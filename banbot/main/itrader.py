@@ -69,7 +69,7 @@ class Trader:
                 res_listeners.append((od_num, func))
         self._bar_listeners = res_listeners
 
-    def _update_wallet(self, symbol: str, amount: float):
+    def _update_wallet(self, symbol: str, amount: float, is_frz=True):
         ava_val, frz_val = self.wallets.get(symbol)
         if amount > 0:
             # 增加钱包金额，不影响冻结值，直接更新
@@ -80,7 +80,8 @@ class Trader:
             frz_val = 0
         else:
             ava_val += amount
-            frz_val -= amount
+            if is_frz:
+                frz_val -= amount
         self.wallets[symbol] = (max(0, ava_val), max(0, frz_val))
 
     def update_wallets(self, **kwargs):
@@ -96,8 +97,8 @@ class Trader:
             # 同时更新2个钱包时，必须是一增一减
             (keya, vala), (keyb, valb) = items
             assert vala * valb < 0, 'two amount should different signs'
-            self._update_wallet(keya, vala)
-            self._update_wallet(keyb, valb)
+            self._update_wallet(keya, vala, False)
+            self._update_wallet(keyb, valb, False)
         else:
             self._update_wallet(*items[0])
 

@@ -6,6 +6,18 @@
 import numpy as np
 
 
+def cluster_kmeans(arr: np.ndarray, cls_num: int, max_iter=20):
+    from sklearn.cluster import KMeans
+    if not isinstance(arr, np.ndarray):
+        arr = np.array(arr)
+    if len(arr.shape) == 1:
+        arr = arr.reshape((-1, 1))
+    kmeans = KMeans(n_clusters=cls_num, max_iter=max_iter, random_state=0, n_init='auto')
+    x_groups = kmeans.fit_predict(arr).tolist()
+    org_centers = kmeans.cluster_centers_.reshape(-1).tolist()
+    return x_groups, org_centers
+
+
 def np_shift(arr, num, fill_value=np.nan):
     result = np.empty_like(arr)
     if num > 0:

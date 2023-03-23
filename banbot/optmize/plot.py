@@ -7,6 +7,7 @@ from pandas import DataFrame
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Optional, Union
+import numpy as np
 from banbot.compute.utils import logger
 
 
@@ -50,12 +51,39 @@ def _add_indicator(fig, df, inds):
                 line=dict(width=1),
                 color=ind.get('color'),
             )
-        elif dtype == 'line':
-            end_key = ind['end_key']
-
-            trace_func = go.Scatter
-            func_args['x'] = ind.get('x')
-            func_args['y'] = ind.get('y')
+        elif dtype == 'order':
+            # 显示订单入场和退出；当前列是入场信号列，
+            enter_id, enter_tag = ind['enter_id'], ind['enter_tag']
+            exit_id, exit_tag = ind['exit_id'], ind['exit_tag']
+            # 过滤在当前df范围内的信号
+            in_set = set(df.index.intersection(enter_id))
+            out_set = set(df.index.intersection(exit_id))
+            in_id_p = [(i, v) for i, v in enumerate(enter_id) if v in in_set]
+            out_id_p = [(i, v) for i, v in enumerate(exit_id) if v in out_set]
+            in_loc, in_id = list(zip(*in_id_p))
+            out_loc, out_id = list(zip(*out_id_p))
+            in_tag = [enter_tag[i] for i, v in enumerate(enter_id) if v in in_set]
+            out_tag = [exit_tag[i] for i, v in enumerate(exit_id) if v in out_set]
+            # 绘制入场信号和退出信号
+            in_id, out_id = list(in_id), list(out_id)
+            start_x, start_y = x_labels.loc[in_id], df.loc[in_id, 'close']
+            end_x, end_y = x_labels.loc[out_id], df.loc[out_id, 'close']
+            start = go.Scatter(x=start_x, y=start_y, mode='markers+text', text=in_tag, marker=dict(color='green'))
+            end = go.Scatter(x=end_x, y=end_y, mode='markers+text', text=out_tag, marker=dict(color='blue'))
+            fig.add_trace(start, row=1, col=1, secondary_y=True)
+            fig.add_trace(end, row=1, col=1, secondary_y=True)
+            # 计算可绘制的线段
+            line_ids = set(in_loc).intersection(out_loc)
+            print(f'line ids: {line_ids}')
+            lin_id = [v for i, v in in_id_p if i in line_ids]
+            lout_id = [v for i, v in out_id_p if i in line_ids]
+            start_x, start_y = x_labels.loc[lin_id], df.loc[lin_id, 'close']
+            end_x, end_y = x_labels.loc[lout_id], df.loc[lout_id, 'close']
+            line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
+            for i in range(len(lin_id)):
+                fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y.iloc[i], end_y.iloc[i]],
+                                         **line_args), row=1, col=1, secondary_y=True)
+            return
         elif dtype == 'bar':
             trace_func = go.Bar
         else:
@@ -70,7 +98,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
              height=None, width=None, xaxis_width: int = 300, show_mode: str = 'inline'):
     '''
     显示蜡烛图和指标。默认绘制蜡烛图和交易量。
-    :param df: 需要输出的数据
+    :param org_df: 需要输出的数据
     :param inds: 指标列表[{col='volume', row=1, type='scatter|mark|bar', color='red', opacity=0.7, symbol=''}]
     :param row_heights: 多个子图的比例，需要和指标中最大row保持一致
     :param height:

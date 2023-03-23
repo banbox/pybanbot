@@ -2,6 +2,7 @@
   "env": "test",
   "pair": "BTC/USDT",
   "min_stake": 10,
+  "data_dir": "E:\\trade\\freqtd_data\\ban_data",
   "client_prod": {
     "api_key": "H3OzezemPSWh6m7K5oVjQy2qCx3aLxsVVofaTjvZqkecvny6S8h2sYURjb03LzCs",
     "api_secret": "ZGPWcTzSrbA4ZbMy4mBc53gTeh343VevCtO1ibqA1KiAViGoQDXLjgPw8lDrgDzV",

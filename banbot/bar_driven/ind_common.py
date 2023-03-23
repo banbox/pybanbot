@@ -9,7 +9,7 @@ import inspect
 import numpy as np
 
 from banbot.compute.utils import to_snake_case, SingletonArg, logger
-from banbot.compute.num_utils import *
+from banbot.util.num_utils import *
 from typing import Callable, Dict, List
 from contextvars import ContextVar
 

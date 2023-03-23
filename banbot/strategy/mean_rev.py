@@ -185,25 +185,25 @@ class MeanRev(BaseStrategy):
         huge_score = self._calc_state('big_vol_prc', arr)
         if huge_score > 0.1 and prc_chg * close_s120 > 0:
             return None, 0
-        # 如果邻近历史极值点，则不入场  TODO: 测试这里是否有必要
-        start_id = len(self.extrems_ma5) - 1
-        end_id = max(start_id - 10, 0)
-        exm_min, exm_max = -long_bar_avg.val, long_bar_avg.val * 3
-        exm_near_len = 4
-        for i in range(start_id, end_id, -1):
-            exm = self.extrems_ma5[i]
-            prow_id = exm[0] - bar_num.get() - 1
-            if prow_id + exm_near_len >= 0:
-                exm_range_arr = arr[prow_id - exm_near_len:, 3]
-            else:
-                exm_range_arr = arr[prow_id - exm_near_len: prow_id + exm_near_len, 3]
-            if exm[-1] == 1:
-                prow_id += np.argmax(exm_range_arr) - exm_near_len
-            else:
-                prow_id += np.argmin(exm_range_arr) - exm_near_len
-            prc_dst = arr[prow_id, 1] - arr[-1, 3]
-            if exm_min < prc_dst < exm_max:
-                return None, 0
+        # 如果邻近历史极值点，则不入场；测试没有这里利润高些
+        # start_id = len(self.extrems_ma5) - 1
+        # end_id = max(start_id - 10, 0)
+        # exm_min, exm_max = -long_bar_avg.val, long_bar_avg.val * 3
+        # exm_near_len = 4
+        # for i in range(start_id, end_id, -1):
+        #     exm = self.extrems_ma5[i]
+        #     prow_id = exm[0] - bar_num.get() - 1
+        #     if prow_id + exm_near_len >= 0:
+        #         exm_range_arr = arr[prow_id - exm_near_len:, 3]
+        #     else:
+        #         exm_range_arr = arr[prow_id - exm_near_len: prow_id + exm_near_len, 3]
+        #     if exm[-1] == 1:
+        #         prow_id += np.argmax(exm_range_arr) - exm_near_len
+        #     else:
+        #         prow_id += np.argmin(exm_range_arr) - exm_near_len
+        #     prc_dst = arr[prow_id, 1] - arr[-1, 3]
+        #     if exm_min < prc_dst < exm_max:
+        #         return None, 0
 
         self.long_sigs[sign_key] = bar_num.get(), score
         return sign_key, score

@@ -15,23 +15,15 @@ from pandas import DataFrame
 
 
 class BTAnalysis:
-    def __init__(self, orders: List[Order], data_path: str, start_pos: int = 0, end_pos: int = 0):
+    def __init__(self, orders: List[Order], **kwargs):
         self.orders = orders
-        self.data_path = data_path
-        self.start_pos = start_pos
-        self.end_pos = end_pos
-        self.df: Optional[DataFrame] = None
+        self.result = kwargs
 
     def save(self, save_dir: str):
-        data = dict(
-            orders=[od.to_dict() for od in self.orders],
-            data_path=self.data_path,
-            start_pos=self.start_pos,
-            end_pos=self.end_pos
-        )
+        self.result['orders'] = [od.to_dict() for od in self.orders]
         dump_path = os.path.join(save_dir, 'backtest.json')
         with open(dump_path, 'wb') as fout:
-            fout.write(orjson.dumps(data))
+            fout.write(orjson.dumps(self.result))
 
     @staticmethod
     def load(save_dir: str) -> 'BTAnalysis':
@@ -40,3 +32,21 @@ class BTAnalysis:
             data: dict = orjson.loads(fout.read())
             data['orders'] = [Order(**od) for od in data['orders']]
             return BTAnalysis(**data)
+
+    def to_dataframe(self) -> DataFrame:
+        from banbot.optmize.backtest import BackTest
+        return BackTest.load_data()
+
+    def to_plot(self) -> List[dict]:
+        enter_id = [od.enter_at - 1 for od in self.orders]
+        exit_id = [od.exit_at - 1 for od in self.orders]
+        enter_tag = [od.enter_tag for od in self.orders]
+        exit_tag = [od.exit_tag for od in self.orders]
+        return [dict(
+            col='open',
+            type='order',
+            enter_id=enter_id,
+            exit_id=exit_id,
+            enter_tag=enter_tag,
+            exit_tag=exit_tag
+        )]

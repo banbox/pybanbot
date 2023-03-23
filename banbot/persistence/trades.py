@@ -67,8 +67,6 @@ class Order:
         price = kwargs.get('price')
         if not od_type:
             od_type = 'limit' if price else 'market'
-        elif od_type == 'market' and price:
-            logger.warning('`price` ignored for market order!')
         elif od_type == 'limit' and not price:
             raise ValueError('`price` is required for limit order')
         self.order_type: str = od_type
@@ -111,7 +109,8 @@ class Order:
             funding_fee=self.funding_fee,
             profit_rate=self.profit_rate,
             profit=self.profit,
-            duration=self.exit_at - self.enter_at
+            duration=self.exit_at - self.enter_at,
+            cost=self.price * self.amount
         )
 
     def update(self, **kwargs):
