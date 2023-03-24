@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 
-from banbot.compute.utils import logger
 from datetime import datetime, timezone, timedelta
 from typing import *
 

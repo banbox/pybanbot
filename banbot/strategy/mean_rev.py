@@ -39,7 +39,6 @@ class MeanRev(BaseStrategy):
         # 原始列：open, high, low, close, volume, count, long_vol
         # max_chg, real, solid_rate, hline_rate, lline_rate
         self.col_num = 12
-        reset_ind_context(self.col_num)
         self.ma120 = SMA(120)
         self.ma20 = SMA(20)
         self.ma5 = SMA(5)
@@ -47,18 +46,13 @@ class MeanRev(BaseStrategy):
         self.natr = NATR()
         self.ntr_rol = NTRRoll()
         self.nvol = NVol()
-        set_use_inds([self.ma5, self.ma20, self.ma120, self.tr, self.natr, self.ntr_rol, self.nvol])
-        self.out_dim = 8
-        self._debug_ids = debug_ids
+        self.debug_ids = debug_ids or set()
         self._is_debug = False
 
     def _init_state_fn(self):
         self._state_fn = dict(
-            big_vol_prc=make_big_vol_prc(self.nvol.out_idx, self.ntr_rol.out_idx, self.col_num),
-            log_extrem=make_log_extrem(self.extrems_ma5, self.extrems_ma20, self.extrems_ma120, self.ma5.out_idx,
-                                       self.ma20.out_idx, self.ma120.out_idx),
-            calc_shorts=make_calc_shorts(self.col_num, self.ma5.out_idx, self.ma20.out_idx, self.ma120.out_idx,
-                                         self.ntr_rol.out_idx)
+            big_vol_prc=make_big_vol_prc(self.nvol, self.ntr_rol, self.col_num),
+            calc_shorts=make_calc_shorts(self.col_num, self.ma5, self.ma20, self.ma120)
         )
 
     def on_bar(self, arr: np.ndarray) -> np.ndarray:
@@ -74,24 +68,40 @@ class MeanRev(BaseStrategy):
         solid_rate = real / max_chg
         hline_rate = (chigh - max(close, copen)) / max_chg
         lline_rate = (min(close, copen) - clow) / max_chg
-        if bar_num.get() < 1:
+        bar_num.set(bar_num.get() + 1)
+        if bar_num.get() == 1:
             crow = np.concatenate([arr[0], [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
-            result = apply_inds_to_first(crow)
-            self.out_dim = result.shape[1]
+            result = np.expand_dims(crow, axis=0)
+            self.ma5(crow[3])
+            self.ma20(crow[3])
+            self.ma120(crow[3])
+            self.tr(result)
+            self.natr(result)
+            self.ntr_rol(result)
+            self.nvol(result)
+            LongVar.update(result)
             self._init_state_fn()
         else:
-            result = apply_inds(arr)
+            result = arr
             result[-1, list(range(7, self.col_num))] = max_chg, real, solid_rate, hline_rate, lline_rate
-        self._is_debug = self._debug_ids and bar_num.get() - 1 in self._debug_ids
+            self.ma5(result[-1, 3])
+            self.ma20(result[-1, 3])
+            self.ma120(result[-1, 3])
+            self.tr(result)
+            self.natr(result)
+            self.ntr_rol(result)
+            self.nvol(result)
+            LongVar.update(result)
+        self._is_debug = self.debug_ids and bar_num.get() - 1 in self.debug_ids
         self.patterns.append(detect_pattern(result))
         # 记录均线极值点
-        self._calc_state('log_extrem', result)
+        log_ma_extrems(self.extrems_ma5, self.extrems_ma20, self.extrems_ma120, self.ma5, self.ma20, self.ma120)
         # 记录MA5和MA20的交叉点
-        self._log_ma_cross(result, self.ma5.out_idx, self.ma20.out_idx)
+        self._log_ma_cross(self.ma5, self.ma20)
         return result
 
     def _sudden_huge_rev(self, arr: np.ndarray) -> Optional[Tuple[str, float, dict]]:
-        if np.isnan(arr[-1, self.ma120.out_idx]):
+        if np.isnan(self.ma120.arr[-1]):
             return
         huge_score = self._calc_state('big_vol_prc', arr)
         if huge_score < 0.1:
@@ -99,10 +109,10 @@ class MeanRev(BaseStrategy):
         
         cur_bar_num = bar_num.get()
         close_chg = arr[-1, 3] - arr[-2, 3]
-        bar_avg_len = long_bar_avg.val
-        ma5_chg = arr[-1, self.ma5.out_idx] - arr[-10, self.ma5.out_idx]
-        ma20_down = arr[-1, self.ma20.out_idx] - arr[-10, self.ma20.out_idx] < bar_avg_len * -0.5
-        ma120 = arr[-1, self.ma120.out_idx]
+        bar_avg_len = LongVar.get(LongVar.bar_len).val
+        ma5_chg = self.ma5.arr[-1] - self.ma5.arr[-10]
+        ma20_down = self.ma20.arr[-1] - self.ma20.arr[-10] < bar_avg_len * -0.5
+        ma120 = self.ma120.arr[-1]
 
         cur_singals = dict()
         if close_chg > 0:
@@ -137,14 +147,14 @@ class MeanRev(BaseStrategy):
             if bar_res[1] > 0.1:
                 return bar_res[:2]
         copen, chigh, clow, close = arr[-1, :4]
-        bar_avg_len = long_bar_avg.val
+        bar_avg_len = LongVar.get(LongVar.bar_len).val
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, self.col_num - 5: self.col_num]
         cur_bar_num = bar_num.get()
         back_len = 7
         if not phuge_up or cur_bar_num - phuge_up[0] > back_len:
             phuge_up = phuge_down
         if phuge_up and cur_bar_num - phuge_up[0] <= back_len:
-            cur_ma5, sign_close = arr[-1, self.ma5.out_idx], arr[phuge_up[0] - cur_bar_num, 3]
+            cur_ma5, sign_close = self.ma5.arr[-1], arr[phuge_up[0] - cur_bar_num, 3]
             if solid_rate >= 0.3 and max_chg >= bar_avg_len and cur_ma5 - sign_close >= bar_avg_len:
                 # 3周期内信号，当前实体至少70%，有足够的实体长度
                 tag = 'huge_up_rev' if copen < close else 'huge_down_rev'
@@ -170,18 +180,18 @@ class MeanRev(BaseStrategy):
         return 0
 
     def ma_cross_entry(self, arr: np.ndarray):
-        ma5, ma20 = arr[-1, self.ma5.out_idx], arr[-1, self.ma20.out_idx]
+        ma5, ma20 = self.ma5.arr[-1], self.ma20.arr[-1]
         if ma5 < ma20:  # or not self.ma_cross or bar_num.get() - self.ma_cross[-1] > 7
             return None, 0
         sign_key, back_len = 'xma', 5
         old_sta = self.long_sigs.get(sign_key)
         if old_sta and bar_num.get() - old_sta[0] <= back_len or arr.shape[0] < back_len:
             return None, 0
-        score = self._up_score(arr, long_bar_avg.val)
+        score = self._up_score(arr, LongVar.get(LongVar.bar_len).val)
         if score < 0.5:
             return None, 0
         # 如果是背离MA120巨量+巨价；则不入场
-        prc_chg, close_s120 = arr[-1, 3] - arr[-1, 0], arr[-1, 3] - arr[-1, self.ma120.out_idx]
+        prc_chg, close_s120 = arr[-1, 3] - arr[-1, 0], arr[-1, 3] - self.ma120.arr[-1]
         huge_score = self._calc_state('big_vol_prc', arr)
         if huge_score > 0.1 and prc_chg * close_s120 > 0:
             return None, 0
@@ -239,14 +249,15 @@ class MeanRev(BaseStrategy):
         :return:
         '''
         profit = arr[-1, 3] - od.price
-        stable_score = profit / long_sub_ma120.val
+        stable_score = profit / LongVar.get(LongVar.sub_malong).val
         if stable_score < 1:
             short_sigs = self._get_sigs('short')
             if not short_sigs:
                 return None
             short_score = short_sigs[0][1]
-            if profit < long_bar_avg.val and short_score >= 0.4:
+            bar_len = LongVar.get(LongVar.bar_len).val
+            if profit < bar_len and short_score >= 0.4:
                 return short_sigs[0][0]
-            elif profit > long_bar_avg.val and short_score >= 0.7:
+            elif profit > bar_len and short_score >= 0.7:
                 return short_sigs[0][0]
             

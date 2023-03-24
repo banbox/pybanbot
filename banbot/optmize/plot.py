@@ -74,7 +74,6 @@ def _add_indicator(fig, df, inds):
             fig.add_trace(end, row=1, col=1, secondary_y=True)
             # 计算可绘制的线段
             line_ids = set(in_loc).intersection(out_loc)
-            print(f'line ids: {line_ids}')
             lin_id = [v for i, v in in_id_p if i in line_ids]
             lout_id = [v for i, v in out_id_p if i in line_ids]
             start_x, start_y = x_labels.loc[lin_id], df.loc[lin_id, 'close']
@@ -95,7 +94,7 @@ def _add_indicator(fig, df, inds):
 
 
 def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, row_heights: Optional[List[float]] = None,
-             height=None, width=None, xaxis_width: int = 300, show_mode: str = 'inline'):
+             height=None, width=None, view_width: int = 230, show_mode: str = 'inline'):
     '''
     显示蜡烛图和指标。默认绘制蜡烛图和交易量。
     :param org_df: 需要输出的数据
@@ -103,7 +102,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
     :param row_heights: 多个子图的比例，需要和指标中最大row保持一致
     :param height:
     :param width:
-    :param xaxis_width: 显示的蜡烛数
+    :param view_width: 显示的蜡烛数
     :param show_mode: inline|external
     :return:
     '''
@@ -168,7 +167,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
     from jupyter_dash import JupyterDash
     from dash import html, dcc, Input, Output, State
     app = JupyterDash(__name__)
-    figure = make_graph(0, xaxis_width)
+    figure = make_graph(0, view_width)
     # 设置range selector的提示
     range_style = dict(appearance='none', width='100%', background='#666', height='6px', borderRadius='3px')
     app.layout = html.Div(children=[
@@ -186,7 +185,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
         x_labels = df['date']
         x_indexs = {k.strftime('%Y-%m-%d %H:%M:%S'): v for v, k in enumerate(x_labels.tolist())}
         if not xmax:
-            xmin, xmax = 0, min(xaxis_width, end - start)
+            xmin, xmax = 0, min(view_width, end - start)
         else:
             xmin, xmax = x_indexs[xmin], x_indexs[xmax]
         figure = make_graph(xmin, xmax)
@@ -215,14 +214,14 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
             xmax = xmax[:xmax.find('.')]
             # logger.warning(f'xaxis:  {xmin}  {xmax}')
             if xmin not in x_indexs:
-                xminid, xmaxid = 0, min(len(x_indexs) - 1, xaxis_width)
+                xminid, xmaxid = 0, min(len(x_indexs) - 1, view_width)
                 if rg_start >= half_rend_width:
                     start = max(0, rg_start - half_rend_width)
                     set_org_range(start, start + max_rend_width, xmin, xmax)
                     last_range_val = range_val = round(start / half_rend_width)
                     return figure, range_val
             elif xmax not in x_indexs:
-                xminid, xmaxid = max(0, len(x_indexs) - xaxis_width), len(x_indexs) - 1
+                xminid, xmaxid = max(0, len(x_indexs) - view_width), len(x_indexs) - 1
                 if rg_end + half_rend_width <= len(org_df):
                     end = min(len(org_df) - 1, rg_end + half_rend_width)
                     set_org_range(end - max_rend_width, end, xmin, xmax)

@@ -3,8 +3,9 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-from typing import *
-from banbot.bar_driven.inds import *
+import numpy as np
+
+from banbot.bar_driven.tainds import *
 from banbot.persistence.trades import *
 
 
@@ -26,16 +27,16 @@ class BaseStrategy:
             self.state[key] = self._state_fn[key](*args, **kwargs)
         return self.state[key]
 
-    def _log_ma_cross(self, arr: np.ndarray, ma_aid: int, ma_bid: int):
-        ma_diff = arr[:, ma_aid] - arr[:, ma_bid]
-        if ma_diff.shape[0] > 3 and not np.isnan(ma_diff[-3]):
-            a, b = ma_diff[-3], ma_diff[-1]
-            if max(a, b) > 0 and a + b < abs(a) + abs(b):
-                crs_id = bar_num.get() - 1
-                if not self.ma_cross or crs_id - self.ma_cross[-1] >= 3:
-                    self.ma_cross.append(crs_id)
-                    if len(self.ma_cross) > 300:
-                        self.ma_cross = self.ma_cross[-100:]
+    def _log_ma_cross(self, ma_a: SMA, ma_b: SMA):
+        if len(ma_a.arr) < 3 or np.isnan(ma_a.arr[-3]):
+            return
+        b, a = ma_a.arr[-1] - ma_b.arr[-1], ma_a.arr[-3] - ma_b.arr[-3]
+        if max(a, b) > 0 and a + b < abs(a) + abs(b):
+            crs_id = bar_num.get() - 1
+            if not self.ma_cross or crs_id - self.ma_cross[-1] >= 3:
+                self.ma_cross.append(crs_id)
+                if len(self.ma_cross) > 300:
+                    self.ma_cross = self.ma_cross[-100:]
 
     def _get_sigs(self, tag: str, period: int = 1) -> List[Tuple[str, float, int]]:
         '''

@@ -14,7 +14,7 @@ from banbot.config.config import cfg
 
 class BackTest(Trader):
     def __init__(self, max_num: int = 0):
-        super(BackTest, self).__init__(MeanRev)
+        super(BackTest, self).__init__()
         self.max_num = max_num
         self.data_dir: str = cfg['data_dir']
         self.out_dir: str = os.path.join(self.data_dir, 'backtest')
@@ -44,6 +44,11 @@ class BackTest(Trader):
         data = self.load_data()
         if self.max_num:
             data = data[:self.max_num]
+        symbol_tf.set(f'{self.pair}_1s')
+        self.strategy = MeanRev()
+        if hasattr(self.strategy, 'debug_ids'):
+            debug_idx = int(np.where(data['date'] == '2023-02-22 00:15:09')[0][0])
+            self.strategy.debug_ids.add(debug_idx)
         self.result['date_from'] = str(data.loc[0, 'date'])
         self.result['date_to'] = str(data.loc[len(data) - 1, 'date'])
         self.result['start_balance'] = self.wallets[self.stake_symbol][0]

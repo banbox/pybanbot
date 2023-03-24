@@ -11,7 +11,7 @@ import uuid
 import pandas as pd
 import numpy as np
 from typing import List, Dict
-from banbot.bar_driven.inds import *
+from banbot.bar_driven.tainds import *
 '''
 K线形态参考：
 https://github.com/SpiralDevelopment/candlestick-patterns/tree/master/candlestick/patterns
@@ -52,7 +52,8 @@ def big_vol_score(arr: np.ndarray, idx: int = -1):
     :return:
     '''
     cur_vol, prev_vol = arr[idx, 4], arr[idx - 1, 4]
-    avg_score = cur_vol / long_vol_avg.val / 2.5
+    vol_avg_val = LongVar.get(LongVar.vol_avg).val
+    avg_score = cur_vol / vol_avg_val / 2.5
     prev_score = cur_vol / prev_vol / 3
     if avg_score > 1 and cur_vol > prev_vol or prev_score > 1:
         return max(avg_score, prev_score) / 1.5
@@ -63,8 +64,6 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     '''
     K线模式形态识别。这里只生成形态信号，使用信号时应根据市场环境和其他指标综合决策。
     :param arr:
-    :param ma5_idx: 短期均线列索引
-    :param ma20_idx: 长期均线列索引
     :return: 匹配的形态名称
     '''
     candle = arr[-1, :]
@@ -117,6 +116,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     if cur_doji and p_solid_rate >= 0.7 and min(copen, close) > pclose > phalf:
         # 前70%阳，见顶十字星
         result['doji_star'] = 1
+    bar_len_val = LongVar.get(LongVar.bar_len).val
 
     def contain_score():
         '''
@@ -129,7 +129,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
         else:
             long_real, long_real_rate = p_real, p_solid_rate
             short_real, short_full = c_real, c_max_chg
-        long_score = min(1, long_real / min(max(short_real, dust), long_bar_avg.val) / 2)
+        long_score = min(1, long_real / min(max(short_real, dust), bar_len_val) / 2)
         add_score = pow(max(1, long_real * 1.5 / short_full), 0.5) - 1
         _vol_score = min(1.5, arr[-1, 4] / arr[-2, 4])
         return (_vol_score * long_score + add_score) * long_real_rate
@@ -140,7 +140,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
         :return:
         '''
         all_len = abs(popen - copen)
-        len_score = min(1.5, all_len / long_bar_avg.val / 3)
+        len_score = min(1.5, all_len / bar_len_val / 3)
         len_rate = min(1, c_real / p_real / 1.1)
         solid_rate = min(p_solid_rate, c_solid_rate)
         return len_score * len_rate * solid_rate
@@ -172,12 +172,12 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
             # 看跌亲吻：前阳后阴。后阴线完全位于阳线上方，意义弱于乌云盖顶
             result['kiss_down'] = kiss_score()
 
-        elif pclose > popen > close and pclose > copen > close and pclose - popen > long_bar_avg.val:
+        elif pclose > popen > close and pclose > copen > close and pclose - popen > bar_len_val:
             # 倾盆大雨（分手线），前阳后阴。阴线整体低于阳线。看跌强于乌云盖顶
             # 分数：成交量至少前一个的1/2；第一日应为大阳线；第二日应为大/中阴线；第二根低开和低收的力度
             vol_score = min(1.5, arr[-1, 4] / arr[-2, 4])
-            plen_score = min(1.2, p_real / long_bar_avg.val / 1.5)
-            clen_score = min(1, c_real / long_bar_avg.val)
+            plen_score = min(1.2, p_real / bar_len_val / 1.5)
+            clen_score = min(1, c_real / bar_len_val)
             # 低开或低收的分数加成
             diff_score = pow(1 + max(pclose - copen, popen - close) / (pclose - popen), 0.5)
             result['black_out_down'] = vol_score * plen_score * clen_score * diff_score
@@ -232,7 +232,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
         else:
             # 最后是阴线，黄昏垂星
             end_lrate = c_hline_rate
-        len_score = min(1, c_real / long_bar_avg.val / 2)
+        len_score = min(1, c_real / bar_len_val / 2)
         return (1 - end_lrate) * len_score * end_deep_score
 
     def jump_out_score():
@@ -282,7 +282,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
         chg_rate1 = (p2close - pclose) / avg_len
         chg_rate2 = (pclose - close) / avg_len
         chg_score = min(1.5, pow((chg_rate1 + chg_rate2) / 2, 0.5))
-        len_score = min(1, avg_len * 1.5 / long_bar_avg.val)
+        len_score = min(1, avg_len * 1.5 / bar_len_val)
         solid_rate = c_real / p2_real * pow(c_solid_rate, 0.7)
         result['new3_down'] = chg_score * len_score * solid_rate
 
@@ -374,19 +374,9 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
                 top += h * 1.5
         _draw_line_texts([' '.join(tags), str(view_arr[0, 7])[:19]])
 
-    from banbot.bar_driven.inds import SMA, apply_inds_to_first, apply_inds, set_use_inds, append_nan_cols, reset_ind_context
-    reset_ind_context(arr.shape[1])
-    ma5 = SMA(5)
-    ma20 = SMA(20)
-    set_use_inds([ma5, ma20])
-    result = apply_inds_to_first(arr[0])
-    pad_len = result.shape[1] - arr.shape[1]
-    arr = append_nan_cols(arr, pad_len)
     count = 0
-    for i in range(1, arr.shape[0]):
-        result = np.append(result, np.expand_dims(arr[i, :], axis=0), axis=0)
-        result = apply_inds(result)
-        tags = detect_pattern(result, ma5.out_idx, ma20.out_idx)
+    for i in range(arr.shape[0]):
+        tags = detect_pattern(arr)
         if not tags or tkey and tkey not in tags:
             continue
         if pos + 1 > max_num:
@@ -395,7 +385,7 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
             im = Image.new('RGB', (imw, imh))
             dr = ImageDraw.Draw(im)
             _init_img_draw()
-        _draw_pattern(tags, result)
+        _draw_pattern(list(tags.keys()), arr)
         pos += 1
         count += 1
         if count >= 180:

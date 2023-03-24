@@ -5,19 +5,17 @@
 # Date  : 2023/2/21
 import operator
 import logging
-import numpy as np
 import talib.abstract as ta
-from freqtrade.strategy.interface import IStrategy
+from banbot.strategy.base import *
 from pandas import DataFrame, Series, concat
 from functools import reduce
-from banbot.compute.utils import np_shift
-import pandas_ta as pta
+from banbot.util.num_utils import np_shift
 import time
 
 log = logging.getLogger(__name__)
 
 
-class TrendModelSys(IStrategy):
+class TrendModelSys(BaseStrategy):
     '''
     Futures Truth Magazine杂志策略排行第9
     https://mp.weixin.qq.com/s?__biz=MzkyODI5ODcyMA==&mid=2247484039&idx=1&sn=defcd9c0c03653ed1078ba98392af315&scene=21#wechat_redirect
@@ -31,31 +29,6 @@ class TrendModelSys(IStrategy):
     例如唐奇安通道上轨是过去N个交易日的最大值，那关键点位就是可以只考虑过去N个金叉对应的最高价的最大值，
     这里只是只是打个比方，类推就好了，就如同以下评论，点评得非常到位。
     '''
-    INTERFACE_VERSION = 3
-    version = '0.1.0'
-
-    minimal_roi = {
-        "0": 10
-    }
-
-    # 默认观察频率
-    timeframe = '5m'
-
-    # 复购、部分卖出
-    position_adjustment_enable = False
-    # 交易所宕机保护
-    has_downtime_protection = False
-
-    stoploss = -0.03
-    use_custom_stoploss = False
-
-    # Exit options
-    use_exit_signal = True
-    ignore_roi_if_entry_signal = True
-
-    # 最少前置蜡烛数
-    startup_candle_count: int = 50
-    can_short = False
 
     def populate_indicators(self, df: DataFrame, metadata: dict) -> DataFrame:
         df['macd_f'], df['macd_s'], df['macd_hist'] = ta.MACD(df['close'], fastperiod=12, slowperiod=26, signalperiod=9)

@@ -12,8 +12,8 @@ from banbot.config.config import cfg
 
 
 class Trader:
-    def __init__(self, Strategy):
-        self.strategy: BaseStrategy = Strategy()
+    def __init__(self):
+        self.strategy: Optional[BaseStrategy] = None
         self._is_first = True
         self.arr = np.array([])
         self._pad_len = 0
@@ -118,7 +118,6 @@ class Trader:
             return
         ava_val, frz_val = self.wallets.get(self.stake_symbol)
         if ava_val < self.min_stake:
-            logger.warning(f'balance less than min allowed: {ava_val}')
             return
         stake_amount = min(stake_amount, ava_val)
         self.open_orders[tag] = Order(
