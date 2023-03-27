@@ -5,7 +5,7 @@
 # Date  : 2023/2/28
 import datetime
 import os
-from banbot.compute.utils import logger
+from banbot.util.common import logger
 
 
 def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):

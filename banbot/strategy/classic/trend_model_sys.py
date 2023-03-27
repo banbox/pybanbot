@@ -3,22 +3,19 @@
 # File  : TrendModelSys.py
 # Author: anyongjin
 # Date  : 2023/2/21
-import operator
-import logging
-import talib.abstract as ta
 from banbot.strategy.base import *
-from pandas import DataFrame, Series, concat
-from functools import reduce
-from banbot.util.num_utils import np_shift
-import time
-
-log = logging.getLogger(__name__)
 
 
 class TrendModelSys(BaseStrategy):
     '''
     Futures Truth Magazine杂志策略排行第9
     https://mp.weixin.qq.com/s?__biz=MzkyODI5ODcyMA==&mid=2247484039&idx=1&sn=defcd9c0c03653ed1078ba98392af315&scene=21#wechat_redirect
+    【核心思想】
+    以震荡区间的最高点/最低点作为突破上下轨阈值。突破时入场。
+
+    【背景】
+    趋势行情出来之前，行情往往是持续震荡。震荡判断方法：MACD短期内经常交叉。
+
     这个策略是一个趋势突破型的交易系统，利用MACD快(DIF)慢(DEA)线的金叉死叉，
     当证券价格突破过去N次金/死叉记录的“最高/低价±0.5倍ATR”时，开仓；
     若持有多头仓位，当证券价格回落至M根K线最低点平仓；
@@ -29,52 +26,60 @@ class TrendModelSys(BaseStrategy):
     例如唐奇安通道上轨是过去N个交易日的最大值，那关键点位就是可以只考虑过去N个金叉对应的最高价的最大值，
     这里只是只是打个比方，类推就好了，就如同以下评论，点评得非常到位。
     '''
+    def __init__(self):
+        super(TrendModelSys, self).__init__()
+        self.macd = StaMACD(9, 26, 4)
+        self.atr = StaATR(4)
+        self.cross_dsct = 50  # 要求最远交叉点的最大距离
+        self.back_num = 4  # 往前查看的交叉点的数量
+        state: dict = bar_state.get()
+        state['cross_exm'] = []
 
-    def populate_indicators(self, df: DataFrame, metadata: dict) -> DataFrame:
-        df['macd_f'], df['macd_s'], df['macd_hist'] = ta.MACD(df['close'], fastperiod=12, slowperiod=26, signalperiod=9)
-        df['hi_tag'] = df['macd_hist'].apply(lambda x: 1 if x >= 0 else -1)
+    def log_macd_cross(self, arr: np.ndarray) -> List[Tuple[int, float, float]]:
+        '''
+        发生交叉时，记录位置和最高值，最低值
+        :param arr:
+        :return:
+        '''
+        state: dict = bar_state.get()
+        macd, signl = self.macd(arr[-1, 3])
+        cmacd_dir = macd - signl
+        if cmacd_dir:
+            macd_dir = state.get('macd_dir', 0)
+            if macd_dir and cmacd_dir * macd_dir < 0:
+                state['cross_exm'].append((bar_num.get(), arr[-1, 1], arr[-1, 2]))
+                state['cross_exm'] = state['cross_exm'][-10:]
+            state['macd_dir'] = cmacd_dir
+        return state['cross_exm']
 
-        num_cross, back_period = 4, 50
-        # 找到MACD金叉或死叉
-        df['hi_cross'] = df['hi_tag'].shift() + df['hi_tag']
-        cross_ids = np.where(df['hi_cross'] == 0)[0]
+    def on_bar(self, arr: np.ndarray) -> np.ndarray:
+        result = self._base_bar(arr)
+        half_atr = self.atr(result) * 0.5
+        cross_exms = self.log_macd_cross(result)
+        if len(cross_exms) >= self.back_num:
+            # 检查最近4个MACD交叉点，要求第四个不超过50周期，表示前面处于震荡行情。
+            max_high, min_low, xid = -1, 9999999, len(cross_exms)
+            while xid > 0:
+                xid -= 1
+                xitem = cross_exms[xid]
+                if bar_num.get() - xitem[0] > self.cross_dsct:
+                    break
+                max_high = max(max_high, xitem[1])
+                min_low = min(min_low, xitem[2])
+            if len(cross_exms) - xid >= self.back_num:
+                if arr[-1, 3] > max_high + half_atr:
+                    # 当前价格突破最高值+ATR，入场
+                    bar_state.get()['up_cross'] = bar_num.get()
+                elif arr[-1, 3] < min_low - half_atr:
+                    bar_state.get()['down_cross'] = bar_num.get()
+        return result
 
-        # 计算与前4个交叉的距离，查找距离不超过back_period的交叉位置
-        cro_num_periods = cross_ids - np_shift(cross_ids, num_cross, -back_period)
-        good_ids = np.where(cro_num_periods < back_period)[0]
-        df['cross'] = np.nan
-        df.loc[cross_ids, 'cross'] = 0
-        df.loc[cross_ids[good_ids], 'cross'] = 1
-        df['cross'].fillna(method='bfill', inplace=True)
+    def on_entry(self, arr: np.ndarray) -> str:
+        state: dict = bar_state.get()
+        if state.get('up_cross') == bar_num.get():
+            return 'upx'
 
-        # 计算开多/开空的入场价格
-        df['atr'] = ta.ATR(df, timeperiod=4)
-        df['roll_high'] = df.loc[cross_ids, 'high'].rolling(num_cross).max() + df.loc[cross_ids, 'atr'] * 0.5
-        # df['roll_low'] = df.loc[cross_ids, 'low'].rolling(num_cross).min() - df.loc[cross_ids, 'atr'] * 0.5
-        df['roll_high'].fillna(method='bfill', inplace=True)
-        # df['roll_low'].fillna(method='bfill', inplace=True)
-
-        df.loc[df['close'] > df['roll_high'], 'cross'] += 1
-        # df.loc[df['close'] < df['roll_low'], 'cross'] += 1
-
-        df['low4'] = df['low'].rolling(6).min()
-        return df
-
-    def populate_entry_trend(self, df: DataFrame, metadata: dict) -> DataFrame:
-        enter_filters = [
-            df['cross'] > 1,
-            df['macd_f'] > df['macd_s']
-        ]
-        long_ids = np.where(reduce(operator.and_, enter_filters))[0]
-        df.loc[long_ids, "enter_long"] = 1
-        df.loc[long_ids, "enter_tag"] = 'cross'
-        return df
-
-    def populate_exit_trend(self, df: DataFrame, metadata: dict) -> DataFrame:
-        exit_filters = [
-            df['close'] < df['low4'],
-        ]
-        short_ids = np.where(reduce(operator.or_, exit_filters))[0]
-        df.loc[short_ids, "exit_long"] = 1
-        df.loc[short_ids, "exit_tag"] = 'low_min4'
-        return df
+    def on_exit(self, arr: np.ndarray) -> str:
+        state: dict = bar_state.get()
+        if state.get('down_cross') == bar_num.get():
+            return 'downx'

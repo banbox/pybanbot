@@ -21,13 +21,14 @@ class BaseStrategy:
         self.extrems_ma120 = []
         self.state = dict()
         self._state_fn = dict()
+        self.col_num = 12
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
             self.state[key] = self._state_fn[key](*args, **kwargs)
         return self.state[key]
 
-    def _log_ma_cross(self, ma_a: SMA, ma_b: SMA):
+    def _log_ma_cross(self, ma_a: StaSMA, ma_b: StaSMA):
         if len(ma_a.arr) < 3 or np.isnan(ma_a.arr[-3]):
             return
         b, a = ma_a.arr[-1] - ma_b.arr[-1], ma_a.arr[-3] - ma_b.arr[-3]
@@ -37,6 +38,26 @@ class BaseStrategy:
                 self.ma_cross.append(crs_id)
                 if len(self.ma_cross) > 300:
                     self.ma_cross = self.ma_cross[-100:]
+
+    def _base_bar(self, arr: np.ndarray) -> np.ndarray:
+        copen, chigh, clow, close = arr[-1, :4]
+        dust = min(0.00001, close * 0.0001)
+        max_chg = dust + chigh - clow
+        real = abs(close - copen)
+        solid_rate = real / max_chg
+        hline_rate = (chigh - max(close, copen)) / max_chg
+        lline_rate = (min(close, copen) - clow) / max_chg
+        bar_num.set(bar_num.get() + 1)
+        if bar_num.get() == 1:
+            crow = np.concatenate([arr[0], [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
+            result = np.expand_dims(crow, axis=0)
+            self.col_num = arr.shape[1] + 5
+        else:
+            result = arr
+            expand_cols = list(range(self.col_num - 5, self.col_num))
+            result[-1, expand_cols] = max_chg, real, solid_rate, hline_rate, lline_rate
+        LongVar.update(result)
+        return result
 
     def _get_sigs(self, tag: str, period: int = 1) -> List[Tuple[str, float, int]]:
         '''

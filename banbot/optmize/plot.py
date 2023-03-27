@@ -3,17 +3,26 @@
 # File  : plot.py
 # Author: anyongjin
 # Date  : 2023/2/21
+import six
+from datetime import datetime
+
 from pandas import DataFrame
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import List, Optional, Union
-import numpy as np
-from banbot.compute.utils import logger
+
+
+def _make_yrange(col):
+    def get_xrange(startx, endx):
+        coly = col.iloc[startx: endx]
+        return coly.min(), coly.max()
+    return get_xrange
 
 
 def _add_indicator(fig, df, inds):
     import pandas as pd
     x_labels = df['date']
+    sub_yrange_calcs = []
     for ind in inds:
         name = ind['col']
         row_num = ind.get('row', 1)
@@ -90,7 +99,17 @@ def _add_indicator(fig, df, inds):
         trace_args = dict(row=row_num, col=1)
         if row_num == 1:
             trace_args['secondary_y'] = True
+        else:
+            sub_yrange_calcs.append((row_num, _make_yrange(df[name])))
         fig.add_trace(trace_func(**func_args), **trace_args)
+    return sorted(sub_yrange_calcs, key=lambda x: x[0])
+
+
+def date_to_stamp(date, fmt: str = '%Y-%m-%d %H:%M:%S'):
+    import calendar
+    if isinstance(date, six.string_types):
+        date = datetime.strptime(date, fmt)
+    return calendar.timegm(date.timetuple())
 
 
 def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, row_heights: Optional[List[float]] = None,
@@ -124,6 +143,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
     if max_rows > 1:
         row_specs.extend([[{"secondary_y": False}]] * (max_rows - 1))
     x_labels = df['date']
+    sub_yrange_calcs = []
 
     def update_yaxis(fig, xmin, xmax):
         price_max = df.iloc[xmin:xmax]['high'].max()
@@ -135,8 +155,20 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
         xstart, xend = x_labels.iloc[xmin], x_labels.iloc[xmax]
         fig.update_layout(xaxis_range=(xstart, xend), yaxis2_range=[price_min - p_delta, price_max + p_delta],
                           yaxis1_range=[vol_min, vol_max + v_delta])
+        # 更新子图的纵坐标范围
+        suby_ranges = dict()
+        for row, calc in sub_yrange_calcs:
+            ystart, yend = calc(xmin, xmax)
+            if row in suby_ranges:
+                ostart, oend = suby_ranges[row]
+                suby_ranges[row] = min(ostart, ystart), max(oend, yend)
+            else:
+                suby_ranges[row] = ystart, yend
+        for row in suby_ranges:
+            fig.update_yaxes(range=suby_ranges[row], row=row)
 
     def make_graph(xmin, xmax):
+        nonlocal sub_yrange_calcs
         fig = make_subplots(rows=max_rows, shared_xaxes=True, row_heights=row_heights, vertical_spacing=0.05,
                             specs=row_specs)
         candles = go.Candlestick(x=x_labels, open=df['open'], high=df['high'], low=df['low'],
@@ -152,7 +184,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
                                   marker={"color": vol_long_color}, hoverinfo='skip', )
             fig.add_trace(vol_long_bar, secondary_y=False)
         if inds:
-            _add_indicator(fig, df, inds)
+            sub_yrange_calcs = _add_indicator(fig, df, inds)
         fig_margin = dict(l=0, r=0, t=0, b=0)
         fig.update_layout(height=height, width=width, xaxis_rangeslider_visible=False,
                           hovermode='x', dragmode='pan', margin=fig_margin, barmode='overlay')
@@ -165,7 +197,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
 
     # Dash 交互部分
     from jupyter_dash import JupyterDash
-    from dash import html, dcc, Input, Output, State
+    from dash import html, dcc, Input, Output
     app = JupyterDash(__name__)
     figure = make_graph(0, view_width)
     # 设置range selector的提示
@@ -174,20 +206,22 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
         dcc.Graph(id='graph1', figure=figure, config=dict(displayModeBar=False)),
         dcc.Input(id='range_sel', type='range', step=1, value=0, max=win_size - 1, style=range_style)
     ])
-    x_indexs = {k.strftime('%Y-%m-%d %H:%M:%S'): v for v, k in enumerate(x_labels.tolist())}
+    x_indexs = [date_to_stamp(v) for v in x_labels.tolist()]
+    item_delta = x_indexs[1] - x_indexs[0]
     last_range_val = 0
 
-    def set_org_range(start, end, xmin: Optional[str] = None, xmax: Optional[str] = None):
+    def set_org_range(start, end, xmin: Optional[int] = None, xmax: Optional[int] = None):
         nonlocal x_labels, df, figure, x_indexs, rg_start, rg_end
         rg_start, rg_end = start, end
         df = org_df[start: end]
         # logger.warning(f'set org range: {xmin}  {xmax}')
         x_labels = df['date']
-        x_indexs = {k.strftime('%Y-%m-%d %H:%M:%S'): v for v, k in enumerate(x_labels.tolist())}
-        if not xmax:
+        x_indexs = [date_to_stamp(v) for v in x_labels.tolist()]
+        if xmax is None:
             xmin, xmax = 0, min(view_width, end - start)
         else:
-            xmin, xmax = x_indexs[xmin], x_indexs[xmax]
+            xmin = next((i for i, v in enumerate(x_indexs) if v > xmin), 1) - 1
+            xmax = next((i for i, v in enumerate(x_indexs) if v > xmax), 1)
         figure = make_graph(xmin, xmax)
         return figure
 
@@ -210,17 +244,17 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
             set_org_range(start, end)
         elif "xaxis.range[0]" in rel_out:
             xmin, xmax = rel_out["xaxis.range[0]"], rel_out["xaxis.range[1]"]
-            xmin = xmin[:xmin.find('.')]
-            xmax = xmax[:xmax.find('.')]
+            xmin = date_to_stamp(xmin[:xmin.find('.')])
+            xmax = date_to_stamp(xmax[:xmax.find('.')])
             # logger.warning(f'xaxis:  {xmin}  {xmax}')
-            if xmin not in x_indexs:
+            if xmin < x_indexs[0] - item_delta:
                 xminid, xmaxid = 0, min(len(x_indexs) - 1, view_width)
                 if rg_start >= half_rend_width:
                     start = max(0, rg_start - half_rend_width)
                     set_org_range(start, start + max_rend_width, xmin, xmax)
                     last_range_val = range_val = round(start / half_rend_width)
                     return figure, range_val
-            elif xmax not in x_indexs:
+            elif xmax > x_indexs[-1] + item_delta:
                 xminid, xmaxid = max(0, len(x_indexs) - view_width), len(x_indexs) - 1
                 if rg_end + half_rend_width <= len(org_df):
                     end = min(len(org_df) - 1, rg_end + half_rend_width)
@@ -228,7 +262,8 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
                     last_range_val = range_val = round((end - max_rend_width) / half_rend_width)
                     return figure, range_val
             else:
-                xminid, xmaxid = x_indexs[xmin], x_indexs[xmax]
+                xminid = next((i for i, v in enumerate(x_indexs) if v > xmin), 1) - 1
+                xmaxid = next((i for i, v in enumerate(x_indexs) if v > xmax), 1)
             update_yaxis(figure, xminid, xmaxid)
         return figure, range_val
 

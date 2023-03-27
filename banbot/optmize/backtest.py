@@ -9,7 +9,9 @@ import numpy as np
 
 from banbot.main.itrader import Trader
 from banbot.strategy.mean_rev import *
+from banbot.strategy.classic.trend_model_sys import TrendModelSys
 from banbot.config.config import cfg
+data_dir = r'E:\trade\freqtd_data\user_data\data_recent\binance'
 
 
 class BackTest(Trader):
@@ -27,8 +29,7 @@ class BackTest(Trader):
 
     @staticmethod
     def load_data():
-        data_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
-        fname = 'BTCUSDT-1s-2023-02-22-2023-02-26.feather'
+        fname = 'BTC_TUSD-1m.feather'
         return pd.read_feather(os.path.join(data_dir, fname))
 
     def bot_start(self):
@@ -41,11 +42,18 @@ class BackTest(Trader):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
         self.bot_start()
+        ctx = get_context(f'{self.pair}_1s')
+        ctx.run(self._run)
+        od_list = [r.to_dict() for r in self.his_orders]
+        print_backtest(pd.DataFrame(od_list), self.result)
+        BTAnalysis(self.his_orders, **self.result).save(self.out_dir)
+        print(f'complete, write to: {self.out_dir}')
+
+    def _run(self):
         data = self.load_data()
         if self.max_num:
             data = data[:self.max_num]
-        symbol_tf.set(f'{self.pair}_1s')
-        self.strategy = MeanRev()
+        self.strategy = TrendModelSys()
         if hasattr(self.strategy, 'debug_ids'):
             debug_idx = int(np.where(data['date'] == '2023-02-22 00:15:09')[0][0])
             self.strategy.debug_ids.add(debug_idx)
@@ -59,10 +67,6 @@ class BackTest(Trader):
         # 关闭未完成订单
         self.force_exit_all()
         self._calc_result_done(arr)
-        od_list = [r.to_dict() for r in self.his_orders]
-        print_backtest(pd.DataFrame(od_list), self.result)
-        BTAnalysis(self.his_orders, **self.result).save(self.out_dir)
-        print(f'complete, write to: {self.out_dir}')
 
     def _calc_result_done(self, arr: np.ndarray):
         self.result['max_open_orders'] = self.max_open_orders
@@ -76,11 +80,17 @@ class BackTest(Trader):
         self.result['abs_profit'] = f"{abs_profit:.3f} {self.stake_symbol}"
         self.result['total_profit_pct'] = f"{abs_profit / start_balance * 100:.2f}%"
         tot_amount = sum(r.amount * r.price for r in self.his_orders)
-        self.result['avg_stake_amount'] = f"{tot_amount / len(self.his_orders):.3f} {self.stake_symbol}"
-        self.result['tot_stake_amount'] = f"{tot_amount:.3f} {self.stake_symbol}"
-        od_sort = sorted(self.his_orders, key=lambda x: x.profit_rate)
-        self.result['best_trade'] = f"{od_sort[-1].symbol} {od_sort[-1].profit_rate * 100:.2f}%"
-        self.result['worst_trade'] = f"{od_sort[0].symbol} {od_sort[0].profit_rate * 100:.2f}%"
+        if self.his_orders:
+            self.result['avg_stake_amount'] = f"{tot_amount / len(self.his_orders):.3f} {self.stake_symbol}"
+            self.result['tot_stake_amount'] = f"{tot_amount:.3f} {self.stake_symbol}"
+            od_sort = sorted(self.his_orders, key=lambda x: x.profit_rate)
+            self.result['best_trade'] = f"{od_sort[-1].symbol} {od_sort[-1].profit_rate * 100:.2f}%"
+            self.result['worst_trade'] = f"{od_sort[0].symbol} {od_sort[0].profit_rate * 100:.2f}%"
+        else:
+            self.result['avg_stake_amount'] = f"0 {self.stake_symbol}"
+            self.result['tot_stake_amount'] = f"0 {self.stake_symbol}"
+            self.result['best_trade'] = "None"
+            self.result['worst_trade'] = "None"
         self.result['min_balance'] = f'{self.min_balance:.3f} {self.stake_symbol}'
         self.result['max_balance'] = f'{self.max_balance:.3f} {self.stake_symbol}'
         self.result['market_change'] = f"{(arr[-1, 3] / arr[0, 0] - 1) * 100: .2f}%"

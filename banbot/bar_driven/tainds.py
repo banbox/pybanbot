@@ -8,14 +8,33 @@ from contextvars import Context, ContextVar
 from typing import *
 
 import numpy as np
+import pandas as pd
 
 from banbot.util.num_utils import *
 
 
-ohcl_arr = ContextVar('ohcl_arr')
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
-bar_num.set(0)
+timeframe_secs = ContextVar('timeframe_secs')
+bar_state = ContextVar('bar_state')
+_symbol_ctx: Dict[str, Context] = dict()
+
+
+def _init_context(symbol: str):
+    from banbot.exchange.exchange_utils import timeframe_to_seconds
+    pair, tf = symbol.split('_')
+    symbol_tf.set(symbol)
+    bar_num.set(0)
+    bar_state.set(dict())
+    timeframe_secs.set(timeframe_to_seconds(tf))
+
+
+def get_context(symbol: str) -> Context:
+    if symbol not in _symbol_ctx:
+        ctx = Context()
+        ctx.run(_init_context, symbol)
+        _symbol_ctx[symbol] = ctx
+    return _symbol_ctx[symbol]
 
 
 def avg_in_range(view_arr, start_rate=0.25, end_rate=0.75, is_abs=True) -> float:
@@ -28,6 +47,12 @@ def avg_in_range(view_arr, start_rate=0.25, end_rate=0.75, is_abs=True) -> float
 
 
 class LongVar:
+    '''
+    更新频率较低的市场信息；同一指标，不同交易对不同周期，需要的参数可能不同。
+    更新方法：一定周期的K线数据更新、API接口计算更新。
+    （创建参数：更新函数、更新周期、）
+    更新间隔：60s的整数倍
+    '''
     _instances: Dict[str, 'LongVar'] = dict()
     create_fns: Dict[str, Callable] = dict()
 
@@ -93,7 +118,7 @@ class CachedInd(type):
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
-        cls_key = f'{symbol_tf.get()}{cls.__name__}{args}{kwargs}'
+        cls_key = f'{symbol_tf.get()}_{cls.__name__}{args}{kwargs}'
         if cls_key not in cls._instances:
             cls._instances[cls_key] = super(CachedInd, cls).__call__(*args, **kwargs)
         return cls._instances[cls_key]
@@ -102,7 +127,7 @@ class CachedInd(type):
 class BaseInd(metaclass=CachedInd):
     def __init__(self, cache_key: str = ''):
         self.cache_key = cache_key
-        self.calc_bar = bar_num.get()
+        self.calc_bar = 0
         self.arr: List[float] = []
 
 
@@ -125,9 +150,9 @@ class BaseSimpleInd(BaseInd):
         raise NotImplementedError(f'_compute in {self.__class__.__name__}')
 
 
-class SMA(BaseSimpleInd):
+class StaSMA(BaseSimpleInd):
     def __init__(self, period: int, cache_key: str = ''):
-        super(SMA, self).__init__(period, cache_key)
+        super(StaSMA, self).__init__(period, cache_key)
         self.dep_vals: List[Number] = []
 
     def _compute(self, val):
@@ -138,9 +163,34 @@ class SMA(BaseSimpleInd):
         return sum(self.dep_vals)
 
 
-class EMA(BaseSimpleInd):
+def _to_nparr(arr) -> np.ndarray:
+    if isinstance(arr, np.ndarray):
+        return arr
+    elif isinstance(arr, pd.Series):
+        return arr.to_numpy()
+    else:
+        return np.array(arr)
+
+
+def _nan_array(arr):
+    result = np.zeros(len(arr))
+    result[:] = np.nan
+    return result
+
+
+def SMA(arr: np.ndarray, period: int) -> np.ndarray:
+    arr = _to_nparr(arr)
+    assert isinstance(arr, np.ndarray) and len(arr.shape) == 1
+    result = _nan_array(arr)
+    div_arr = arr / period
+    for i in range(period, len(arr)):
+        result[i] = sum(div_arr[i - period: i])
+    return result
+
+
+class StaEMA(BaseSimpleInd):
     def __init__(self, period: int, cache_key: str = ''):
-        super(EMA, self).__init__(period, cache_key)
+        super(StaEMA, self).__init__(period, cache_key)
         self.mul = 2 / (period + 1)
 
     def _compute(self, val):
@@ -151,9 +201,22 @@ class EMA(BaseSimpleInd):
         return ind_val
 
 
-class TR(BaseInd):
+def EMA(arr: np.ndarray, period: int) -> np.ndarray:
+    arr = _to_nparr(arr)
+    assert isinstance(arr, np.ndarray) and len(arr.shape) == 1
+    mul = 2 / (period + 1)
+    result = _nan_array(arr)
+    old_val = arr[0]
+    result[0] = old_val
+    for i in range(1, len(arr)):
+        result[i] = arr[i] * mul + old_val * (1 - mul)
+        old_val = result[i]
+    return result
+
+
+class StaTR(BaseInd):
     def __init__(self, cache_key: str = ''):
-        super(TR, self).__init__(cache_key)
+        super(StaTR, self).__init__(cache_key)
 
     def __call__(self, *args, **kwargs):
         arr = args[0]
@@ -171,11 +234,22 @@ class TR(BaseInd):
         return cur_tr
 
 
-class NATR(BaseInd):
+def TR(arr) -> np.ndarray:
+    arr = _to_nparr(arr)
+    assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5
+    result = _nan_array(arr)
+    result[0] = arr[0, 1] - arr[0, 2]
+    for i in range(1, result.shape[0]):
+        crow, prow = arr[i, :], arr[i - 1, :]
+        result[i] = max(crow[1] - crow[2], abs(crow[1] - prow[3]), abs(crow[2] - prow[3]))
+    return result
+
+
+class StaATR(BaseInd):
     def __init__(self, period: int = 3, cache_key: str = ''):
-        super(NATR, self).__init__(cache_key)
+        super(StaATR, self).__init__(cache_key)
         self.period = period
-        self.tr = TR(cache_key)
+        self.tr = StaTR(cache_key)
 
     def __call__(self, *args, **kwargs):
         arr = args[0]
@@ -183,22 +257,53 @@ class NATR(BaseInd):
         if self.calc_bar >= bar_num.get():
             return self.arr[-1]
         tr_val = self.tr(arr)
-        long_price_range = LongVar.get(LongVar.price_range)
-        if arr.shape[0] < long_price_range.roll_len:
-            ind_val = np.nan
-        elif not self.arr or np.isnan(self.arr[-1]):
+        if not self.arr or np.isnan(self.arr[-1]):
             ind_val = sum(self.tr.arr[-self.period:]) / self.period
         else:
             ind_val = (self.arr[-1] * (self.period - 1) + tr_val) / self.period
+        self.arr.append(ind_val)
+        self.arr = self.arr[-600:]
+        self.calc_bar = bar_num.get()
+        return self.arr[-1]
+
+
+def ATR(arr, period: int) -> np.ndarray:
+    arr = _to_nparr(arr)
+    assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5
+    tr = TR(arr)
+    result = _nan_array(arr)
+    old_val = sum(tr[:period]) / period
+    result[period] = old_val
+    for i in range(period + 1, result.shape[0]):
+        old_val = (tr[i] + old_val * (period - 1)) / period
+        result[i] = old_val
+    return result
+
+
+class StaNATR(BaseInd):
+    def __init__(self, period: int = 3, cache_key: str = ''):
+        super(StaNATR, self).__init__(cache_key)
+        self.period = period
+        self.atr = StaATR(period, cache_key)
+
+    def __call__(self, *args, **kwargs):
+        arr = args[0]
+        assert isinstance(arr, np.ndarray)
+        if self.calc_bar >= bar_num.get():
+            return self.arr[-1]
+        ind_val = self.atr(arr)
+        long_price_range = LongVar.get(LongVar.price_range)
+        if arr.shape[0] < long_price_range.roll_len:
+            ind_val = np.nan
         self.arr.append(ind_val / long_price_range.val)
         self.arr = self.arr[-600:]
         self.calc_bar = bar_num.get()
         return self.arr[-1]
 
 
-class TRRoll(BaseInd):
+class StaTRRoll(BaseInd):
     def __init__(self, period: int = 4, cache_key: str = ''):
-        super(TRRoll, self).__init__(cache_key)
+        super(StaTRRoll, self).__init__(cache_key)
         self.period = period
 
     def __call__(self, *args, **kwargs):
@@ -226,10 +331,10 @@ class TRRoll(BaseInd):
         return ind_val
 
 
-class NTRRoll(BaseInd):
+class StaNTRRoll(BaseInd):
     def __init__(self, period: int = 4, roll_len: int = 4, cache_key: str = ''):
-        super(NTRRoll, self).__init__(cache_key)
-        self.tr_roll = TRRoll(period, cache_key)
+        super(StaNTRRoll, self).__init__(cache_key)
+        self.tr_roll = StaTRRoll(period, cache_key)
         self.roll_len = roll_len
 
     def __call__(self, *args, **kwargs):
@@ -244,9 +349,9 @@ class NTRRoll(BaseInd):
         return self.arr[-1]
 
 
-class NVol(BaseInd):
+class StaNVol(BaseInd):
     def __init__(self, cache_key: str = ''):
-        super(NVol, self).__init__(cache_key)
+        super(StaNVol, self).__init__(cache_key)
 
     def __call__(self, *args, **kwargs):
         arr = args[0]
@@ -259,13 +364,13 @@ class NVol(BaseInd):
         return self.arr[-1]
 
 
-class MACD(BaseInd):
-    def __init__(self, short_period: int = 12, long_period: int = 26, smooth_period: int = 9,
+class StaMACD(BaseInd):
+    def __init__(self, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9,
                  cache_key: str = ''):
-        super(MACD, self).__init__(cache_key)
-        self.ema_short = EMA(short_period, cache_key)
-        self.ema_long = EMA(long_period, cache_key)
-        self.ema_sgl = EMA(smooth_period, cache_key + 'macd')
+        super(StaMACD, self).__init__(cache_key)
+        self.ema_short = StaEMA(fast_period, cache_key)
+        self.ema_long = StaEMA(slow_period, cache_key)
+        self.ema_sgl = StaEMA(smooth_period, cache_key + 'macd')
         self.macd_arr = []
         self.singal_arr = []
 
@@ -284,8 +389,17 @@ class MACD(BaseInd):
         return macd, singal
 
 
+def MACD(arr: np.ndarray, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9)\
+        -> Tuple[np.ndarray, np.ndarray]:
+    arr = _to_nparr(arr)
+    ema_fast, ema_slow = EMA(arr, fast_period), EMA(arr, slow_period)
+    macd = ema_fast - ema_slow
+    signal = EMA(macd, smooth_period)
+    return macd, signal
+
+
 def _make_sub_malong():
-    malong = SMA(120)
+    malong = StaSMA(120)
 
     def calc(arr):
         return abs(arr[-1, 3] - malong(arr[-1, 3]))
@@ -293,7 +407,7 @@ def _make_sub_malong():
 
 
 def _make_atr_low():
-    natr = NATR()
+    natr = StaNATR()
 
     def calc(arr):
         return avg_in_range(natr.arr, 0.1, 0.4)

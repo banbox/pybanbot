@@ -7,7 +7,7 @@ import numpy as np
 from banbot.compute.patterns import *
 
 
-def _log_extrem(log_list: list, ma: SMA, min_dist: float = 0):
+def _log_extrem(log_list: list, ma: StaSMA, min_dist: float = 0):
     ind_vals = ma.arr[-3:]
     mid_ind = ind_vals[-2]
     if min(ind_vals[-3], ind_vals[-1]) <= mid_ind <= max(ind_vals[-3], ind_vals[-1]):
@@ -28,7 +28,7 @@ def _log_extrem(log_list: list, ma: SMA, min_dist: float = 0):
         del log_list[:50]
 
 
-def log_ma_extrems(log_ma5, log_ma20, log_ma120, ma5: SMA, ma20: SMA, ma120: SMA):
+def log_ma_extrems(log_ma5, log_ma20, log_ma120, ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
     '''
     检查当前是否出现极值点并记录。
     :return:
@@ -44,7 +44,7 @@ def log_ma_extrems(log_ma5, log_ma20, log_ma120, ma5: SMA, ma20: SMA, ma120: SMA
         _log_extrem(log_ma120, ma120, bar_len_val * 0.5)
 
 
-def make_big_vol_prc(nvol: NVol, ntr_rol: NTRRoll, col_num: int):
+def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll, col_num: int):
     def calc_func(arr: np.ndarray) -> float:
         '''
         是否巨量。是成交量均值的15倍，或10倍且5周期最大，或5倍且10周期最大
@@ -100,7 +100,7 @@ def norm_score(arr: np.ndarray, ntr_rol_id: int):
     return cur_ntr / prev_ntr
 
 
-def make_calc_shorts(col_num: int, ma5: SMA, ma20: SMA, ma120: SMA):
+def make_calc_shorts(col_num: int, ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
     def calc(arr: np.ndarray, his_ptns: List[Dict[str, float]], huge_score: float) -> List[Tuple[str, float]]:
         copen, chigh, clow, close, vol = arr[-1, :5]
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, col_num - 5: col_num]

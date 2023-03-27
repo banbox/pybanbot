@@ -4,6 +4,23 @@
 # Author: anyongjin
 # Date  : 2023/3/2
 import numpy as np
+from typing import List
+
+
+def cross_zero(arr: np.ndarray, go_type=0) -> List[int]:
+    prev_val = arr[0]
+    result = []
+    for i in range(1, len(arr)):
+        val = arr[i]
+        if not val or prev_val * val > 0:
+            continue
+        if prev_val * val < 0:
+            if go_type >= 0 and val > 0:
+                result.append(i)
+            elif go_type <= 0 and val < 0:
+                result.append(i)
+        prev_val = val
+    return result
 
 
 def cluster_kmeans(arr: np.ndarray, cls_num: int, max_iter=20):

@@ -22,6 +22,8 @@ def _calc_winloss(df: pd.DataFrame):
 
 
 def text_order_tags(df: pd.DataFrame, tag_type: str):
+    if not len(df):
+        return ''
     headers = ['Tag', 'Count', 'AvgProfit %', 'SumProfit %', 'SumProfit', 'TotProfit %', 'Duration', 'WinDrawLoss']
     headers[0] = 'EnterTag' if tag_type != 'exit' else 'ExitTag'
     hd_fmts = ['s', 'd', '.2f', '.2f', '.3f', '.2f', '.1f', 's']
@@ -75,6 +77,8 @@ def _group_counts(df: pd.DataFrame, col: str, show_num=3):
 
 
 def text_order_profits(df: pd.DataFrame) -> str:
+    if not len(df):
+        return ''
     from banbot.util.num_utils import cluster_kmeans
     headers = ['Profit Range', 'Count', 'AvgProfit %', 'TotProfit', 'Duration', 'EnterTags', 'ExitTags']
     if len(df) > 150:

@@ -38,14 +38,14 @@ class MeanRev(BaseStrategy):
         super().__init__()
         # 原始列：open, high, low, close, volume, count, long_vol
         # max_chg, real, solid_rate, hline_rate, lline_rate
-        self.col_num = 12
-        self.ma120 = SMA(120)
-        self.ma20 = SMA(20)
-        self.ma5 = SMA(5)
-        self.tr = TR()
-        self.natr = NATR()
-        self.ntr_rol = NTRRoll()
-        self.nvol = NVol()
+        self.ma120 = StaSMA(120)
+        self.ma20 = StaSMA(20)
+        self.ma5 = StaSMA(5)
+        self.tr = StaTR()
+        self.natr = StaNATR()
+        self.ntr_rol = StaNTRRoll()
+        self.nvol = StaNVol()
+        self.macd = StaMACD()
         self.debug_ids = debug_ids or set()
         self._is_debug = False
 
@@ -61,37 +61,17 @@ class MeanRev(BaseStrategy):
         :param arr: 二维数组，每个元素是一个蜡烛：[open, high, low, close, volume, count, long_vol]
         :return:
         '''
-        copen, chigh, clow, close = arr[-1, :4]
-        dust = min(0.00001, close * 0.0001)
-        max_chg = dust + chigh - clow
-        real = abs(close - copen)
-        solid_rate = real / max_chg
-        hline_rate = (chigh - max(close, copen)) / max_chg
-        lline_rate = (min(close, copen) - clow) / max_chg
-        bar_num.set(bar_num.get() + 1)
-        if bar_num.get() == 1:
-            crow = np.concatenate([arr[0], [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
-            result = np.expand_dims(crow, axis=0)
-            self.ma5(crow[3])
-            self.ma20(crow[3])
-            self.ma120(crow[3])
-            self.tr(result)
-            self.natr(result)
-            self.ntr_rol(result)
-            self.nvol(result)
-            LongVar.update(result)
+        result = self._base_bar(arr)
+        self.ma5(result[-1, 3])
+        self.ma20(result[-1, 3])
+        self.ma120(result[-1, 3])
+        self.macd(result[-1, 3])
+        self.tr(result)
+        self.natr(result)
+        self.ntr_rol(result)
+        self.nvol(result)
+        if not self._state_fn:
             self._init_state_fn()
-        else:
-            result = arr
-            result[-1, list(range(7, self.col_num))] = max_chg, real, solid_rate, hline_rate, lline_rate
-            self.ma5(result[-1, 3])
-            self.ma20(result[-1, 3])
-            self.ma120(result[-1, 3])
-            self.tr(result)
-            self.natr(result)
-            self.ntr_rol(result)
-            self.nvol(result)
-            LongVar.update(result)
         self._is_debug = self.debug_ids and bar_num.get() - 1 in self.debug_ids
         self.patterns.append(detect_pattern(result))
         # 记录均线极值点
