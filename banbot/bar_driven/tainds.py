@@ -166,7 +166,7 @@ class StaSMA(BaseSimpleInd):
 def _to_nparr(arr) -> np.ndarray:
     if isinstance(arr, np.ndarray):
         return arr
-    elif isinstance(arr, pd.Series):
+    elif isinstance(arr, (pd.Series, pd.DataFrame)):
         return arr.to_numpy()
     else:
         return np.array(arr)
@@ -269,7 +269,7 @@ class StaATR(BaseInd):
 
 def ATR(arr, period: int) -> np.ndarray:
     arr = _to_nparr(arr)
-    assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5
+    assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5, f'{arr.shape} invalid'
     tr = TR(arr)
     result = _nan_array(arr)
     old_val = sum(tr[:period]) / period

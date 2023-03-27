@@ -4,12 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/3/17
 import os.path
+import time
 
 import numpy as np
 
 from banbot.main.itrader import Trader
 from banbot.strategy.mean_rev import *
-from banbot.strategy.classic.trend_model_sys import TrendModelSys
 from banbot.config.config import cfg
 data_dir = r'E:\trade\freqtd_data\user_data\data_recent\binance'
 
@@ -26,6 +26,7 @@ class BackTest(Trader):
         self.max_open_orders = 1
         self.min_balance = 0
         self.max_balance = 0
+        self.network_cost = 0.6  # 模拟网络延迟
 
     @staticmethod
     def load_data():
@@ -38,25 +39,22 @@ class BackTest(Trader):
         self.wallets[self.stake_symbol] = (self.stake_amount, 0)
         self.wallets[self.base_symbol] = 0, 0
 
-    def run(self):
+    def run(self, make_strategy):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
         self.bot_start()
-        ctx = get_context(f'{self.pair}_1s')
-        ctx.run(self._run)
+        ctx = get_context(f'{self.pair}_1m')
+        ctx.run(self._run, make_strategy)
         od_list = [r.to_dict() for r in self.his_orders]
         print_backtest(pd.DataFrame(od_list), self.result)
         BTAnalysis(self.his_orders, **self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    def _run(self):
+    def _run(self, make_strategy):
         data = self.load_data()
         if self.max_num:
             data = data[:self.max_num]
-        self.strategy = TrendModelSys()
-        if hasattr(self.strategy, 'debug_ids'):
-            debug_idx = int(np.where(data['date'] == '2023-02-22 00:15:09')[0][0])
-            self.strategy.debug_ids.add(debug_idx)
+        self.strategy = make_strategy()
         self.result['date_from'] = str(data.loc[0, 'date'])
         self.result['date_to'] = str(data.loc[len(data) - 1, 'date'])
         self.result['start_balance'] = self.wallets[self.stake_symbol][0]
@@ -81,6 +79,7 @@ class BackTest(Trader):
         self.result['total_profit_pct'] = f"{abs_profit / start_balance * 100:.2f}%"
         tot_amount = sum(r.amount * r.price for r in self.his_orders)
         if self.his_orders:
+            self.result['avg_profit_pct'] = f"{abs_profit / start_balance / len(self.his_orders) * 1000:.3f}%o"
             self.result['avg_stake_amount'] = f"{tot_amount / len(self.his_orders):.3f} {self.stake_symbol}"
             self.result['tot_stake_amount'] = f"{tot_amount:.3f} {self.stake_symbol}"
             od_sort = sorted(self.his_orders, key=lambda x: x.profit_rate)
@@ -95,10 +94,18 @@ class BackTest(Trader):
         self.result['max_balance'] = f'{self.max_balance:.3f} {self.stake_symbol}'
         self.result['market_change'] = f"{(arr[-1, 3] / arr[0, 0] - 1) * 100: .2f}%"
 
+    def market_price(self, arr: np.ndarray) -> float:
+        '''
+        计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
+        :return:
+        '''
+        rate = min(1, self.network_cost / timeframe_secs.get())
+        return arr[-1, 0] * (1 - rate) + arr[-1, 3] * rate
+
     def _new_order(self, tag: str):
         def callback(arr: np.ndarray):
             od: Order = self.open_orders[tag]
-            enter_price = arr[-1, 3]
+            enter_price = self.market_price(arr)
             quote_amount = enter_price * od.amount
             self.update_wallets(**{self.stake_symbol: -quote_amount, self.base_symbol: od.amount})
             od.status = OrderStatus.FullEnter
@@ -116,7 +123,7 @@ class BackTest(Trader):
         def calc_fn(arr: np.ndarray):
             od: Order = self.open_orders[tag]
             od.exit_at = bar_num.get()
-            od.stop_price = arr[-1, 3]
+            od.stop_price = self.market_price(arr)
             od.status = OrderStatus.FullExit
             quote_amount = od.stop_price * od.amount
             self.update_wallets(**{self.stake_symbol: quote_amount, self.base_symbol: -od.amount})
@@ -130,5 +137,16 @@ class BackTest(Trader):
 
 
 if __name__ == '__main__':
+    def make_strategy():
+        from banbot.strategy.macd_cross import MACDCross
+        stg = MACDCross()
+        # from banbot.strategy.mean_rev import MeanRev
+        # stg = MeanRev()
+        # from banbot.strategy.classic.trend_model_sys import TrendModelSys
+        # strategy = TrendModelSys()
+        # if hasattr(strategy, 'debug_ids'):
+        #     debug_idx = int(np.where(data['date'] == '2023-02-22 00:15:09')[0][0])
+        #     strategy.debug_ids.add(debug_idx)
+        return stg
     bot = BackTest(10000)
-    bot.run()
+    bot.run(make_strategy)

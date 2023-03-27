@@ -5,7 +5,10 @@
 # Date  : 2023/3/21
 
 from datetime import datetime, timezone, timedelta
+from banbot.bar_driven.tainds import bar_num
 from typing import *
+
+import numpy as np
 
 
 class OrderStatus:
@@ -88,7 +91,7 @@ class Order:
         self.profit: float = kwargs.get('profit', 0.0)
 
     def can_close(self):
-        return self.status > OrderStatus.Init and not self.exit_tag
+        return self.status > OrderStatus.Init and not self.exit_tag and bar_num.get() > self.enter_at
 
     def to_dict(self) -> dict:
         return dict(
@@ -124,3 +127,14 @@ class Order:
         self.stoploss: float = kwargs.get('stoploss', self.stoploss)
         self.profit_rate: float = kwargs.get('profit_rate', self.profit_rate)
         self.profit: float = kwargs.get('profit', self.profit)
+
+    def update_by_bar(self, arr: np.ndarray):
+        '''
+        此方法由接口调用，策略中不应该调用此方法。
+        :param arr:
+        :return:
+        '''
+        if self.status in {OrderStatus.Init, OrderStatus.FullExit}:
+            return
+        self.profit = (arr[-1, 3] - self.price) * self.amount
+        self.profit_rate = arr[-1, 3] / self.price - 1

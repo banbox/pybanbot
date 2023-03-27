@@ -73,7 +73,7 @@ class MeanRev(BaseStrategy):
         if not self._state_fn:
             self._init_state_fn()
         self._is_debug = self.debug_ids and bar_num.get() - 1 in self.debug_ids
-        self.patterns.append(detect_pattern(result))
+        self.patterns.append(detect_pattern(result, self.col_num - 5))
         # 记录均线极值点
         log_ma_extrems(self.extrems_ma5, self.extrems_ma20, self.extrems_ma120, self.ma5, self.ma20, self.ma120)
         # 记录MA5和MA20的交叉点
@@ -204,20 +204,21 @@ class MeanRev(BaseStrategy):
         :param arr:
         :return:
         '''
-        enter_tags = [self.sudden_huge_rev(arr), self.ma_cross_entry(arr)]
+        # self.ma_cross_entry(arr)
+        enter_tags = [self.sudden_huge_rev(arr)]
         enter_tags = sorted(enter_tags, key=lambda x: x[1], reverse=True)
         final_tag = enter_tags[0]
         if final_tag[1] > 0.1:
             return final_tag[0]
 
-    def on_exit(self, arr: np.ndarray) -> str:
-        huge_score = self._calc_state('big_vol_prc', arr)
-        short_sigs = self._calc_state('calc_shorts', arr, self.patterns, huge_score)
-        if short_sigs:
-            for key, score in short_sigs:
-                self.short_sigs[key] = bar_num.get(), score
-            if short_sigs[0][1] > 0.8:
-                return short_sigs[0][0]
+    # def on_exit(self, arr: np.ndarray) -> str:
+    #     huge_score = self._calc_state('big_vol_prc', arr)
+    #     short_sigs = self._calc_state('calc_shorts', arr, self.patterns, huge_score)
+    #     if short_sigs:
+    #         for key, score in short_sigs:
+    #             self.short_sigs[key] = bar_num.get(), score
+    #         if short_sigs[0][1] > 0.8:
+    #             return short_sigs[0][0]
 
     def custom_exit(self, arr: np.ndarray, od: Order) -> Optional[str]:
         '''
@@ -228,16 +229,17 @@ class MeanRev(BaseStrategy):
         :param od:
         :return:
         '''
-        profit = arr[-1, 3] - od.price
-        stable_score = profit / LongVar.get(LongVar.sub_malong).val
-        if stable_score < 1:
-            short_sigs = self._get_sigs('short')
-            if not short_sigs:
-                return None
-            short_score = short_sigs[0][1]
-            bar_len = LongVar.get(LongVar.bar_len).val
-            if profit < bar_len and short_score >= 0.4:
-                return short_sigs[0][0]
-            elif profit > bar_len and short_score >= 0.7:
-                return short_sigs[0][0]
+        return trail_stop_loss(arr, od)
+        # profit = arr[-1, 3] - od.price
+        # stable_score = profit / LongVar.get(LongVar.sub_malong).val
+        # if stable_score < 1:
+        #     short_sigs = self._get_sigs('short')
+        #     if not short_sigs:
+        #         return None
+        #     short_score = short_sigs[0][1]
+        #     bar_len = LongVar.get(LongVar.bar_len).val
+        #     if profit < bar_len and short_score >= 0.4:
+        #         return short_sigs[0][0]
+        #     elif profit > bar_len and short_score >= 0.7:
+        #         return short_sigs[0][0]
             

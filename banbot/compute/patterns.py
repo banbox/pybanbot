@@ -60,16 +60,17 @@ def big_vol_score(arr: np.ndarray, idx: int = -1):
     return 0
 
 
-def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
+def detect_pattern(arr: np.ndarray, col_start: int) -> Dict[str, float]:
     '''
     K线模式形态识别。这里只生成形态信号，使用信号时应根据市场环境和其他指标综合决策。
     :param arr:
+    :param col_start: 额外冗余列的起始位置
     :return: 匹配的形态名称
     '''
     candle = arr[-1, :]
     has_p1 = arr.shape[0] > 1
     has_p2 = arr.shape[0] > 2
-    c_max_chg, c_real, c_solid_rate, c_hline_rate, c_lline_rate = candle[7: 12]
+    c_max_chg, c_real, c_solid_rate, c_hline_rate, c_lline_rate = candle[col_start: col_start + 5]
     copen, chigh, clow, close = candle[:4]
     dust = min(0.00001, close * 0.0001)
 
@@ -80,11 +81,11 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     if has_p1:
         pcandle = arr[-2, :]
         popen, phigh, plow, pclose = pcandle[:4]
-        p_max_chg, p_real, p_solid_rate, p_hline_rate, p_lline_rate = pcandle[7: 12]
+        p_max_chg, p_real, p_solid_rate, p_hline_rate, p_lline_rate = pcandle[col_start: col_start + 5]
         if has_p2:
             p2candle = arr[-3, :]
             p2open, p2high, p2low, p2close = p2candle[:4]
-            p2_max_chg, p2_real, p2_solid_rate, p2_hline_rate, p2_lline_rate = p2candle[7: 12]
+            p2_max_chg, p2_real, p2_solid_rate, p2_hline_rate, p2_lline_rate = p2candle[col_start: col_start + 5]
 
     result = dict()
 

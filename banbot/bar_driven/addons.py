@@ -66,7 +66,8 @@ def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll, col_num: int):
         # 判断是否价格剧烈变化
         cur_ntr = ntr_rol.arr[-1]
         prev_ntr = np.max(ntr_rol.arr[-4:-1])
-        ntr_chg = cur_ntr / prev_ntr
+        dust = min(0.00001, arr[-1, 3] * 0.0001)
+        ntr_chg = cur_ntr / max(prev_ntr, dust)
         is_price_huge_chg = ntr_chg >= 2 or ntr_chg >= 1.5 and cur_ntr >= 0.3
         if np.isnan(prev_ntr) or not is_price_huge_chg:
             # 当前波动不够剧烈（是前一个2倍，或1.5倍但波动幅度超过历史30%）

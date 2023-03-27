@@ -57,6 +57,7 @@ def text_bt_metrics(data: dict):
         ('Finish Balance', data['final_balance']),
         ('Absolute profit', data['abs_profit']),
         ('Total profit %', data['total_profit_pct']),
+        ('Avg profit %o', data['avg_profit_pct']),
         ('Avg. stake amount', data['avg_stake_amount']),
         ('Total trade volume', data['tot_stake_amount']),
         ('Best trade', data['best_trade']),

@@ -38,15 +38,13 @@ class BTAnalysis:
         return BackTest.load_data()
 
     def to_plot(self) -> List[dict]:
-        enter_id = [od.enter_at - 1 for od in self.orders]
-        exit_id = [od.exit_at - 1 for od in self.orders]
-        enter_tag = [od.enter_tag for od in self.orders]
-        exit_tag = [od.exit_tag for od in self.orders]
         return [dict(
             col='open',
             type='order',
-            enter_id=enter_id,
-            exit_id=exit_id,
-            enter_tag=enter_tag,
-            exit_tag=exit_tag
+            enter_id=[od.enter_at - 1 for od in self.orders],
+            exit_id=[od.exit_at - 1 for od in self.orders],
+            enter_tag=[od.enter_tag for od in self.orders],
+            exit_tag=[od.exit_tag for od in self.orders],
+            enter_price=[od.price for od in self.orders],
+            exit_price=[od.stop_price for od in self.orders],
         )]

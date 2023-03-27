@@ -9,6 +9,7 @@ from banbot.strategy.mean_rev import *
 from banbot.strategy.base import BaseStrategy
 from banbot.persistence.trades import *
 from banbot.config.config import cfg
+from banbot.util.common import logger
 
 
 class Trader:
@@ -40,21 +41,29 @@ class Trader:
         else:
             self.arr = np.append(self.arr, append_nan_cols(arr, self._pad_len), axis=0)
             self.strategy.state = dict()
+            # 计算指标
             self.arr = self.strategy.on_bar(self.arr)
+            # 调用监听器
             self._fire_listeners()
+            if self.open_orders:
+                # 更新订单利润
+                for tag in self.open_orders:
+                    self.open_orders[tag].update_by_bar(self.arr)
+            # 调用策略生成入场和出场信号
             entry_tag = self.strategy.on_entry(self.arr)
             exit_tag = self.strategy.on_exit(self.arr)
             if entry_tag and not exit_tag:
+                bar_state.get()['last_enter'] = bar_num.get()
                 self.on_new_order(entry_tag)
             elif exit_tag:
                 self.on_close_orders(exit_tag)
             if self.open_orders:
-                for tag in self.open_orders:
-                    od = self.open_orders[tag]
+                # 调用策略的自定义退出判断
+                for od in list(self.open_orders.values()):
                     if not od.can_close():
                         continue
                     if ext_tag := self.strategy.custom_exit(self.arr, od):
-                        self.close_order(tag, ext_tag)
+                        self.close_order(od.enter_tag, ext_tag)
 
     def _fire_listeners(self):
         '''
@@ -168,6 +177,6 @@ class Trader:
         bar_num.set(bar_num.get() + 1)
         self._fire_listeners()
 
-    def run(self):
+    def run(self, make_strategy):
         raise NotImplementedError('`run` is not implemented')
 

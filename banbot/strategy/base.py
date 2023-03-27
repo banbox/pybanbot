@@ -3,10 +3,8 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-import numpy as np
 
-from banbot.bar_driven.tainds import *
-from banbot.persistence.trades import *
+from banbot.strategy.common import *
 
 
 class BaseStrategy:
@@ -59,6 +57,9 @@ class BaseStrategy:
         LongVar.update(result)
         return result
 
+    def bar_rates(self, arr: np.ndarray, index: int):
+        return arr[index, self.col_num - 5: self.col_num]
+
     def _get_sigs(self, tag: str, period: int = 1) -> List[Tuple[str, float, int]]:
         '''
         获取做空或做多信号。按bar_num降序、置信度降序
@@ -81,7 +82,7 @@ class BaseStrategy:
         '''
         raise NotImplementedError('on_bar is not implemented')
 
-    def on_entry(self, arr: np.ndarray) -> str:
+    def on_entry(self, arr: np.ndarray) -> Optional[str]:
         '''
         时间升序，最近的是最后一个
         :param arr:
@@ -89,7 +90,7 @@ class BaseStrategy:
         '''
         pass
 
-    def on_exit(self, arr: np.ndarray) -> str:
+    def on_exit(self, arr: np.ndarray) -> Optional[str]:
         pass
 
     def custom_exit(self, arr: np.ndarray, od: Order) -> Optional[str]:
