@@ -3,8 +3,7 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/3/28
-import asyncio
-import time
+from banbot.exchange.crypto_exchange import *
 from banbot.exchange.exchange_utils import *
 
 
@@ -31,13 +30,13 @@ class PairDataHolder:
         # 超过3s检查一次的（1分钟及以上维度），通过API获取；否则通过Websocket获取
         self.is_ws = self.min_interval <= 2
         self.auto_prefire = auto_prefire
+        self.next_since = None
         self.callback = None
 
-    async def update(self, exchange: ccxt.Exchange, exg_ws: ccxtpro.Exchange):
+    async def update(self, exchange: CryptoExchange):
         '''
         对当前交易对检查是否需要从交易所拉取数据
         :param exchange:
-        :param exg_ws:
         :return:
         '''
         assert self.callback, '`callback` is not set!'
@@ -46,9 +45,11 @@ class PairDataHolder:
         if not state.need_check():
             return
         if not self.is_ws:
-            details = await exchange.fetch_ohlcv(self.pair, '1s', limit=state.check_interval * 2)
+            limit = state.check_interval * 2
+            details = await exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since, limit=limit)
+            self.next_since = details[-1][0] + 1
         else:
-            details = await exg_ws.watch_trades(self.pair)
+            details = await exchange.watch_trades(self.pair)
         ohlcvs = [state.bar_row] if state.bar_row else []
         prefire = 0.1 if self.auto_prefire else 0
         ohlcvs = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
@@ -64,6 +65,7 @@ class PairDataHolder:
             # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
             return
         # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
+        ohlcvs = build_ohlcvc(details, state.tf_secs, prefire)
         for state in self.states[1:]:
             cur_ohlcvs = [state.bar_row] if state.bar_row else []
             prefire = 0.05 if self.auto_prefire else 0

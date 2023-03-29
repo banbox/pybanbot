@@ -1,6 +1,5 @@
 {
   "env": "prod",
-  "proxy": "http://127.0.0.1",
   "prefire": true,
   "pairlist": [
     ["BTC/TUSD", "1m"]

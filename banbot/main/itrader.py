@@ -9,6 +9,7 @@ from banbot.strategy.base import *
 from banbot.config import *
 from banbot.config import consts
 from banbot.util.common import logger
+from banbot.main.wallets import WalletsLocal
 
 
 class Trader:
@@ -18,8 +19,8 @@ class Trader:
         self.his_orders: List[Order] = []  # 历史订单
         self.open_orders: Dict[str, Order] = dict()  # 键是tag，值是字典
         self.stake_amount: float = cfg.get('stake_amount', 1000)
-        self.wallets = dict()  # 当前钱包
         self._bar_listeners: List[Tuple[int, Callable]] = []
+        self.wallets: WalletsLocal = None
         self.cur_time = datetime.now(timezone.utc)
         # 每次切换交易对时更新
         self.pair = 'BTC/USDT'
@@ -73,39 +74,6 @@ class Trader:
             elif od_num > bar_num.get():
                 res_listeners.append((od_num, func))
         self._bar_listeners = res_listeners
-
-    def _update_wallet(self, symbol: str, amount: float, is_frz=True):
-        ava_val, frz_val = self.wallets.get(symbol)
-        if amount > 0:
-            # 增加钱包金额，不影响冻结值，直接更新
-            # TODO: 取消订单时，可能需要增加可用余额，减少冻结金额
-            ava_val += amount
-        elif abs(frz_val / abs(amount) - 1) <= 0.02:
-            ava_val = ava_val + frz_val + amount
-            frz_val = 0
-        else:
-            ava_val += amount
-            if is_frz:
-                frz_val -= amount
-        self.wallets[symbol] = (max(0, ava_val), max(0, frz_val))
-
-    def update_wallets(self, **kwargs):
-        '''
-        更新钱包，可同时更新两个钱包，或只更新一个钱包：
-        只更新一个钱包时，变化值记录为冻结。
-        :param kwargs:
-        :return:
-        '''
-        items = list(kwargs.items())
-        assert 0 < len(items) <= 2, 'update wallets should be 2 keys'
-        if len(items) == 2:
-            # 同时更新2个钱包时，必须是一增一减
-            (keya, vala), (keyb, valb) = items
-            assert vala * valb < 0, 'two amount should different signs'
-            self._update_wallet(keya, vala, False)
-            self._update_wallet(keyb, valb, False)
-        else:
-            self._update_wallet(*items[0])
 
     def on_new_order(self, tag: str, stoploss: float = None, ):
         if tag in self.open_orders:

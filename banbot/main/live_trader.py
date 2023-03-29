@@ -5,8 +5,11 @@
 # Date  : 2023/2/28
 import asyncio
 
+import numpy as np
+
 from banbot.main.itrader import *
-from banbot.exchange.exchange_utils import *
+from banbot.exchange.crypto_exchange import *
+from banbot.main.wallets import CryptoWallet
 from banbot.data.live_provider import LiveDataProvider
 from banbot.util.misc import *
 
@@ -18,16 +21,24 @@ class LiveTrader(Trader):
 
     def __init__(self):
         super(LiveTrader, self).__init__()
-        self.data_hold = LiveDataProvider(cfg)
+        self.exchange = CryptoExchange(cfg)
+        self.data_hold = LiveDataProvider(self.exchange)
+        self.wallets = CryptoWallet(cfg, self.exchange)
         self.strategy_map: Dict[str, BaseStrategy] = dict()
         self.data_hold.set_callback(self._make_invoke())
 
     def _make_invoke(self):
-        async def invoke_pair(pair, timeframe, row: np.ndarray):
+        async def invoke_pair(pair, timeframe, row):
             set_context(f'{pair}_{timeframe}')
             logger.info(f'ohlc: {pair} {timeframe} {row}')
-            await self.on_data_feed(row)
+            await self.on_data_feed(np.array(row))
         return invoke_pair
+
+    async def init(self):
+        await self.exchange.load_markets()
+        await self.wallets.init()
+        await init_longvars(self.exchange, self.pairlist)
+        logger.info('init longvars complete')
 
     async def on_data_feed(self, row: np.ndarray):
         pass
@@ -37,7 +48,7 @@ class LiveTrader(Trader):
             symbol = f'{pair}_{timeframe}'
             set_context(symbol)
             self.strategy_map[symbol] = make_strategy()
-        await self.data_hold.init()
+        await self.init()
         logger.info(f'data update interval: {self.data_hold.min_interval}')
         while True:
             start_time = time.time()
