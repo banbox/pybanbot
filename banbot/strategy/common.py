@@ -23,7 +23,7 @@ def trail_stop_loss(arr: np.ndarray, od: Order, odlens: List[int] = None, loss_t
     :param back_rates: 回撤比率。默认：0.47, 0.28, 0.18
     :return:
     '''
-    if bar_num.get() == bar_state.get()['last_enter']:
+    if bar_num.get() == pair_state.get()['last_enter']:
         return
     elp_num = bar_num.get() - od.enter_at
     max_price = np.max(arr[-elp_num:, 3])

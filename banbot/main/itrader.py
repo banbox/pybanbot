@@ -5,55 +5,51 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
-from banbot.strategy.mean_rev import *
-from banbot.strategy.base import BaseStrategy
-from banbot.persistence.trades import *
-from banbot.config.config import cfg
+from banbot.strategy.base import *
+from banbot.config import *
+from banbot.config import consts
 from banbot.util.common import logger
 
 
 class Trader:
     def __init__(self):
         self.strategy: Optional[BaseStrategy] = None
-        self._is_first = True
-        self.arr = np.array([])
-        self._pad_len = 0
-        self.pair: str = cfg.get('pair')
+        self.pairlist: List[Tuple[str, str]] = cfg.get('pairlist')
         self.his_orders: List[Order] = []  # 历史订单
         self.open_orders: Dict[str, Order] = dict()  # 键是tag，值是字典
-        self.base_symbol, self.stake_symbol = self.pair.split('/')
         self.stake_amount: float = cfg.get('stake_amount', 1000)
         self.wallets = dict()  # 当前钱包
-        self.min_amount = 10
         self._bar_listeners: List[Tuple[int, Callable]] = []
         self.cur_time = datetime.now(timezone.utc)
-        self.min_stake = cfg.get('min_stake')
-
-    def bot_start(self):
-        pass
+        # 每次切换交易对时更新
+        self.pair = 'BTC/USDT'
+        self.timeframe = ''
+        self.base_symbol, self.stake_symbol = self.pair.split('/')
 
     def on_data_feed(self, row: np.ndarray):
         arr = np.expand_dims(row, 0)
-        if self._is_first:
-            self.arr = self.strategy.on_bar(arr)
-            self._pad_len = self.arr.shape[1] - arr.shape[1]
-            self._is_first = False
+        state = pair_state.get()
+        if not bar_num.get():
+            pair_arr = self.strategy.on_bar(arr)
+            state['pad_len'] = pair_arr.shape[1] - arr.shape[1]
+            bar_arr.set(pair_arr)
         else:
-            self.arr = np.append(self.arr, append_nan_cols(arr, self._pad_len), axis=0)
+            pair_arr = np.append(bar_arr.get(), append_nan_cols(arr, state['pad_len']), axis=0)
             self.strategy.state = dict()
             # 计算指标
-            self.arr = self.strategy.on_bar(self.arr)
+            pair_arr = self.strategy.on_bar(pair_arr)
+            bar_arr.set(pair_arr)
             # 调用监听器
             self._fire_listeners()
             if self.open_orders:
                 # 更新订单利润
                 for tag in self.open_orders:
-                    self.open_orders[tag].update_by_bar(self.arr)
+                    self.open_orders[tag].update_by_bar(pair_arr)
             # 调用策略生成入场和出场信号
-            entry_tag = self.strategy.on_entry(self.arr)
-            exit_tag = self.strategy.on_exit(self.arr)
+            entry_tag = self.strategy.on_entry(pair_arr)
+            exit_tag = self.strategy.on_exit(pair_arr)
             if entry_tag and not exit_tag:
-                bar_state.get()['last_enter'] = bar_num.get()
+                state['last_enter'] = bar_num.get()
                 self.on_new_order(entry_tag)
             elif exit_tag:
                 self.on_close_orders(exit_tag)
@@ -62,7 +58,7 @@ class Trader:
                 for od in list(self.open_orders.values()):
                     if not od.can_close():
                         continue
-                    if ext_tag := self.strategy.custom_exit(self.arr, od):
+                    if ext_tag := self.strategy.custom_exit(pair_arr, od):
                         self.close_order(od.enter_tag, ext_tag)
 
     def _fire_listeners(self):
@@ -73,7 +69,7 @@ class Trader:
         res_listeners = []
         for od_num, func in self._bar_listeners:
             if od_num == bar_num.get():
-                func(self.arr)
+                func(bar_arr.get())
             elif od_num > bar_num.get():
                 res_listeners.append((od_num, func))
         self._bar_listeners = res_listeners
@@ -123,16 +119,17 @@ class Trader:
         state = self.strategy.state
         score = state.get('entry_score', 1)
         stake_amount = round(self.stake_amount * score, 2)
-        if stake_amount < self.min_stake:
+        if stake_amount < consts.MIN_STAKE_AMOUNT:
             return
         ava_val, frz_val = self.wallets.get(self.stake_symbol)
-        if ava_val < self.min_stake:
+        if ava_val < consts.MIN_STAKE_AMOUNT:
             return
         stake_amount = min(stake_amount, ava_val)
+        pair_arr = bar_arr.get()
         self.open_orders[tag] = Order(
             symbol=self.pair,
             order_type=state.get('order_type', 'market'),
-            amount=stake_amount / self.arr[-1, 3],
+            amount=stake_amount / pair_arr[-1, 3],
             enter_tag=tag,
             enter_at=bar_num.get(),
             stoploss=stoploss

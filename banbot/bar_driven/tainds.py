@@ -4,10 +4,9 @@
 # Author: anyongjin
 # Date  : 2023/3/24
 from numbers import Number
-from contextvars import Context, ContextVar
+from contextvars import Context, ContextVar, copy_context
 from typing import *
 
-import numpy as np
 import pandas as pd
 
 from banbot.util.num_utils import *
@@ -16,25 +15,36 @@ from banbot.util.num_utils import *
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
 timeframe_secs = ContextVar('timeframe_secs')
-bar_state = ContextVar('bar_state')
+pair_state = ContextVar('bar_state')
+bar_arr = ContextVar('bar_arr')
 _symbol_ctx: Dict[str, Context] = dict()
 
 
-def _init_context(symbol: str):
-    from banbot.exchange.exchange_utils import timeframe_to_seconds
-    pair, tf = symbol.split('_')
-    symbol_tf.set(symbol)
-    bar_num.set(0)
-    bar_state.set(dict())
-    timeframe_secs.set(timeframe_to_seconds(tf))
+def _update_context(kwargs):
+    for key, val in kwargs:
+        key.set(val)
 
 
-def get_context(symbol: str) -> Context:
+def set_context(symbol: str):
+    old_ctx = copy_context()
+    if symbol_tf in old_ctx and symbol_tf.get() in _symbol_ctx:
+        if symbol_tf.get() == symbol:
+            # 上下文未变化，直接退出
+            return
+        # 保存旧的值到旧的上下文
+        save_ctx = _symbol_ctx[symbol_tf.get()]
+        save_ctx.run(_update_context, old_ctx.items())
     if symbol not in _symbol_ctx:
-        ctx = Context()
-        ctx.run(_init_context, symbol)
-        _symbol_ctx[symbol] = ctx
-    return _symbol_ctx[symbol]
+        from banbot.exchange.exchange_utils import timeframe_to_seconds
+        pair, tf = symbol.split('_')
+        symbol_tf.set(symbol)
+        bar_num.set(0)
+        pair_state.set(dict())
+        timeframe_secs.set(timeframe_to_seconds(tf))
+        _symbol_ctx[symbol] = copy_context()
+    else:
+        # 从新的上下文恢复上次的状态
+        _update_context(_symbol_ctx[symbol].items())
 
 
 def avg_in_range(view_arr, start_rate=0.25, end_rate=0.75, is_abs=True) -> float:
@@ -229,6 +239,7 @@ class StaTR(BaseInd):
         else:
             prow = arr[-2, :]
             cur_tr = max(crow[1] - crow[2], abs(crow[1] - prow[3]), abs(crow[2] - prow[3]))
+        self.arr.append(cur_tr)
         self.arr = self.arr[-600:]
         self.calc_bar = bar_num.get()
         return cur_tr

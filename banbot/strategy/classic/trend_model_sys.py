@@ -32,7 +32,7 @@ class TrendModelSys(BaseStrategy):
         self.atr = StaATR(4)
         self.cross_dsct = 50  # 要求最远交叉点的最大距离
         self.back_num = 4  # 往前查看的交叉点的数量
-        state: dict = bar_state.get()
+        state: dict = pair_state.get()
         state['cross_exm'] = []
 
     def log_macd_cross(self, arr: np.ndarray) -> List[Tuple[int, float, float]]:
@@ -41,7 +41,7 @@ class TrendModelSys(BaseStrategy):
         :param arr:
         :return:
         '''
-        state: dict = bar_state.get()
+        state: dict = pair_state.get()
         macd, signl = self.macd(arr[-1, 3])
         cmacd_dir = macd - signl
         if cmacd_dir:
@@ -69,17 +69,17 @@ class TrendModelSys(BaseStrategy):
             if len(cross_exms) - xid >= self.back_num:
                 if arr[-1, 3] > max_high + half_atr:
                     # 当前价格突破最高值+ATR，入场
-                    bar_state.get()['up_cross'] = bar_num.get()
+                    pair_state.get()['up_cross'] = bar_num.get()
                 elif arr[-1, 3] < min_low - half_atr:
-                    bar_state.get()['down_cross'] = bar_num.get()
+                    pair_state.get()['down_cross'] = bar_num.get()
         return result
 
     def on_entry(self, arr: np.ndarray) -> str:
-        state: dict = bar_state.get()
+        state: dict = pair_state.get()
         if state.get('up_cross') == bar_num.get():
             return 'upx'
 
     def on_exit(self, arr: np.ndarray) -> str:
-        state: dict = bar_state.get()
+        state: dict = pair_state.get()
         if state.get('down_cross') == bar_num.get():
             return 'downx'

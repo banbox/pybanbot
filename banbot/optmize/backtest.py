@@ -10,7 +10,7 @@ import numpy as np
 
 from banbot.main.itrader import Trader
 from banbot.strategy.mean_rev import *
-from banbot.config.config import cfg
+from banbot.config import cfg
 data_dir = r'E:\trade\freqtd_data\user_data\data_recent\binance'
 
 
@@ -43,7 +43,7 @@ class BackTest(Trader):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
         self.bot_start()
-        ctx = get_context(f'{self.pair}_1m')
+        ctx = set_context(f'{self.pair}_1m')
         ctx.run(self._run, make_strategy)
         od_list = [r.to_dict() for r in self.his_orders]
         print_backtest(pd.DataFrame(od_list), self.result)

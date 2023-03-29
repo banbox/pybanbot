@@ -59,5 +59,5 @@ def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):
 
 
 if __name__ == '__main__':
-    data_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
-    convert_bnb_klines_datas(data_dir, '1s')
+    cdata_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
+    convert_bnb_klines_datas(cdata_dir, '1s')

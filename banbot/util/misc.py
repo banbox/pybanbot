@@ -13,6 +13,14 @@ def utime(secs: int = 0, as_ms: bool = True):
     return round((time.time() + secs) * multipler)
 
 
+def call_async(async_fn, *args, **kwargs):
+    import asyncio
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(async_fn(*args, **kwargs))
+    loop.close()
+    return result
+
+
 def nearly_group(data, max_pct=0.1, do_sort=True):
     '''
     近似分组方法，对于给定的一组数据，如果相邻之间相差在max_pct范围内，则认为是一组

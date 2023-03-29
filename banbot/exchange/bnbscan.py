@@ -13,7 +13,7 @@ from binance.websocket.spot.websocket_api import SpotWebsocketAPIClient as WsApi
 from binance.spot import Spot as RestApi
 from typing import List
 from collections import OrderedDict
-from banbot.config.config import *
+from banbot.config import *
 from banbot.utils import *
 
 
