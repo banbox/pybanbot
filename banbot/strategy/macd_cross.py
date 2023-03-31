@@ -3,8 +3,6 @@
 # File  : macd_cross.py
 # Author: anyongjin
 # Date  : 2023/3/27
-import numpy as np
-
 from banbot.strategy.base import *
 
 
@@ -14,16 +12,14 @@ class MACDCross(BaseStrategy):
     当MA5处于上升通道，当前bar阳线，且MACD也上升时，入场。
     使用跟踪止损出场
     '''
-    def __init__(self):
-        super(MACDCross, self).__init__()
+    def __init__(self, config: dict):
+        super(MACDCross, self).__init__(config)
         self.macd = StaMACD(11, 38, 14)
         self.ma5 = StaSMA(5)
 
-    def on_bar(self, arr: np.ndarray) -> np.ndarray:
-        result = self._base_bar(arr)
-        self.ma5(result[-1, 3])
-        self.macd(result[-1, 3])
-        return result
+    def on_bar(self, arr: np.ndarray):
+        self.ma5(arr[-1, 3])
+        self.macd(arr[-1, 3])
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         if np.isnan(self.ma5.arr[-1]) or np.isnan(LongVar.get(LongVar.bar_len).val):
@@ -36,6 +32,6 @@ class MACDCross(BaseStrategy):
         if price_up and len_ok and ma5_up and macd_up:
             return 'ent'
 
-    def custom_exit(self, arr: np.ndarray, od: Order) -> Optional[str]:
+    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         return trail_stop_loss(arr, od)
 

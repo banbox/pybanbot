@@ -60,13 +60,13 @@ def big_vol_score(arr: np.ndarray, idx: int = -1):
     return 0
 
 
-def detect_pattern(arr: np.ndarray, col_start: int) -> Dict[str, float]:
+def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     '''
     K线模式形态识别。这里只生成形态信号，使用信号时应根据市场环境和其他指标综合决策。
     :param arr:
-    :param col_start: 额外冗余列的起始位置
     :return: 匹配的形态名称
     '''
+    col_start: int = fea_col_start.get()
     candle = arr[-1, :]
     has_p1 = arr.shape[0] > 1
     has_p2 = arr.shape[0] > 2

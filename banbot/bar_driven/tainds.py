@@ -3,6 +3,10 @@
 # File  : tainds.py
 # Author: anyongjin
 # Date  : 2023/3/24
+'''
+上下文变量的归类：pair+timeframe
+跟策略无关，不考虑策略。（即pair+timeframe对应多个策略时，也是同一个上下文环境）
+'''
 from numbers import Number
 from contextvars import Context, ContextVar, copy_context
 from typing import *
@@ -17,6 +21,7 @@ symbol_tf = ContextVar('symbol_tf')
 timeframe_secs = ContextVar('timeframe_secs')
 pair_state = ContextVar('bar_state')
 bar_arr = ContextVar('bar_arr')
+fea_col_start = ContextVar('fea_col_start')
 _symbol_ctx: Dict[str, Context] = dict()
 
 
@@ -25,7 +30,17 @@ def _update_context(kwargs):
         key.set(val)
 
 
+def get_cur_symbol() -> Tuple[str, str, str, str]:
+    base_symbol, quote_symbol, timeframe = symbol_tf.get().split('/')
+    return f'{base_symbol}/{quote_symbol}', base_symbol, quote_symbol, timeframe
+
+
 def set_context(symbol: str):
+    '''
+    设置交易对和时间单元上下文。
+    :param symbol: BTC/USDT/1m
+    :return:
+    '''
     old_ctx = copy_context()
     if symbol_tf in old_ctx and symbol_tf.get() in _symbol_ctx:
         if symbol_tf.get() == symbol:
@@ -36,10 +51,11 @@ def set_context(symbol: str):
         save_ctx.run(_update_context, old_ctx.items())
     if symbol not in _symbol_ctx:
         from banbot.exchange.exchange_utils import timeframe_to_seconds
-        pair, tf = symbol.split('_')
+        base_s, quote_s, tf = symbol.split('/')
         symbol_tf.set(symbol)
         bar_num.set(0)
         pair_state.set(dict())
+        bar_arr.set([])
         timeframe_secs.set(timeframe_to_seconds(tf))
         _symbol_ctx[symbol] = copy_context()
     else:

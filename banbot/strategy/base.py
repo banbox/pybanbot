@@ -3,13 +3,37 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
+import numpy as np
 
 from banbot.strategy.common import *
 
 
+def append_new_bar(row: np.ndarray) -> np.ndarray:
+    result = bar_arr.get()
+    copen, chigh, clow, close = row[:4]
+    dust = min(0.00001, close * 0.0001)
+    max_chg = dust + chigh - clow
+    real = abs(close - copen)
+    solid_rate = real / max_chg
+    hline_rate = (chigh - max(close, copen)) / max_chg
+    lline_rate = (min(close, copen) - clow) / max_chg
+    bar_num.set(bar_num.get() + 1)
+    crow = np.concatenate([row, [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
+    exp_crow = np.expand_dims(crow, axis=0)
+    if not len(result):
+        fea_col_start.set(len(row))
+        result = exp_crow
+    else:
+        result = np.append(result, exp_crow, axis=0)
+    bar_arr.set(result)
+    LongVar.update(result)
+    return result
+
+
 class BaseStrategy:
 
-    def __init__(self):
+    def __init__(self, config: dict):
+        self.config = config
         self.long_sigs: Dict[str, Tuple[int, float]] = dict()  # 记录做多信号。key: [bar_num, score]
         self.short_sigs: Dict[str, Tuple[int, float]] = dict()  # 记录做空信号。key: [bar_num, score]
         self.patterns: List[Dict[str, float]] = []  # 识别出的K线形态
@@ -19,7 +43,6 @@ class BaseStrategy:
         self.extrems_ma120 = []
         self.state = dict()
         self._state_fn = dict()
-        self.col_num = 12
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -37,28 +60,8 @@ class BaseStrategy:
                 if len(self.ma_cross) > 300:
                     self.ma_cross = self.ma_cross[-100:]
 
-    def _base_bar(self, arr: np.ndarray) -> np.ndarray:
-        copen, chigh, clow, close = arr[-1, :4]
-        dust = min(0.00001, close * 0.0001)
-        max_chg = dust + chigh - clow
-        real = abs(close - copen)
-        solid_rate = real / max_chg
-        hline_rate = (chigh - max(close, copen)) / max_chg
-        lline_rate = (min(close, copen) - clow) / max_chg
-        bar_num.set(bar_num.get() + 1)
-        if bar_num.get() == 1:
-            crow = np.concatenate([arr[0], [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
-            result = np.expand_dims(crow, axis=0)
-            self.col_num = arr.shape[1] + 5
-        else:
-            result = arr
-            expand_cols = list(range(self.col_num - 5, self.col_num))
-            result[-1, expand_cols] = max_chg, real, solid_rate, hline_rate, lline_rate
-        LongVar.update(result)
-        return result
-
     def bar_rates(self, arr: np.ndarray, index: int):
-        return arr[index, self.col_num - 5: self.col_num]
+        return arr[index, -5:]
 
     def _get_sigs(self, tag: str, period: int = 1) -> List[Tuple[str, float, int]]:
         '''
@@ -74,13 +77,13 @@ class BaseStrategy:
             sigs = [(lkey, litem[1], litem[0]) for lkey, litem in self.short_sigs.items() if litem[0] > min_id]
         return sorted(sigs, key=lambda x: (x[1], x[2]), reverse=True)
 
-    def on_bar(self, arr: np.ndarray) -> np.ndarray:
+    def on_bar(self, arr: np.ndarray):
         '''
         计算指标。用于后续入场出场信号判断使用。
         :param arr:
         :return:
         '''
-        raise NotImplementedError('on_bar is not implemented')
+        pass
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         '''
@@ -90,8 +93,16 @@ class BaseStrategy:
         '''
         pass
 
+    def custom_cost(self, enter_tag: str) -> float:
+        '''
+        返回自定义的此次订单金额
+        :param enter_tag:
+        :return:
+        '''
+        return self.config.get('stake_amount', 1000)
+
     def on_exit(self, arr: np.ndarray) -> Optional[str]:
         pass
 
-    def custom_exit(self, arr: np.ndarray, od: Order) -> Optional[str]:
+    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         return None

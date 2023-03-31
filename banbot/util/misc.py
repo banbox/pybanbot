@@ -21,6 +21,35 @@ def call_async(async_fn, *args, **kwargs):
     return result
 
 
+def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):
+    """
+    Search a value in obj, return this if it's not None.
+    Then search key2 in obj - return that if it's not none - then use default_value.
+    Else falls back to None.
+    """
+    if key1 in obj and obj[key1] is not None:
+        return obj[key1]
+    else:
+        if key2 in obj and obj[key2] is not None:
+            return obj[key2]
+    return default_value
+
+
+def add_dict_prefix(data: dict, prefix: str) -> dict:
+    return {f'{prefix}{k}': v for k, v in data.items()}
+
+
+def del_dict_prefix(data: dict, prefix: str, with_others=True) -> dict:
+    result = dict()
+    pre_len = len(prefix)
+    for key, val in data.items():
+        if key.startswith(prefix):
+            result[key[pre_len:]] = val
+        elif with_others:
+            result[key] = val
+    return result
+
+
 def nearly_group(data, max_pct=0.1, do_sort=True):
     '''
     近似分组方法，对于给定的一组数据，如果相邻之间相差在max_pct范围内，则认为是一组

@@ -4,10 +4,10 @@
 # Author: anyongjin
 # Date  : 2023/3/27
 from banbot.bar_driven.tainds import *
-from banbot.persistence.trades import *
+from banbot.storage.orders import *
 
 
-def trail_stop_loss(arr: np.ndarray, od: Order, odlens: List[int] = None, loss_thres: List[float] = None,
+def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, loss_thres: List[float] = None,
                     back_rates: List[float] = None) -> Optional[str]:
     '''
     跟踪止损。
@@ -28,7 +28,7 @@ def trail_stop_loss(arr: np.ndarray, od: Order, odlens: List[int] = None, loss_t
     elp_num = bar_num.get() - od.enter_at
     max_price = np.max(arr[-elp_num:, 3])
     cur_close = arr[-1, 3]
-    max_loss = min(cur_close - od.price, cur_close - max_price)
+    max_loss = min(cur_close - od.enter.price, cur_close - max_price)
     bar_len = LongVar.get(LongVar.bar_len).val
     flen, slen, mlen, llen = odlens if odlens else 3, 5, 10, 15
     pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres if loss_thres else -1, -0, 1.5, 2, 3.6
@@ -39,7 +39,7 @@ def trail_stop_loss(arr: np.ndarray, od: Order, odlens: List[int] = None, loss_t
     if not back_rates:
         back_rates = 0.47, 0.28, 0.18
     dust = min(0.00001, cur_close * 0.0001)
-    max_change = max(dust, max_price - od.price)
+    max_change = max(dust, max_price - od.enter.price)
     back_rate = (max_price - cur_close) / max_change
     if back_rate >= back_rates[0] and (slen < elp_num <= mlen or max_change > bar_len * pf_1):
         return 'back.5'

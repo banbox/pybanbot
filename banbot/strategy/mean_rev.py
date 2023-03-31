@@ -51,34 +51,32 @@ class MeanRev(BaseStrategy):
 
     def _init_state_fn(self):
         self._state_fn = dict(
-            big_vol_prc=make_big_vol_prc(self.nvol, self.ntr_rol, self.col_num),
-            calc_shorts=make_calc_shorts(self.col_num, self.ma5, self.ma20, self.ma120)
+            big_vol_prc=make_big_vol_prc(self.nvol, self.ntr_rol),
+            calc_shorts=make_calc_shorts(self.ma5, self.ma20, self.ma120)
         )
 
-    def on_bar(self, arr: np.ndarray) -> np.ndarray:
+    def on_bar(self, arr: np.ndarray):
         '''
         针对每个蜡烛计算后续用到的指标。
         :param arr: 二维数组，每个元素是一个蜡烛：[open, high, low, close, volume, count, long_vol]
         :return:
         '''
-        result = self._base_bar(arr)
-        self.ma5(result[-1, 3])
-        self.ma20(result[-1, 3])
-        self.ma120(result[-1, 3])
-        self.macd(result[-1, 3])
-        self.tr(result)
-        self.natr(result)
-        self.ntr_rol(result)
-        self.nvol(result)
+        self.ma5(arr[-1, 3])
+        self.ma20(arr[-1, 3])
+        self.ma120(arr[-1, 3])
+        self.macd(arr[-1, 3])
+        self.tr(arr)
+        self.natr(arr)
+        self.ntr_rol(arr)
+        self.nvol(arr)
         if not self._state_fn:
             self._init_state_fn()
         self._is_debug = self.debug_ids and bar_num.get() - 1 in self.debug_ids
-        self.patterns.append(detect_pattern(result, self.col_num - 5))
+        self.patterns.append(detect_pattern(arr))
         # 记录均线极值点
         log_ma_extrems(self.extrems_ma5, self.extrems_ma20, self.extrems_ma120, self.ma5, self.ma20, self.ma120)
         # 记录MA5和MA20的交叉点
         self._log_ma_cross(self.ma5, self.ma20)
-        return result
 
     def _sudden_huge_rev(self, arr: np.ndarray) -> Optional[Tuple[str, float, dict]]:
         if np.isnan(self.ma120.arr[-1]):
@@ -128,7 +126,8 @@ class MeanRev(BaseStrategy):
                 return bar_res[:2]
         copen, chigh, clow, close = arr[-1, :4]
         bar_avg_len = LongVar.get(LongVar.bar_len).val
-        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, self.col_num - 5: self.col_num]
+        fea_start = fea_col_start.get()
+        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
         cur_bar_num = bar_num.get()
         back_len = 7
         if not phuge_up or cur_bar_num - phuge_up[0] > back_len:
@@ -144,19 +143,20 @@ class MeanRev(BaseStrategy):
         return tag, score
 
     def _up_score(self, arr: np.ndarray, up_val) -> float:
-        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, self.col_num - 5: self.col_num]
+        fea_start = fea_col_start.get()
+        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
         if arr[-1, 0] >= arr[-1, 3] or solid_rate < 0.5:
             # 最后一个必须阳线，实体50%
             return 0
         if real >= up_val and solid_rate >= 0.7:
             # 单个上涨较多，实体70%
             return solid_rate / 0.8
-        if arr[-1, 3] - arr[-2, 0] >= up_val and arr[-2, self.col_num - 3] >= 0.5:
+        if arr[-1, 3] - arr[-2, 0] >= up_val and arr[-2, fea_start + 2] >= 0.5:
             # 两个上涨较多，实体均不小于50%
-            return np.average(arr[-2:, self.col_num - 3]) / 0.66
-        if arr[-1, 3] - arr[-3, 0] >= up_val and np.min(arr[-3:, self.col_num - 3]) >= 0.5:
+            return np.average(arr[-2:, fea_start + 2]) / 0.66
+        if arr[-1, 3] - arr[-3, 0] >= up_val and np.min(arr[-3:, fea_start + 2]) >= 0.5:
             # 三个上涨较多，实体不小于50%
-            return np.average(arr[-3:, self.col_num - 3]) / 0.66
+            return np.average(arr[-3:, fea_start + 2]) / 0.66
         return 0
 
     def ma_cross_entry(self, arr: np.ndarray):

@@ -1,8 +1,16 @@
 {
   "env": "prod",
   "prefire": true,
+  "quote_base": "USDT",
+  "stake_amount": 100,
   "pairlist": [
     ["BTC/TUSD", "1m"]
+  ],
+  "run_policy": [
+    {"name": "MACDCross"}
+  ],
+  "strategy_paths": [
+    "banbot.strategy.macd_cross"
   ],
   "data_dir": "E:\\trade\\freqtd_data\\ban_data",
   "exchange": {

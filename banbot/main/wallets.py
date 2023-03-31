@@ -3,13 +3,26 @@
 # File  : wallets.py
 # Author: anyongjin
 # Date  : 2023/3/29
-from banbot.exchange.crypto_exchange import CryptoExchange
+
+from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
 from banbot.util.common import logger
+from banbot.config.consts import MIN_STAKE_AMOUNT
+from numbers import Number
 
 
 class WalletsLocal:
     def __init__(self):
         self.data = dict()
+
+    def set_wallets(self, **kwargs):
+        for key, val in kwargs.items():
+            if isinstance(val, (tuple, list)):
+                assert len(val) == 2
+                self.data[key] = val
+            elif isinstance(val, Number):
+                self.data[key] = val, 0
+            else:
+                raise ValueError(f'unsupport val type: {key} {type(val)}')
 
     def _update_wallet(self, symbol: str, amount: float, is_frz=True):
         ava_val, frz_val = self.data.get(symbol)
@@ -49,6 +62,27 @@ class WalletsLocal:
             return 0, 0
         return self.data[symbol]
 
+    def _get_symbol_price(self, symbol: str):
+        raise ValueError(f'unsupport quote symbol: {symbol}')
+
+    def get_avaiable_by_cost(self, symbol: str, cost: float):
+        '''
+        根据花费的USDT计算需要的数量，并返回可用数量
+        :param symbol:
+        :param cost:
+        :return:
+        '''
+        if symbol.find('USD') >= 0:
+            price = 1
+        else:
+            price = self._get_symbol_price(symbol)
+        req_amount = (cost * 0.99) / price
+        ava_val, frz_val = self.get(symbol)
+        fin_amount = min(req_amount, ava_val)
+        if fin_amount < MIN_STAKE_AMOUNT:
+            return 0
+        return fin_amount
+
 
 class CryptoWallet(WalletsLocal):
     def __init__(self, config: dict, exchange: CryptoExchange):
@@ -62,11 +96,25 @@ class CryptoWallet(WalletsLocal):
             self._symbols.add(a)
             self._symbols.add(b)
 
-    async def init(self):
-        balances = await self.exchange.fetch_balance()
+    def _get_symbol_price(self, symbol: str):
+        if symbol not in self.exchange.quote_symbols:
+            raise ValueError(f'unsupport quote symbol: {symbol}')
+        return self.exchange.quote_symbols[symbol]
+
+    def _update_local(self, balances: dict):
         message = []
         for symbol in self._symbols:
             state = balances[symbol]
             self.data[symbol] = state['free'], state['used']
             message.append(f'{symbol}: {self.data[symbol][0]}/{self.data[symbol][1]}')
-        logger.info(f'load balances: {"  ".join(message)}')
+        return '  '.join(message)
+
+    async def init(self):
+        balances = await self.exchange.fetch_balance()
+        logger.info(f'load balances: {self._update_local(balances)}')
+
+    @loop_forever
+    async def update_forever(self):
+        balances = await self.exchange.watch_balance()
+        logger.info(f'update balances: {self._update_local(balances)}')
+

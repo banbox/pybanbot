@@ -52,10 +52,9 @@ class TrendModelSys(BaseStrategy):
             state['macd_dir'] = cmacd_dir
         return state['cross_exm']
 
-    def on_bar(self, arr: np.ndarray) -> np.ndarray:
-        result = self._base_bar(arr)
-        half_atr = self.atr(result) * 0.5
-        cross_exms = self.log_macd_cross(result)
+    def on_bar(self, arr: np.ndarray):
+        half_atr = self.atr(arr) * 0.5
+        cross_exms = self.log_macd_cross(arr)
         if len(cross_exms) >= self.back_num:
             # 检查最近4个MACD交叉点，要求第四个不超过50周期，表示前面处于震荡行情。
             max_high, min_low, xid = -1, 9999999, len(cross_exms)
@@ -72,7 +71,6 @@ class TrendModelSys(BaseStrategy):
                     pair_state.get()['up_cross'] = bar_num.get()
                 elif arr[-1, 3] < min_low - half_atr:
                     pair_state.get()['down_cross'] = bar_num.get()
-        return result
 
     def on_entry(self, arr: np.ndarray) -> str:
         state: dict = pair_state.get()

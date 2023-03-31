@@ -4,11 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/25
 import math
-import time
-
 import ccxt
-import numpy as np
-from banbot.config.consts import *
 from typing import *
 
 

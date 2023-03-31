@@ -9,13 +9,12 @@
 import os.path
 
 import orjson
-from typing import *
-from banbot.persistence.trades import *
+from banbot.storage.orders import *
 from pandas import DataFrame
 
 
 class BTAnalysis:
-    def __init__(self, orders: List[Order], **kwargs):
+    def __init__(self, orders: List[InOutOrder], **kwargs):
         self.orders = orders
         self.result = kwargs
 
@@ -30,7 +29,7 @@ class BTAnalysis:
         dump_path = os.path.join(save_dir, 'backtest.json')
         with open(dump_path, 'rb') as fout:
             data: dict = orjson.loads(fout.read())
-            data['orders'] = [Order(**od) for od in data['orders']]
+            data['orders'] = [InOutOrder(**od) for od in data['orders']]
             return BTAnalysis(**data)
 
     def to_dataframe(self) -> DataFrame:
@@ -45,6 +44,6 @@ class BTAnalysis:
             exit_id=[od.exit_at - 1 for od in self.orders],
             enter_tag=[od.enter_tag for od in self.orders],
             exit_tag=[od.exit_tag for od in self.orders],
-            enter_price=[od.price for od in self.orders],
-            exit_price=[od.stop_price for od in self.orders],
+            enter_price=[od.enter.price for od in self.orders],
+            exit_price=[od.exit.price for od in self.orders],
         )]

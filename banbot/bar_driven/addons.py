@@ -44,7 +44,7 @@ def log_ma_extrems(log_ma5, log_ma20, log_ma120, ma5: StaSMA, ma20: StaSMA, ma12
         _log_extrem(log_ma120, ma120, bar_len_val * 0.5)
 
 
-def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll, col_num: int):
+def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll):
     def calc_func(arr: np.ndarray) -> float:
         '''
         是否巨量。是成交量均值的15倍，或10倍且5周期最大，或5倍且10周期最大
@@ -74,7 +74,8 @@ def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll, col_num: int):
             return 0
         prc_score = max(ntr_chg / 2.5, cur_ntr / 0.4)
         copen, chigh, clow, close = arr[-1, :4]
-        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, col_num - 5: col_num]
+        col_start = fea_col_start.get()
+        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, col_start: col_start + 5]
         if solid_rate < 0.7:
             # 蜡烛实体部分至少占比70%
             return 0
@@ -101,10 +102,11 @@ def norm_score(arr: np.ndarray, ntr_rol_id: int):
     return cur_ntr / prev_ntr
 
 
-def make_calc_shorts(col_num: int, ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
+def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
     def calc(arr: np.ndarray, his_ptns: List[Dict[str, float]], huge_score: float) -> List[Tuple[str, float]]:
         copen, chigh, clow, close, vol = arr[-1, :5]
-        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, col_num - 5: col_num]
+        fea_start = fea_col_start.get()
+        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
 
         ma5_val, ma20_val, ma120_val = ma5.arr[-1], ma20.arr[-1], ma120.arr[-1]
         ma5_chg = ma5_val - ma5.arr[-10] if arr.shape[0] >= 10 else np.nan
@@ -169,7 +171,7 @@ def make_calc_shorts(col_num: int, ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
         if not result and close < arr[-2, 3] and (bar_sub < avg_bar_len * -0.5 or solid_rate < 0.1):
             # 如果没有明显退出信号，连续两个(阴线、十字星)退出
             popen, phigh, plow, pclose = arr[-1, :4]
-            p_max_chg, p_real, p_solid_rate, p_hline_rate, p_lline_rate = arr[-2, col_num - 5: col_num]
+            p_max_chg, p_real, p_solid_rate, p_hline_rate, p_lline_rate = arr[-2, fea_start: fea_start + 5]
             if p_solid_rate < 0.1 or popen > pclose and p_real * 3 >= avg_bar_len:
                 if p_solid_rate < 0.1:
                     p_score = pow(p_max_chg / avg_bar_len, 0.5)

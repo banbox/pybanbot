@@ -7,9 +7,26 @@ import ccxt
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import os
+import time
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
+from banbot.config.consts import *
+import numpy as np
 from typing import *
+
+
+def loop_forever(func):
+
+    async def wrap(*args, **kwargs):
+        while True:
+            try:
+                await func(*args, **kwargs)
+            except ccxt.errors.NetworkError as e:
+                if str(e) == '1006':
+                    logger.warning(f'[{args}] watch balance get 1006, retry...')
+                    continue
+                raise e
+    return wrap
 
 
 def _create_exchange(module, cfg: dict):
@@ -64,6 +81,10 @@ def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.
 class CryptoExchange:
     def __init__(self, config: dict):
         self.api, self.api_async, self.api_ws = _init_exchange(config, True)
+        self.name = self.api.name
+        self.quote_prices: Dict[str, float] = dict()
+        self.quote_base = config.get('quote_base', 'USDT')
+        self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
 
     async def load_markets(self):
         markets = await self.api_async.load_markets()
@@ -82,6 +103,38 @@ class CryptoExchange:
 
     async def fetch_balance(self, params={}):
         return await self.api_async.fetch_balance(params)
+
+    async def watch_balance(self, params={}):
+        '''
+        没有新数据时此方法每1分钟发出异常：ccxt.base.errors.NetworkError: 1006，需要在try catch中重试
+        :param params:
+        :return:
+        '''
+        return await self.api_ws.watch_balance(params)
+
+    async def watch_orders(self, symbol=None, since=None, limit=None, params={}):
+        '''
+        监听订单更新，来自和watch_my_trades相同的数据触发。建议使用watch_my_trades，更细粒度
+        没有新数据时此方法每1分钟发出异常：ccxt.base.errors.NetworkError: 1006，需要在try catch中重试
+        :param symbol:
+        :param since:
+        :param limit:
+        :param params:
+        :return:
+        '''
+        return await self.api_ws.watch_orders(symbol, since, limit, params)
+
+    async def watch_my_trades(self, symbol=None, since=None, limit=None, params={}):
+        '''
+        监听订单的部分成交变化。
+        没有新数据时此方法每1分钟发出异常：ccxt.base.errors.NetworkError: 1006，需要在try catch中重试
+        :param symbol:
+        :param since:
+        :param limit:
+        :param params:
+        :return:
+        '''
+        return await self.api_ws.watch_my_trades(symbol, since, limit, params)
 
     async def fetch_ohlcv_plus(self, pair: str, timeframe: str, since=None, limit=None,
                                force_sub=False, min_last_ratio=0.799):
@@ -123,6 +176,20 @@ class CryptoExchange:
             ohlc_arr = ohlc_arr[:-1]
         return ohlc_arr
 
+    async def update_quote_price(self):
+        for symbol in self.quote_symbols:
+            if symbol.find('USD') >= 0:
+                self.quote_prices[symbol] = 1
+            else:
+                od_books = await self.api_async.fetch_order_book(f'{symbol}/USDT', limit=5)
+                self.quote_prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
+
+    async def create_limit_order(self, symbol, side, amount, price, params={}):
+        return await self.api_async.create_limit_order(symbol, side, amount, price, params)
+
+    def __str__(self):
+        return self.name
+
 
 async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
     from banbot.bar_driven.tainds import LongVar, StaSMA, StaNATR, bar_num
@@ -145,5 +212,5 @@ async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
 async def init_longvars(exchange: CryptoExchange, pairlist: List[Tuple[str, str]]):
     from banbot.bar_driven.tainds import set_context
     for pair, timeframe in pairlist:
-        set_context(f'{pair}_{timeframe}')
+        set_context(f'{pair}/{timeframe}')
         await _init_longvars(exchange, pair, timeframe)

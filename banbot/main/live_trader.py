@@ -4,19 +4,17 @@
 # Author: anyongjin
 # Date  : 2023/2/28
 import asyncio
-
-import numpy as np
-
 from banbot.main.itrader import *
 from banbot.exchange.crypto_exchange import *
-from banbot.main.wallets import CryptoWallet
 from banbot.data.live_provider import LiveDataProvider
+from banbot.storage.od_manager import *
 from banbot.util.misc import *
+from banbot.util import btime
 
 
 class LiveTrader(Trader):
     '''
-    实盘交易
+    实盘交易、实时模拟。模式:DRY_RUN LIVE
     '''
 
     def __init__(self):
@@ -24,52 +22,74 @@ class LiveTrader(Trader):
         self.exchange = CryptoExchange(cfg)
         self.data_hold = LiveDataProvider(self.exchange)
         self.wallets = CryptoWallet(cfg, self.exchange)
-        self.strategy_map: Dict[str, BaseStrategy] = dict()
+        self.order_hold = LiveOrderManager(self.exchange, self.wallets)
         self.data_hold.set_callback(self._make_invoke())
 
     def _make_invoke(self):
         async def invoke_pair(pair, timeframe, row):
-            set_context(f'{pair}_{timeframe}')
+            set_context(f'{pair}/{timeframe}')
             logger.info(f'ohlc: {pair} {timeframe} {row}')
             await self.on_data_feed(np.array(row))
         return invoke_pair
 
     async def init(self):
+        self._load_strategies()
         await self.exchange.load_markets()
+        await self.exchange.update_quote_price()
         await self.wallets.init()
         await init_longvars(self.exchange, self.pairlist)
-        logger.info('init longvars complete')
+        logger.info('banbot init complete')
 
-    async def on_data_feed(self, row: np.ndarray):
-        pass
-
-    async def run(self, make_strategy):
-        for pair, timeframe in self.pairlist:
-            symbol = f'{pair}_{timeframe}'
-            set_context(symbol)
-            self.strategy_map[symbol] = make_strategy()
+    async def run(self):
+        # 初始化
         await self.init()
-        logger.info(f'data update interval: {self.data_hold.min_interval}')
+        # 启动异步任务
+        await self._start_tasks()
+        # 轮训执行任务
+        await self._loop_tasks()
+
+    async def _start_tasks(self):
+        if btime.run_mode == RunMode.LIVE:
+            # 仅实盘交易模式，监听钱包和订单状态更新
+            # 监听钱包更新
+            asyncio.create_task(self.wallets.update_forever())
+            # 监听订单更新
+            asyncio.create_task(self.order_hold.update_forever())
+
+    async def _loop_tasks(self):
+        '''
+        这里不能执行耗时的异步任务（比如watch_balance），
+        :return:
+        '''
+        cur_time = time.time()
+        biz_list = [
+            # 轮询函数，轮询间隔，下次执行时间
+            [self.data_hold.process, self.data_hold.min_interval, cur_time],
+            # 定时更新定价货币的价格
+            [self.exchange.update_quote_price, 60, cur_time]
+        ]
         while True:
+            wait_list = sorted(biz_list, key=lambda x: x[2])
+            biz_func, interval, next_start = wait_list[0]
+            wait_secs = next_start - time.time()
+            if wait_secs > 0:
+                await asyncio.sleep(wait_secs)
             start_time = time.time()
-            next_check = start_time + self.data_hold.min_interval
-            await self.data_hold.process()
-            sleep_time = next_check - time.time()
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
+            if inspect.iscoroutinefunction(biz_func):
+                try:
+                    await asyncio.wait_for(biz_func(), interval)
+                except TimeoutError:
+                    raise RuntimeError(f'{biz_func.__qualname__} rum timeout: {interval:.3f}s')
+            else:
+                biz_func()
+            exec_cost = time.time() - start_time
+            if exec_cost >= interval * 0.9:
+                logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
+                interval = exec_cost * 1.5
+                wait_list[0][1] = interval
+            wait_list[0][2] += interval
 
 
 if __name__ == '__main__':
-    def cmake_strategy():
-        from banbot.strategy.macd_cross import MACDCross
-        stg = MACDCross()
-        # from banbot.strategy.mean_rev import MeanRev
-        # stg = MeanRev()
-        # from banbot.strategy.classic.trend_model_sys import TrendModelSys
-        # strategy = TrendModelSys()
-        # if hasattr(strategy, 'debug_ids'):
-        #     debug_idx = int(np.where(data['date'] == '2023-02-22 00:15:09')[0][0])
-        #     strategy.debug_ids.add(debug_idx)
-        return stg
     trader = LiveTrader()
-    call_async(trader.run, cmake_strategy)
+    call_async(trader.run)

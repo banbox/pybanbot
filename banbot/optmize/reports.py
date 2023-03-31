@@ -32,7 +32,7 @@ def text_order_tags(df: pd.DataFrame, tag_type: str):
     for tag, count in df[col_key].value_counts().items():
         result = df[df[col_key] == tag]
         profit_sum = result['profit'].sum()
-        profit_tot_pct = profit_sum / result['cost'].sum()
+        profit_tot_pct = profit_sum / result['enter_cost'].sum()
         data.append([
             tag,
             len(result),
@@ -94,7 +94,7 @@ def text_order_profits(df: pd.DataFrame) -> str:
         gp_df = df.loc[row_ids]
         profit_min, profit_max = gp_df['profit_rate'].min(), gp_df['profit_rate'].max()
         tot_profit = gp_df['profit'].sum()
-        profit_rate = tot_profit / gp_df['cost'].sum()
+        profit_rate = tot_profit / gp_df['enter_cost'].sum()
         records.append([
             f'{profit_min * 100:.2f} ~ {profit_max * 100:.2f}%',
             len(gp_df),
