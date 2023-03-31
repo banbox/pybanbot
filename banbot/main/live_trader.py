@@ -19,6 +19,7 @@ class LiveTrader(Trader):
 
     def __init__(self):
         super(LiveTrader, self).__init__()
+        self.out_path = cfg.get('out_path')
         self.exchange = CryptoExchange(cfg)
         self.data_hold = LiveDataProvider(self.exchange)
         self.wallets = CryptoWallet(cfg, self.exchange)
@@ -28,8 +29,7 @@ class LiveTrader(Trader):
     def _make_invoke(self):
         async def invoke_pair(pair, timeframe, row):
             set_context(f'{pair}/{timeframe}')
-            logger.info(f'ohlc: {pair} {timeframe} {row}')
-            await self.on_data_feed(np.array(row))
+            await self.on_data_feed(np.array(row[1:]))
         return invoke_pair
 
     async def init(self):
@@ -47,6 +47,10 @@ class LiveTrader(Trader):
         await self._start_tasks()
         # 轮训执行任务
         await self._loop_tasks()
+
+    def _bar_callback(self):
+        if btime.run_mode != RunMode.LIVE:
+            self.order_hold.fill_pending_orders(bar_arr.get())
 
     async def _start_tasks(self):
         if btime.run_mode == RunMode.LIVE:
@@ -91,5 +95,7 @@ class LiveTrader(Trader):
 
 
 if __name__ == '__main__':
+    btime.run_mode = btime.RunMode(cfg.get('run_mode', 'dry_run'))
+    logger.warning(f"Run Mode: {btime.run_mode.value}")
     trader = LiveTrader()
     call_async(trader.run)

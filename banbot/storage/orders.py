@@ -137,6 +137,7 @@ class InOutOrder:
         self.key = f'{self.symbol}_{self.enter_tag}_{self.strategy}'
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
         self.enter: Order = Order(**enter_kwargs, inout_key=self.key, enter=True)
+        # exit_kwargs = del_dict_prefix(kwargs, 'exit_')
         self.exit: Optional[Order] = None
 
         self.stoploss: float = kwargs.get('stoploss')

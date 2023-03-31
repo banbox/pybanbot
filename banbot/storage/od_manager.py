@@ -5,6 +5,8 @@
 # Date  : 2023/3/30
 import inspect
 
+import orjson
+
 from banbot.bar_driven.tainds import get_cur_symbol, timeframe_secs, bar_arr
 from banbot.exchange.crypto_exchange import loop_forever, CryptoExchange
 from banbot.storage.orders import *
@@ -16,7 +18,7 @@ from banbot.util.misc import *
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, exg_name: str, wallets: WalletsLocal):
+    def __init__(self, exg_name: str, wallets: WalletsLocal, dump_path: str = None):
         self.name = exg_name
         self.wallets = wallets
         self.exg_orders: Dict[str, Order] = dict()
@@ -24,6 +26,7 @@ class OrderManager(metaclass=SingletonArg):
         self.his_list: List[InOutOrder] = []  # 历史已完成或取消的订单
         self.network_cost = 0.6  # 模拟网络延迟
         self.callbacks: List[Callable] = []
+        self.dump_path = dump_path
 
     def _fire(self, key: str, enter: bool):
         if key not in self.callbacks:
@@ -34,6 +37,16 @@ class OrderManager(metaclass=SingletonArg):
                 call_async(func(od, enter))
             else:
                 func(od, enter)
+
+    def try_dump(self):
+        if not self.dump_path:
+            return
+        result = dict(
+            open_ods=[od.to_dict() for key, od in self.open_orders.items()],
+            his_ods=[od.to_dict() for od in self.his_list],
+        )
+        with open(self.dump_path, 'wb') as fout:
+            fout.write(orjson.dumps(result))
 
     def enter_order(self, strategy: str, pair: str, tag: str, cost: float, price: float):
         lock_key = f'{pair}_{tag}_{strategy}'
@@ -47,7 +60,7 @@ class OrderManager(metaclass=SingletonArg):
             logger.warning(f'fail to create order: {lock_key} is locked')
             return
         amount = quote_cost / price
-        self.open_orders[lock_key] = InOutOrder(
+        od = InOutOrder(
             symbol=pair,
             enter_price=price,
             enter_amount=amount,
@@ -55,8 +68,12 @@ class OrderManager(metaclass=SingletonArg):
             enter_at=bar_num.get(),
             strategy=strategy
         )
+        self.open_orders[lock_key] = od
         TradeLock.lock(lock_key, btime.now() + btime.timedelta(minutes=1))
-        self._enter_order(self.open_orders[lock_key])
+        if btime.run_mode == btime.RunMode.LIVE:
+            cost = od.enter.price * od.enter.amount
+            logger.info(f'order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
+        self._enter_order(od)
 
     def _enter_order(self, od: InOutOrder):
         pass
@@ -76,6 +93,7 @@ class OrderManager(metaclass=SingletonArg):
         # TODO: 根据交易对情况设置手续费
         TradeLock.unlock(od.key)
         self._fire(od.key, True)
+        self.try_dump()
 
     def _fill_pending_exit(self, arr: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(arr)
@@ -93,6 +111,7 @@ class OrderManager(metaclass=SingletonArg):
         # TODO: 根据交易对情况设置手续费
         self._finish_order(od.strategy, pair, od.enter_tag)
         self._fire(od.key, False)
+        self.try_dump()
 
     def _sim_market_price(self, arr: np.ndarray) -> float:
         '''
@@ -132,6 +151,9 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = exit_tag
         # 默认以最低价卖出（即吃单方）
         od.update_exit(price=bar_arr.get()[-1, 2])
+        if btime.run_mode == btime.RunMode.LIVE:
+            cost = od.exit.price * od.exit.amount
+            logger.info(f'exit {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
         self._exit_order(od)
 
     def _exit_order(self, od: InOutOrder):
@@ -169,8 +191,8 @@ class OrderManager(metaclass=SingletonArg):
 
 
 class LiveOrderManager(OrderManager):
-    def __init__(self, exchange: CryptoExchange, wallets: CryptoWallet):
-        super(LiveOrderManager, self).__init__(exchange.name, wallets)
+    def __init__(self, exchange: CryptoExchange, wallets: CryptoWallet, dump_path: str = None):
+        super(LiveOrderManager, self).__init__(exchange.name, wallets, dump_path)
         self.exchange = exchange
 
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
@@ -192,12 +214,15 @@ class LiveOrderManager(OrderManager):
                 logger.warning(f'{od} is {order_status} by {self.name}, no filled')
         if od.status > InOutStatus.Init:
             self._fire(od.key, is_enter)
+            self.try_dump()
 
     async def _enter_order(self, od: InOutOrder):
-        await self._create_exg_order(od, True)
+        if btime.run_mode == btime.RunMode.LIVE:
+            await self._create_exg_order(od, True)
 
     async def _exit_order(self, od: InOutOrder):
-        await self._create_exg_order(od, False)
+        if btime.run_mode == btime.RunMode.LIVE:
+            await self._create_exg_order(od, False)
 
     def _update_bnb_order(self, od: Order, data: dict):
         info = data['info']
@@ -227,6 +252,7 @@ class LiveOrderManager(OrderManager):
             logger.error(f'unknown bnb order status: {state}, {data}')
             return
         self._fire(od.inout_key, od.enter)
+        self.try_dump()
 
     def _update_order(self, od: Order, data: dict):
         if self.name.find('binance') >= 0:

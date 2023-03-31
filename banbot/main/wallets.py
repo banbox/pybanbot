@@ -41,6 +41,7 @@ class WalletsLocal:
 
     def update_wallets(self, **kwargs):
         '''
+        【目前仅在回测、模拟实盘等模式下使用】
         更新钱包，可同时更新两个钱包，或只更新一个钱包：
         只更新一个钱包时，变化值记录为冻结。
         :param kwargs:

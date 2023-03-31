@@ -1,5 +1,6 @@
 {
   "env": "prod",
+  "run_mode": "dry_run",
   "prefire": true,
   "quote_base": "USDT",
   "stake_amount": 100,
@@ -13,6 +14,7 @@
     "banbot.strategy.macd_cross"
   ],
   "data_dir": "E:\\trade\\freqtd_data\\ban_data",
+  "out_path": "E:\\trade\\freqtd_data\\ban_data\\result.json",
   "exchange": {
     "name": "binance",
     "proxies": {

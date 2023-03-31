@@ -11,6 +11,7 @@ import time
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
 from banbot.config.consts import *
+from banbot.util import btime
 import numpy as np
 from typing import *
 
@@ -185,6 +186,8 @@ class CryptoExchange:
                 self.quote_prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
 
     async def create_limit_order(self, symbol, side, amount, price, params={}):
+        if btime.run_mode != btime.RunMode.LIVE:
+            raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
 
     def __str__(self):
