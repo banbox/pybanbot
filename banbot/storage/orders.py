@@ -8,6 +8,7 @@ from banbot.util import btime
 from datetime import datetime
 from banbot.bar_driven.tainds import *
 from banbot.util.misc import del_dict_prefix, add_dict_prefix
+from banbot.util.num_utils import to_pytypes
 from typing import *
 
 import numpy as np
@@ -65,6 +66,7 @@ class TradeLock:
 class Order:
     '''
     交易所订单；一次买入（卖出）就会产生一个订单
+    同一交易所下，symbol+order_id可唯一确定一个订单。
     '''
     def __init__(self, **kwargs):
         self.symbol: str = kwargs['symbol']
@@ -104,14 +106,14 @@ class Order:
             order_type=self.order_type,
             inout_key=self.inout_key,
             side=self.side,
-            price=self.price,
-            amount=self.amount,
+            price=to_pytypes(self.price),
+            amount=to_pytypes(self.amount),
             status=self.status,
-            filled=self.filled,
-            average=self.average,
-            fee=self.fee,
+            filled=to_pytypes(self.filled),
+            average=to_pytypes(self.average),
+            fee=to_pytypes(self.fee),
             fee_type=self.fee_type,
-            cost=self.price * self.amount
+            cost=to_pytypes(self.price * self.amount)
         )
 
     def __str__(self):
@@ -122,7 +124,6 @@ class InOutOrder:
     '''
     策略逻辑订单（包含入场、出场两个Order）
     为避免过度复杂，不支持市价单按定价金额买入（需按基准产品数量买入）
-    同一交易所下，symbol+order_id可唯一确定一个订单。
     一个交易所的所有订单维护在一个OrderManager中
     '''
 
@@ -133,6 +134,7 @@ class InOutOrder:
         self.enter_at: int = kwargs.get('enter_at')
         self.exit_tag: str = kwargs.get('exit_tag')
         self.exit_at: int = kwargs.get('exit_at')
+        self.timestamp = btime.time()
         self.strategy: str = kwargs.get('strategy')
         self.key = f'{self.symbol}_{self.enter_tag}_{self.strategy}'
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
@@ -150,14 +152,13 @@ class InOutOrder:
     def to_dict(self) -> dict:
         result = dict(
             symbol=self.symbol,
-            enter=self.enter.to_dict(),
-            exit=self.exit.to_dict() if self.exit else None,
             status=self.status,
             key=self.key,
             enter_tag=self.enter_tag,
             enter_at=self.enter_at,
             exit_tag=self.exit_tag,
             exit_at=self.exit_at,
+            timestamp=self.timestamp,
             stoploss=self.stoploss,
             profit_rate=self.profit_rate,
             profit=self.profit,
@@ -202,6 +203,7 @@ class InOutOrder:
         '''
         if self.status in {InOutStatus.Init, InOutStatus.FullExit}:
             return
+        # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
         self.profit = (arr[-1, ccol] - self.enter.price) * self.enter.amount
         self.profit_rate = arr[-1, ccol] / self.enter.price - 1
 

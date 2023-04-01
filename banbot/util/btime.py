@@ -10,6 +10,7 @@
 '''
 import asyncio
 import datetime
+import calendar
 from datetime import timedelta
 from banbot.config.consts import *
 
@@ -45,3 +46,22 @@ def now():
     if run_mode in TRADING_MODES:
         return datetime.datetime.now()
     return datetime.datetime.utcfromtimestamp(cur_timestamp)
+
+
+def to_datetime(timestamp: int = None):
+    if not timestamp:
+        timestamp = time()
+    else:
+        timestamp = int(timestamp)
+        if timestamp >= 1000000000000:
+            timestamp = int(timestamp / 1000)
+    return datetime.datetime.utcfromtimestamp(timestamp)
+
+
+def to_utcstamp(dt):
+    return calendar.timegm(dt.timetuple())
+
+
+def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
+    dt = to_datetime(timestamp)
+    return dt.strftime(fmt)

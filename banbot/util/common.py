@@ -69,25 +69,36 @@ class MeasureTime:
             print(f'{item[0]:<{max_name_len}}{item[1]:.5f}')
 
 
-def get_logger(level=logging.INFO):
-    logger = logging.getLogger()
-    logger.setLevel(level)
-    logger.propagate = False
-    if logger.hasHandlers():
-        return logger
+class TradeLogger(logging.Logger):
+    def trade_info(self, msg, *args, **kwargs):
+        from banbot.util import btime
+        if btime.run_mode not in btime.TRADING_MODES:
+            return
+        from banbot.bar_driven.tainds import symbol_tf, bar_end_time
+        prefix = f'{bar_end_time.get()}/{symbol_tf.get()} '
+        self.info(prefix + msg, *args, **kwargs)
+
+
+def get_logger(level=logging.INFO) -> TradeLogger:
+    log: TradeLogger = logging.getLogger('banbot')
+    log.setLevel(level)
+    log.propagate = False
+    if log.hasHandlers():
+        return log
     # 定义handler的输出格式
     formatter = logging.Formatter(fmt='%(asctime)s %(process)d %(levelname)s %(message)s')
     low_handler = logging.StreamHandler(sys.stdout)
     low_handler.setLevel(level)
     low_handler.setFormatter(formatter)
     low_handler.addFilter(lambda r: r.levelno < logging.ERROR)
-    logger.addHandler(low_handler)
+    log.addHandler(low_handler)
 
     error_handler = logging.StreamHandler(sys.stderr)
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
-    logger.addHandler(error_handler)
-    return logger
+    log.addHandler(error_handler)
+    return log
 
 
+logging.setLoggerClass(TradeLogger)
 logger = get_logger()

@@ -54,9 +54,10 @@ class BackTest(Trader):
         self.result['date_from'] = str(data.loc[0, 'date'])
         self.result['date_to'] = str(data.loc[len(data) - 1, 'date'])
         self.result['start_balance'] = self.wallets.get(quote_s)[0]
+        data['date'] = data['date'].apply(lambda x: int(x.timestamp() * 1000))
         arr = data.to_numpy()
         for i in range(arr.shape[0]):
-            btime.add_secs(1)
+            btime.add_secs(timeframe_secs.get())
             self.on_data_feed(arr[i])
         # 关闭未完成订单
         self.force_exit_all()

@@ -4,6 +4,11 @@
   "prefire": true,
   "quote_base": "USDT",
   "stake_amount": 100,
+  "fatal_stop": {
+    "30": 0.3,
+    "180": 0.2,
+    "1440": 0.1
+  },
   "pairlist": [
     ["BTC/TUSD", "1m"]
   ],

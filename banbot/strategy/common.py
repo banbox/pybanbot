@@ -3,7 +3,6 @@
 # File  : common.py
 # Author: anyongjin
 # Date  : 2023/3/27
-from banbot.bar_driven.tainds import *
 from banbot.storage.orders import *
 
 
@@ -23,8 +22,6 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
     :param back_rates: 回撤比率。默认：0.47, 0.28, 0.18
     :return:
     '''
-    if bar_num.get() == pair_state.get()['last_enter']:
-        return
     elp_num = bar_num.get() - od.enter_at
     max_price = np.max(arr[-elp_num:, ccol])
     cur_close = arr[-1, ccol]

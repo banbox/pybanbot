@@ -19,11 +19,10 @@ class LiveTrader(Trader):
 
     def __init__(self):
         super(LiveTrader, self).__init__()
-        self.out_path = cfg.get('out_path')
         self.exchange = CryptoExchange(cfg)
         self.data_hold = LiveDataProvider(self.exchange)
         self.wallets = CryptoWallet(cfg, self.exchange)
-        self.order_hold = LiveOrderManager(self.exchange, self.wallets)
+        self.order_hold = LiveOrderManager(cfg, self.exchange, self.wallets)
         self.data_hold.set_callback(self._make_invoke())
 
     def _make_invoke(self):
@@ -68,10 +67,12 @@ class LiveTrader(Trader):
         '''
         cur_time = time.time()
         biz_list = [
-            # 轮询函数，轮询间隔，下次执行时间
+            # 轮询函数，轮询间隔(s)，下次执行时间
             [self.data_hold.process, self.data_hold.min_interval, cur_time],
             # 定时更新定价货币的价格
-            [self.exchange.update_quote_price, 60, cur_time]
+            [self.exchange.update_quote_price, 60, cur_time],
+            # 定时检查整体损失是否触发限制
+            [self.order_hold.check_fatal_stop, 300, cur_time + 3]
         ]
         while True:
             wait_list = sorted(biz_list, key=lambda x: x[2])
@@ -82,7 +83,9 @@ class LiveTrader(Trader):
             start_time = time.time()
             if inspect.iscoroutinefunction(biz_func):
                 try:
-                    await asyncio.wait_for(biz_func(), interval)
+                    future = biz_func()
+                    if future:
+                        await asyncio.wait_for(future, interval)
                 except TimeoutError:
                     raise RuntimeError(f'{biz_func.__qualname__} rum timeout: {interval:.3f}s')
             else:

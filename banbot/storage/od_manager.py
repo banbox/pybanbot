@@ -7,7 +7,6 @@ import inspect
 
 import orjson
 
-from banbot.bar_driven.tainds import get_cur_symbol, timeframe_secs, bar_arr
 from banbot.exchange.crypto_exchange import loop_forever, CryptoExchange
 from banbot.storage.orders import *
 from banbot.util.common import logger, SingletonArg
@@ -18,15 +17,26 @@ from banbot.util.misc import *
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, exg_name: str, wallets: WalletsLocal, dump_path: str = None):
+    def __init__(self, config: dict, exg_name: str, wallets: WalletsLocal):
+        self.config = config
         self.name = exg_name
         self.wallets = wallets
-        self.exg_orders: Dict[str, Order] = dict()
+        self.prices = dict()  # 所有产品对法币的价格
         self.open_orders: Dict[str, InOutOrder] = dict()  # 尚未退出的订单
         self.his_list: List[InOutOrder] = []  # 历史已完成或取消的订单
         self.network_cost = 0.6  # 模拟网络延迟
         self.callbacks: List[Callable] = []
-        self.dump_path = dump_path
+        self.dump_path = config.get('out_path')
+        self.fatal_stop = dict()
+        self._load_fatal_stop()
+        self.disabled = False
+
+    def _load_fatal_stop(self):
+        fatal_cfg = self.config.get('fatal_stop')
+        if not fatal_cfg:
+            return
+        for k, v in fatal_cfg.items():
+            self.fatal_stop[int(k)] = v
 
     def _fire(self, key: str, enter: bool):
         if key not in self.callbacks:
@@ -56,6 +66,10 @@ class OrderManager(metaclass=SingletonArg):
         quote_cost = self.wallets.get_avaiable_by_cost(pair.split('/')[1], cost)
         if not quote_cost:
             return
+        if self.disabled:
+            # 触发系统交易熔断时，禁止入场，允许出场
+            logger.warning(f'order enter forbid, fatal stop, {strategy} {pair} {tag} {cost:.3f}')
+            return
         if TradeLock.get_pair_locks(lock_key):
             logger.warning(f'fail to create order: {lock_key} is locked')
             return
@@ -70,9 +84,7 @@ class OrderManager(metaclass=SingletonArg):
         )
         self.open_orders[lock_key] = od
         TradeLock.lock(lock_key, btime.now() + btime.timedelta(minutes=1))
-        if btime.run_mode == btime.RunMode.LIVE:
-            cost = od.enter.price * od.enter.amount
-            logger.info(f'order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
+        logger.trade_info(f'order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
         self._enter_order(od)
 
     def _enter_order(self, od: InOutOrder):
@@ -151,9 +163,8 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = exit_tag
         # 默认以最低价卖出（即吃单方）
         od.update_exit(price=bar_arr.get()[-1, 2])
-        if btime.run_mode == btime.RunMode.LIVE:
-            cost = od.exit.price * od.exit.amount
-            logger.info(f'exit {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
+        cost = od.exit.price * od.exit.amount
+        logger.trade_info(f'exit {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
         self._exit_order(od)
 
     def _exit_order(self, od: InOutOrder):
@@ -166,16 +177,19 @@ class OrderManager(metaclass=SingletonArg):
 
     def _finish_order(self, strategy: str, pair: str, tag: str):
         od: InOutOrder = self.open_orders.pop(f'{pair}_{tag}_{strategy}')
-        od.profit_rate = od.exit.price / od.enter.price - 1
-        od.profit = (od.exit.price - od.enter.price) * od.enter.amount
+        od.profit_rate = float(od.exit.price / od.enter.price) - 1
+        od.profit = float((od.exit.price - od.enter.price) * od.enter.amount)
         self.his_list.append(od)
 
     def update_by_bar(self, pair_arr: np.ndarray):
-        if not self.open_orders:
-            return
-        # 更新订单利润
-        for tag in self.open_orders:
-            self.open_orders[tag].update_by_bar(pair_arr)
+        if self.open_orders:
+            # 更新订单利润
+            for tag in self.open_orders:
+                self.open_orders[tag].update_by_bar(pair_arr)
+        # 更新价格
+        pair, base_s, quote_s, timeframe = get_cur_symbol()
+        if quote_s.find('USD') >= 0:
+            self.prices[base_s] = float(pair_arr[-1, ccol])
 
     def check_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy):
         if not self.open_orders:
@@ -189,16 +203,72 @@ class OrderManager(metaclass=SingletonArg):
             if ext_tag := strategy.custom_exit(pair_arr, od):
                 self.exit_order(od, ext_tag)
 
+    @loop_forever
+    def check_fatal_stop(self):
+        for check_mins, bad_ratio in self.fatal_stop.items():
+            fatal_loss = self.calc_fatal_loss(check_mins)
+            if fatal_loss >= bad_ratio:
+                logger.error(f'{bar_end_time.get()} fatal loss {fatal_loss * 100:.2f}% in {check_mins} mins, Disable!')
+                self.disabled = True
+                break
+
+    def calc_fatal_loss(self, back_mins: int) -> float:
+        '''
+        计算系统级别最近n分钟内，账户余额损失百分比
+        :param back_mins:
+        :return:
+        '''
+        fin_loss = 0
+        min_timestamp = btime.to_utcstamp(btime.now() - btime.timedelta(minutes=back_mins))
+        for i in range(len(self.his_list) - 1, -1, -1):
+            od = self.his_list[i]
+            if od.timestamp < min_timestamp:
+                break
+            fin_loss += od.profit
+        if fin_loss >= 0:
+            return 0
+        fin_loss = abs(fin_loss)
+        return fin_loss / (fin_loss + self.get_legal_value())
+
+    def _symbol_price(self, symbol: str):
+        if symbol not in self.prices:
+            raise RuntimeError(f'{symbol} price to USD unknown')
+        return self.prices[symbol]
+
+    def _get_legal_value(self, symbol: str):
+        if symbol not in self.wallets.data:
+            return 0
+        amount = sum(self.wallets.data[symbol])
+        if symbol.find('USD') >= 0:
+            return amount
+        return amount * self._symbol_price(symbol)
+
+    def get_legal_value(self, symbol: str = None):
+        '''
+        获取某个产品的法定价值。USDT直接返回。BTC等需要计算。
+        :param symbol:
+        :return:
+        '''
+        if symbol:
+            return self._get_legal_value(symbol)
+        else:
+            result = 0
+            for key in self.wallets.data:
+                result += self._get_legal_value(key)
+            return result
+
 
 class LiveOrderManager(OrderManager):
-    def __init__(self, exchange: CryptoExchange, wallets: CryptoWallet, dump_path: str = None):
-        super(LiveOrderManager, self).__init__(exchange.name, wallets, dump_path)
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet):
+        super(LiveOrderManager, self).__init__(config, exchange.name, wallets)
         self.exchange = exchange
+        self.exg_orders: Dict[str, Order] = dict()
 
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         order = await self.exchange.create_limit_order(od.symbol, side, amount, price)
+        self.exg_orders[f'{od.symbol}_{order["id"]}'] = sub_od
         order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))
         if filled > 0:
             filled_price = safe_value_fallback(order, 'average', 'price', price)

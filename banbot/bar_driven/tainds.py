@@ -22,6 +22,7 @@ timeframe_secs = ContextVar('timeframe_secs')
 pair_state = ContextVar('bar_state')
 bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
+bar_end_time = ContextVar('bar_end_time')
 _symbol_ctx: Dict[str, Context] = dict()
 # 几个常用列的索引
 tcol, ocol, hcol, lcol, ccol, vcol = 0, 1, 2, 3, 4, 5

@@ -3,6 +3,8 @@
 # File  : crypto_exchange.py
 # Author: anyongjin
 # Date  : 2023/3/29
+import inspect
+
 import ccxt
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
@@ -22,7 +24,10 @@ def loop_forever(func):
     async def wrap(*args, **kwargs):
         while True:
             try:
-                await func(*args, **kwargs)
+                if inspect.iscoroutinefunction(func):
+                    await func(*args, **kwargs)
+                else:
+                    func(*args, **kwargs)
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
                     logger.warning(f'[{args}] watch balance get 1006, retry...')

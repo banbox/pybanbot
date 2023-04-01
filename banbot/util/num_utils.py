@@ -66,3 +66,9 @@ def parse_int(text: str, def_val=0):
         return int(text)
     except Exception:
         return def_val
+
+
+def to_pytypes(data):
+    if hasattr(data, 'dtype'):
+        return data.item()
+    return data
