@@ -14,7 +14,7 @@ def resample_candlesticks(arr: np.ndarray, period: int, max_num: int = 0) -> np.
             return out_arr
         out_arr = np.concatenate([arr[end - 1: end, :], out_arr], axis=0)
         row = out_arr[0, :]
-        row[0] = arr[start, 0]
+        row[0] = arr[start, ocol]
         row[1] = np.max(arr[start: end, 1])
         row[2] = np.min(arr[start: end, 2])
         row[4] = np.sum(arr[start: end, 4])

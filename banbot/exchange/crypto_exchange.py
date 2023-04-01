@@ -10,6 +10,7 @@ import os
 import time
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
+from banbot.bar_driven.tainds import *
 from banbot.config.consts import *
 from banbot.util import btime
 import numpy as np
@@ -197,7 +198,7 @@ class CryptoExchange:
 async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
     from banbot.bar_driven.tainds import LongVar, StaSMA, StaNATR, bar_num
     ochl_data = await exchange.fetch_ohlcv_plus(pair, timeframe, limit=900)
-    bar_arr = np.array(ochl_data)[:, 1:]
+    pair_arr = np.array(ochl_data)
     LongVar.get(LongVar.price_range)
     LongVar.get(LongVar.vol_avg)
     LongVar.get(LongVar.bar_len)
@@ -205,11 +206,11 @@ async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
     LongVar.get(LongVar.atr_low)
     malong = StaSMA(120)
     natr = StaNATR()
-    for i in range(bar_arr.shape[0]):
+    for i in range(pair_arr.shape[0]):
         bar_num.set(i + 1)
-        malong(bar_arr[i, 3])
-        natr(bar_arr[:i + 1, :])
-        LongVar.update(bar_arr[:i + 1, :])
+        malong(pair_arr[i, ccol])
+        natr(pair_arr[:i + 1, :])
+        LongVar.update(pair_arr[:i + 1, :])
 
 
 async def init_longvars(exchange: CryptoExchange, pairlist: List[Tuple[str, str]]):

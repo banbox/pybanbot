@@ -66,14 +66,14 @@ def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll):
         # 判断是否价格剧烈变化
         cur_ntr = ntr_rol.arr[-1]
         prev_ntr = np.max(ntr_rol.arr[-4:-1])
-        dust = min(0.00001, arr[-1, 3] * 0.0001)
+        dust = min(0.00001, arr[-1, ccol] * 0.0001)
         ntr_chg = cur_ntr / max(prev_ntr, dust)
         is_price_huge_chg = ntr_chg >= 2 or ntr_chg >= 1.5 and cur_ntr >= 0.3
         if np.isnan(prev_ntr) or not is_price_huge_chg:
             # 当前波动不够剧烈（是前一个2倍，或1.5倍但波动幅度超过历史30%）
             return 0
         prc_score = max(ntr_chg / 2.5, cur_ntr / 0.4)
-        copen, chigh, clow, close = arr[-1, :4]
+        copen, chigh, clow, close = arr[-1, ocol:vcol]
         col_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, col_start: col_start + 5]
         if solid_rate < 0.7:
@@ -89,22 +89,21 @@ def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll):
     return calc_func
 
 
-def norm_score(arr: np.ndarray, ntr_rol_id: int):
+def norm_score(ntr_rol: StaNTRRoll):
     '''
     趋势规范化分数，用于判断处于趋势还是盘整。
     >1.7 是轻微趋势  >2.5 是明显趋势
-    :param arr:
-    :param ntr_rol_id:
+    :param ntr_rol:
     :return:
     '''
-    cur_ntr = arr[-1, ntr_rol_id]
-    prev_ntr = np.max(arr[-4:-1, ntr_rol_id])
+    cur_ntr = ntr_rol.arr[-1]
+    prev_ntr = np.max(ntr_rol.arr[-4:-1])
     return cur_ntr / prev_ntr
 
 
 def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
     def calc(arr: np.ndarray, his_ptns: List[Dict[str, float]], huge_score: float) -> List[Tuple[str, float]]:
-        copen, chigh, clow, close, vol = arr[-1, :5]
+        copen, chigh, clow, close, vol = arr[-1, ocol:vcol + 1]
         fea_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
 
@@ -115,10 +114,10 @@ def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
 
         result = dict()
 
-        if abs(close - copen) > abs(close - arr[-2, 3]):
+        if abs(close - copen) > abs(close - arr[-2, ccol]):
             bar_sub = close - copen
         else:
-            bar_sub = close - arr[-2, 3]
+            bar_sub = close - arr[-2, ccol]
         bar_solid_rate = bar_sub / avg_bar_len
         if bar_solid_rate < -1 and solid_rate > 0.66:
             # 大阴线
@@ -157,8 +156,8 @@ def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
         bear_ptns = dict(new3_down=1, down2_mid=1, evening_star=1, black_out_down=1, hanging_man=0.8)
         if bear_twice.intersection(cur_ptns):
             # 乌云盖顶形态。较大概率下跌
-            score = 0.8 if close > arr[-2, 0] else 1
-            if vol < arr[-2, 5] * 0.66 and vol < np.average(arr[-6:-1, 5]):
+            score = 0.8 if close > arr[-2, ocol] else 1
+            if vol < arr[-2, vcol] * 0.66 and vol < np.average(arr[-6:-1, vcol]):
                 # 阴线的成交量需是前一日的2/3或前5日均量的1倍，否则可靠性降低
                 score *= 0.7
             result['bear_top_dark'] = score
@@ -168,9 +167,9 @@ def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
             if down_key:
                 result[down_key] = cur_ptns[down_key] * bear_ptns[down_key]
 
-        if not result and close < arr[-2, 3] and (bar_sub < avg_bar_len * -0.5 or solid_rate < 0.1):
+        if not result and close < arr[-2, ccol] and (bar_sub < avg_bar_len * -0.5 or solid_rate < 0.1):
             # 如果没有明显退出信号，连续两个(阴线、十字星)退出
-            popen, phigh, plow, pclose = arr[-1, :4]
+            popen, phigh, plow, pclose = arr[-1, ocol:vcol]
             p_max_chg, p_real, p_solid_rate, p_hline_rate, p_lline_rate = arr[-2, fea_start: fea_start + 5]
             if p_solid_rate < 0.1 or popen > pclose and p_real * 3 >= avg_bar_len:
                 if p_solid_rate < 0.1:

@@ -42,12 +42,12 @@ class TrendModelSys(BaseStrategy):
         :return:
         '''
         state: dict = pair_state.get()
-        macd, signl = self.macd(arr[-1, 3])
+        macd, signl = self.macd(arr[-1, ccol])
         cmacd_dir = macd - signl
         if cmacd_dir:
             macd_dir = state.get('macd_dir', 0)
             if macd_dir and cmacd_dir * macd_dir < 0:
-                state['cross_exm'].append((bar_num.get(), arr[-1, 1], arr[-1, 2]))
+                state['cross_exm'].append((bar_num.get(), arr[-1, hcol], arr[-1, lcol]))
                 state['cross_exm'] = state['cross_exm'][-10:]
             state['macd_dir'] = cmacd_dir
         return state['cross_exm']
@@ -66,10 +66,10 @@ class TrendModelSys(BaseStrategy):
                 max_high = max(max_high, xitem[1])
                 min_low = min(min_low, xitem[2])
             if len(cross_exms) - xid >= self.back_num:
-                if arr[-1, 3] > max_high + half_atr:
+                if arr[-1, ccol] > max_high + half_atr:
                     # 当前价格突破最高值+ATR，入场
                     pair_state.get()['up_cross'] = bar_num.get()
-                elif arr[-1, 3] < min_low - half_atr:
+                elif arr[-1, ccol] < min_low - half_atr:
                     pair_state.get()['down_cross'] = bar_num.get()
 
     def on_entry(self, arr: np.ndarray) -> str:

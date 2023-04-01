@@ -51,7 +51,7 @@ def big_vol_score(arr: np.ndarray, idx: int = -1):
     :param idx:
     :return:
     '''
-    cur_vol, prev_vol = arr[idx, 4], arr[idx - 1, 4]
+    cur_vol, prev_vol = arr[idx, vcol], arr[idx - 1, vcol]
     vol_avg_val = LongVar.get(LongVar.vol_avg).val
     avg_score = cur_vol / vol_avg_val / 2.5
     prev_score = cur_vol / prev_vol / 3
@@ -132,7 +132,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
             short_real, short_full = c_real, c_max_chg
         long_score = min(1, long_real / min(max(short_real, dust), bar_len_val) / 2)
         add_score = pow(max(1, long_real * 1.5 / short_full), 0.5) - 1
-        _vol_score = min(1.5, arr[-1, 4] / arr[-2, 4])
+        _vol_score = min(1.5, arr[-1, vcol] / arr[-2, vcol])
         return (_vol_score * long_score + add_score) * long_real_rate
 
     def kiss_score():
@@ -176,7 +176,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
         elif pclose > popen > close and pclose > copen > close and pclose - popen > bar_len_val:
             # 倾盆大雨（分手线），前阳后阴。阴线整体低于阳线。看跌强于乌云盖顶
             # 分数：成交量至少前一个的1/2；第一日应为大阳线；第二日应为大/中阴线；第二根低开和低收的力度
-            vol_score = min(1.5, arr[-1, 4] / arr[-2, 4])
+            vol_score = min(1.5, arr[-1, vcol] / arr[-2, vcol])
             plen_score = min(1.2, p_real / bar_len_val / 1.5)
             clen_score = min(1, c_real / bar_len_val)
             # 低开或低收的分数加成
@@ -255,7 +255,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
             dir_score -= 0.1
         res_score = pos_score * dir_score
         # 跳空的成交量不能太大，也不能太小
-        jump_vol_rate = np.max(arr[-2:, 4]) / arr[-3, 4]
+        jump_vol_rate = np.max(arr[-2:, vcol]) / arr[-3, vcol]
         if jump_vol_rate > 1.2:
             res_score /= jump_vol_rate
         elif jump_vol_rate < 1:
@@ -290,9 +290,9 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     elif close < p2close < p2open and close < copen < p2open and min(p2_solid_rate, c_solid_rate) > 0.6 and \
             phigh < p2high and plow > clow and min(pclose, popen) > close and max(pclose, popen) < p2open:
         # 两阴夹一阳：第一和最后一个都是阴线，且占比不低于60%，最后一个低于第一个；中间的没超出范围
-        vol_score = min(1.3, max(0.7, arr[-1, 4] * 1.3 / arr[-3, 4]))
+        vol_score = min(1.3, max(0.7, arr[-1, vcol] * 1.3 / arr[-3, vcol]))
         # 中间的如果是阳线应该量小于第一个
-        mid_vol_score = 1 if popen > pclose else min(1.5, arr[-3, 4] / arr[-2, 4]) / 1.2
+        mid_vol_score = 1 if popen > pclose else min(1.5, arr[-3, vcol] / arr[-2, vcol]) / 1.2
         # 最后一个下降应该略大
         chg_score = pow((p2close - close) / p2_max_chg + 1, 0.5)
         result['down2_mid'] = vol_score * mid_vol_score * chg_score
@@ -343,9 +343,9 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
         if view_arr.shape[0] < back_len:
             return
         # 所有价格减去最小值
-        view_arr[:, :4] -= np.min(view_arr[:, 2])
+        view_arr[:, ocol:vcol] -= np.min(view_arr[:, lcol])
         # 所有价格改为像素长度，方便绘制
-        view_arr[:, :4] *= ith * 0.6 / np.max(view_arr[:, 1])
+        view_arr[:, ocol:vcol] *= ith * 0.6 / np.max(view_arr[:, hcol])
         top = ith * math.floor(pos / coln)
         left = itw * (pos % rown)
         top += round(ith * 0.07)
@@ -353,11 +353,11 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
         bar_wid = round(bar_h * 0.06)
         bar_left = left + (itw - bar_wid * back_len * 2) / 2
         for di in range(back_len):
-            o, c = view_arr[di, 0], view_arr[di, 3]
+            o, c = view_arr[di, ocol], view_arr[di, ccol]
             rmin, rmax = min(o, c), max(o, c)
             fill = 'green' if o <= c else 'red'
             dr.rectangle((bar_left, top + (bar_h - rmax), bar_left + bar_wid, top + (bar_h - rmin)), fill=fill)
-            h, l = view_arr[di, 1], view_arr[di, 2]
+            h, l = view_arr[di, hcol], view_arr[di, lcol]
             center_x = bar_left + bar_wid * 0.5
             dr.line((center_x, top + (bar_h - h), center_x, top + (bar_h - l)), fill=fill)
             bar_left += bar_wid * 2
@@ -373,7 +373,7 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
                 _, _, w, h = dr.textbbox((0, 0), line)
                 dr.text((left + (itw - w) / 2, float(top)), line, fill='black')
                 top += h * 1.5
-        _draw_line_texts([' '.join(tags), str(view_arr[0, 7])[:19]])
+        _draw_line_texts([' '.join(tags), str(view_arr[0, 0])[:19]])
 
     count = 0
     for i in range(arr.shape[0]):
@@ -403,6 +403,5 @@ def load_bnb_1s():
 if __name__ == '__main__':
     origin_df = load_bnb_1s()
     og_arr = origin_df[:10000].to_numpy()[:, :8]
-    og_arr = og_arr[:, list(range(1, 8)) + [0]]
-    bar_avg_chg600 = np.average(og_arr[:, 1] - og_arr[:, 2])
+    bar_avg_chg600 = np.average(og_arr[:, hcol] - og_arr[:, lcol])
     test_pattern_draws(og_arr, bar_avg_chg600)

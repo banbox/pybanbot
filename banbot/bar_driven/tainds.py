@@ -23,6 +23,8 @@ pair_state = ContextVar('bar_state')
 bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
 _symbol_ctx: Dict[str, Context] = dict()
+# 几个常用列的索引
+tcol, ocol, hcol, lcol, ccol, vcol = 0, 1, 2, 3, 4, 5
 
 
 def _update_context(kwargs):
@@ -123,11 +125,11 @@ class LongVar:
         if key in cls.create_fns:
             return cls.create_fns[key]()
         elif key == cls.price_range:
-            return LongVar(lambda view_arr: np.max(view_arr[:, 1]) - np.min(view_arr[:, 2]), 600, 600)
+            return LongVar(lambda view_arr: np.max(view_arr[:, hcol]) - np.min(view_arr[:, lcol]), 600, 600)
         elif key == cls.vol_avg:
-            return LongVar(lambda view_arr: np.average(view_arr[:, 4]), 600, 600)
+            return LongVar(lambda view_arr: np.average(view_arr[:, vcol]), 600, 600)
         elif key == cls.bar_len:
-            return LongVar(lambda arr: avg_in_range(arr[:, 0] - arr[:, 3]), 600, 600)
+            return LongVar(lambda arr: avg_in_range(arr[:, ocol] - arr[:, ccol]), 600, 600)
         else:
             raise ValueError(f'unknown long key: {key}')
 
@@ -251,10 +253,10 @@ class StaTR(BaseInd):
             return self.arr[-1]
         crow = arr[-1, :]
         if arr.shape[0] < 2:
-            cur_tr = crow[1] - crow[2]
+            cur_tr = crow[hcol] - crow[lcol]
         else:
             prow = arr[-2, :]
-            cur_tr = max(crow[1] - crow[2], abs(crow[1] - prow[3]), abs(crow[2] - prow[3]))
+            cur_tr = max(crow[hcol] - crow[lcol], abs(crow[hcol] - prow[ccol]), abs(crow[lcol] - prow[ccol]))
         self.arr.append(cur_tr)
         self.arr = self.arr[-600:]
         self.calc_bar = bar_num.get()
@@ -265,10 +267,10 @@ def TR(arr) -> np.ndarray:
     arr = _to_nparr(arr)
     assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5
     result = _nan_array(arr)
-    result[0] = arr[0, 1] - arr[0, 2]
+    result[0] = arr[0, hcol] - arr[0, lcol]
     for i in range(1, result.shape[0]):
         crow, prow = arr[i, :], arr[i - 1, :]
-        result[i] = max(crow[1] - crow[2], abs(crow[1] - prow[3]), abs(crow[2] - prow[3]))
+        result[i] = max(crow[hcol] - crow[lcol], abs(crow[hcol] - prow[ccol]), abs(crow[lcol] - prow[ccol]))
     return result
 
 
@@ -338,7 +340,7 @@ class StaTRRoll(BaseInd):
         assert isinstance(arr, np.ndarray)
         if self.calc_bar >= bar_num.get():
             return self.arr[-1]
-        high_col, low_col = arr[-self.period:, 1], arr[-self.period:, 2]
+        high_col, low_col = arr[-self.period:, hcol], arr[-self.period:, lcol]
         max_id = np.argmax(high_col)
         roll_max = high_col[max_id]
         min_id = np.argmin(low_col)
@@ -385,7 +387,7 @@ class StaNVol(BaseInd):
         assert isinstance(arr, np.ndarray)
         if self.calc_bar >= bar_num.get():
             return self.arr[-1]
-        self.arr.append(arr[-1, 4] / LongVar.get(LongVar.vol_avg).val)
+        self.arr.append(arr[-1, vcol] / LongVar.get(LongVar.vol_avg).val)
         self.arr = self.arr[-600:]
         self.calc_bar = bar_num.get()
         return self.arr[-1]
@@ -429,7 +431,7 @@ def _make_sub_malong():
     malong = StaSMA(120)
 
     def calc(arr):
-        return abs(arr[-1, 3] - malong(arr[-1, 3]))
+        return abs(arr[-1, ccol] - malong(arr[-1, ccol]))
     return LongVar(calc, 900, 600)
 
 

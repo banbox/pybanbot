@@ -34,8 +34,8 @@ class MeanRev(BaseStrategy):
       MA5向上，3窗口NATR较低，前期属于熊市，位于MA100下方，是买入信号
     '''
 
-    def __init__(self, debug_ids: Optional[set] = None):
-        super().__init__()
+    def __init__(self, config: dict, debug_ids: Optional[set] = None):
+        super().__init__(config)
         # 原始列：open, high, low, close, volume, count, long_vol
         # max_chg, real, solid_rate, hline_rate, lline_rate
         self.ma120 = StaSMA(120)
@@ -61,10 +61,11 @@ class MeanRev(BaseStrategy):
         :param arr: 二维数组，每个元素是一个蜡烛：[open, high, low, close, volume, count, long_vol]
         :return:
         '''
-        self.ma5(arr[-1, 3])
-        self.ma20(arr[-1, 3])
-        self.ma120(arr[-1, 3])
-        self.macd(arr[-1, 3])
+        ccolse = arr[-1, ccol]
+        self.ma5(ccolse)
+        self.ma20(ccolse)
+        self.ma120(ccolse)
+        self.macd(ccolse)
         self.tr(arr)
         self.natr(arr)
         self.ntr_rol(arr)
@@ -86,7 +87,7 @@ class MeanRev(BaseStrategy):
             return
         
         cur_bar_num = bar_num.get()
-        close_chg = arr[-1, 3] - arr[-2, 3]
+        close_chg = arr[-1, ccol] - arr[-2, ccol]
         bar_avg_len = LongVar.get(LongVar.bar_len).val
         ma5_chg = self.ma5.arr[-1] - self.ma5.arr[-10]
         ma20_down = self.ma20.arr[-1] - self.ma20.arr[-10] < bar_avg_len * -0.5
@@ -95,7 +96,7 @@ class MeanRev(BaseStrategy):
         cur_singals = dict()
         if close_chg > 0:
             # 巨量向上
-            if ma5_chg < bar_avg_len * -1.5 and ma20_down and arr[-1, 3] + bar_avg_len < ma120:
+            if ma5_chg < bar_avg_len * -1.5 and ma20_down and arr[-1, ccol] + bar_avg_len < ma120:
                 # 下降周期 & MA100在上方 & 量价巨增  买入信号（等待确认信号）
                 cur_singals['huge_up_rev'] = cur_bar_num, huge_score
             elif ma5_chg > bar_avg_len * 1.5:
@@ -124,7 +125,7 @@ class MeanRev(BaseStrategy):
             sign_updates = bar_res[2]
             if bar_res[1] > 0.1:
                 return bar_res[:2]
-        copen, chigh, clow, close = arr[-1, :4]
+        copen, chigh, clow, close = arr[-1, ocol:vcol]
         bar_avg_len = LongVar.get(LongVar.bar_len).val
         fea_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
@@ -133,7 +134,7 @@ class MeanRev(BaseStrategy):
         if not phuge_up or cur_bar_num - phuge_up[0] > back_len:
             phuge_up = phuge_down
         if phuge_up and cur_bar_num - phuge_up[0] <= back_len:
-            cur_ma5, sign_close = self.ma5.arr[-1], arr[phuge_up[0] - cur_bar_num, 3]
+            cur_ma5, sign_close = self.ma5.arr[-1], arr[phuge_up[0] - cur_bar_num, ccol]
             if solid_rate >= 0.3 and max_chg >= bar_avg_len and cur_ma5 - sign_close >= bar_avg_len:
                 # 3周期内信号，当前实体至少70%，有足够的实体长度
                 tag = 'huge_up_rev' if copen < close else 'huge_down_rev'
@@ -145,16 +146,16 @@ class MeanRev(BaseStrategy):
     def _up_score(self, arr: np.ndarray, up_val) -> float:
         fea_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
-        if arr[-1, 0] >= arr[-1, 3] or solid_rate < 0.5:
+        if arr[-1, ocol] >= arr[-1, ccol] or solid_rate < 0.5:
             # 最后一个必须阳线，实体50%
             return 0
         if real >= up_val and solid_rate >= 0.7:
             # 单个上涨较多，实体70%
             return solid_rate / 0.8
-        if arr[-1, 3] - arr[-2, 0] >= up_val and arr[-2, fea_start + 2] >= 0.5:
+        if arr[-1, ccol] - arr[-2, ocol] >= up_val and arr[-2, fea_start + 2] >= 0.5:
             # 两个上涨较多，实体均不小于50%
             return np.average(arr[-2:, fea_start + 2]) / 0.66
-        if arr[-1, 3] - arr[-3, 0] >= up_val and np.min(arr[-3:, fea_start + 2]) >= 0.5:
+        if arr[-1, ccol] - arr[-3, ocol] >= up_val and np.min(arr[-3:, fea_start + 2]) >= 0.5:
             # 三个上涨较多，实体不小于50%
             return np.average(arr[-3:, fea_start + 2]) / 0.66
         return 0
@@ -171,7 +172,7 @@ class MeanRev(BaseStrategy):
         if score < 0.5:
             return None, 0
         # 如果是背离MA120巨量+巨价；则不入场
-        prc_chg, close_s120 = arr[-1, 3] - arr[-1, 0], arr[-1, 3] - self.ma120.arr[-1]
+        prc_chg, close_s120 = arr[-1, ccol] - arr[-1, ocol], arr[-1, ccol] - self.ma120.arr[-1]
         huge_score = self._calc_state('big_vol_prc', arr)
         if huge_score > 0.1 and prc_chg * close_s120 > 0:
             return None, 0
@@ -191,7 +192,7 @@ class MeanRev(BaseStrategy):
         #         prow_id += np.argmax(exm_range_arr) - exm_near_len
         #     else:
         #         prow_id += np.argmin(exm_range_arr) - exm_near_len
-        #     prc_dst = arr[prow_id, 1] - arr[-1, 3]
+        #     prc_dst = arr[prow_id, hcol] - arr[-1, ccol]
         #     if exm_min < prc_dst < exm_max:
         #         return None, 0
 
@@ -220,7 +221,7 @@ class MeanRev(BaseStrategy):
     #         if short_sigs[0][1] > 0.8:
     #             return short_sigs[0][0]
 
-    def custom_exit(self, arr: np.ndarray, od: Order) -> Optional[str]:
+    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         '''
         判断订单是否应该平仓。
         如果是刚开仓，稍有趋势不对（连续两个见顶信号）应该立刻平仓。
@@ -230,7 +231,7 @@ class MeanRev(BaseStrategy):
         :return:
         '''
         return trail_stop_loss(arr, od)
-        # profit = arr[-1, 3] - od.price
+        # profit = arr[-1, ccol] - od.price
         # stable_score = profit / LongVar.get(LongVar.sub_malong).val
         # if stable_score < 1:
         #     short_sigs = self._get_sigs('short')

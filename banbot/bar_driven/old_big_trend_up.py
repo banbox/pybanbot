@@ -72,7 +72,7 @@ def trend_trace(self, arr: np.ndarray) -> Tuple[Optional[str], float]:
     if big_arr.shape[0] < rsm_len:
         return None, 0
 
-    if len(np.where(big_arr[:, 0] >= big_arr[:, 3])[0]):
+    if len(np.where(big_arr[:, ocol] >= big_arr[:, ccol])[0]):
         # 三个都必须是阳线
         return None, 0
     max_chg, real, solid_rate, hline_rate, lline_rate = big_arr[-1, self.col_num - 5: self.col_num]

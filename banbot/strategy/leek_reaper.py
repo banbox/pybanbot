@@ -59,7 +59,7 @@ class LeekReaper(BnbScan):
         self.bid_price = self.bid_arr[0][0] * 0.618 + self.ask_arr[0][0] * 0.382 + self.price_dust
         self.ask_price = self.bid_arr[0][0] * 0.382 + self.ask_arr[0][0] * 0.618 - self.price_dust
         # 0是距离现在最近的，-1是最早的
-        self.his_prices = self.klines[:his_plen, 3].tolist()
+        self.his_prices = self.klines[:his_plen, ccol].tolist()
         if len(self.his_prices) < his_plen:
             pad_len = his_plen - len(self.his_prices)
             self.his_prices += [self.his_prices[-1]] * pad_len
@@ -124,7 +124,7 @@ class LeekReaper(BnbScan):
         # 4. 盘口价差过大，减少力度
         amount_fac = 1
         down_tags = []
-        avg_vol = self.klines[:, 4].mean()
+        avg_vol = self.klines[:, vcol].mean()
         if self.smo_vol < avg_vol:
             amount_fac *= self.smo_vol / avg_vol
             down_tags.append('vol_sm')

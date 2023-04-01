@@ -54,7 +54,7 @@ class BackTest(Trader):
         self.result['date_from'] = str(data.loc[0, 'date'])
         self.result['date_to'] = str(data.loc[len(data) - 1, 'date'])
         self.result['start_balance'] = self.wallets.get(quote_s)[0]
-        arr = data.to_numpy()[:, 1:]
+        arr = data.to_numpy()
         for i in range(arr.shape[0]):
             btime.add_secs(1)
             self.on_data_feed(arr[i])
@@ -109,10 +109,10 @@ class BackTest(Trader):
             self.result['worst_trade'] = "None"
         self.result['min_balance'] = f'{self.min_balance:.3f} {quote_s}'
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
-        self.result['market_change'] = f"{(arr[-1, 3] / arr[0, 0] - 1) * 100: .2f}%"
+        self.result['market_change'] = f"{(arr[-1, ccol] / arr[0, ocol] - 1) * 100: .2f}%"
 
     def force_exit_all(self):
-        self.order_hold.exit_open_orders('force_exit')
+        self.order_hold.exit_open_orders(None, 'force_exit')
         self.order_hold.fill_pending_orders(bar_arr.get())
 
 

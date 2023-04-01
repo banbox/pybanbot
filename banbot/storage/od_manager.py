@@ -119,7 +119,7 @@ class OrderManager(metaclass=SingletonArg):
         :return:
         '''
         rate = min(1, self.network_cost / timeframe_secs.get())
-        return arr[-1, 0] * (1 - rate) + arr[-1, 3] * rate
+        return arr[-1, ocol] * (1 - rate) + arr[-1, ccol] * rate
 
     def fill_pending_orders(self, arr: np.ndarray):
         '''

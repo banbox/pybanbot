@@ -27,9 +27,10 @@ class LiveTrader(Trader):
         self.data_hold.set_callback(self._make_invoke())
 
     def _make_invoke(self):
-        async def invoke_pair(pair, timeframe, row):
+        def invoke_pair(pair, timeframe, row):
             set_context(f'{pair}/{timeframe}')
-            await self.on_data_feed(np.array(row[1:]))
+            logger.info(f'{pair}/{timeframe} {row}')
+            self.on_data_feed(np.array(row))
         return invoke_pair
 
     async def init(self):

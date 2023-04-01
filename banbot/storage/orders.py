@@ -6,7 +6,7 @@
 
 from banbot.util import btime
 from datetime import datetime
-from banbot.bar_driven.tainds import bar_num
+from banbot.bar_driven.tainds import *
 from banbot.util.misc import del_dict_prefix, add_dict_prefix
 from typing import *
 
@@ -202,8 +202,8 @@ class InOutOrder:
         '''
         if self.status in {InOutStatus.Init, InOutStatus.FullExit}:
             return
-        self.profit = (arr[-1, 3] - self.enter.price) * self.enter.amount
-        self.profit_rate = arr[-1, 3] / self.enter.price - 1
+        self.profit = (arr[-1, ccol] - self.enter.price) * self.enter.amount
+        self.profit_rate = arr[-1, ccol] / self.enter.price - 1
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'

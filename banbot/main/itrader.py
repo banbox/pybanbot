@@ -42,7 +42,7 @@ class Trader:
             if entry_tag and not exit_tag:
                 state['last_enter'] = bar_num.get()
                 cost = strategy.custom_cost(entry_tag)
-                price = pair_arr[-1][3]
+                price = pair_arr[-1][ccol]
                 self.order_hold.enter_order(stg_name, pair, entry_tag, cost, price)
             elif exit_tag:
                 self.order_hold.exit_open_orders(stg_name, pair, exit_tag)

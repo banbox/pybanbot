@@ -26,8 +26,8 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
     if bar_num.get() == pair_state.get()['last_enter']:
         return
     elp_num = bar_num.get() - od.enter_at
-    max_price = np.max(arr[-elp_num:, 3])
-    cur_close = arr[-1, 3]
+    max_price = np.max(arr[-elp_num:, ccol])
+    cur_close = arr[-1, ccol]
     max_loss = min(cur_close - od.enter.price, cur_close - max_price)
     bar_len = LongVar.get(LongVar.bar_len).val
     flen, slen, mlen, llen = odlens if odlens else 3, 5, 10, 15

@@ -10,8 +10,8 @@ from banbot.strategy.common import *
 
 def append_new_bar(row: np.ndarray) -> np.ndarray:
     result = bar_arr.get()
-    copen, chigh, clow, close = row[:4]
-    dust = min(0.00001, close * 0.0001)
+    copen, chigh, clow, close = row[ocol:vcol]
+    dust = min(0.00001, max(close, 0.001) * 0.0001)
     max_chg = dust + chigh - clow
     real = abs(close - copen)
     solid_rate = real / max_chg
@@ -59,9 +59,6 @@ class BaseStrategy:
                 self.ma_cross.append(crs_id)
                 if len(self.ma_cross) > 300:
                     self.ma_cross = self.ma_cross[-100:]
-
-    def bar_rates(self, arr: np.ndarray, index: int):
-        return arr[index, -5:]
 
     def _get_sigs(self, tag: str, period: int = 1) -> List[Tuple[str, float, int]]:
         '''

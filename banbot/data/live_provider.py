@@ -3,6 +3,8 @@
 # File  : live_provider.py
 # Author: anyongjin
 # Date  : 2023/3/28
+import inspect
+
 from banbot.data.base import *
 from banbot.config import *
 from banbot.util.common import logger
@@ -25,7 +27,10 @@ class LiveDataProvider(DataProvider):
         async def handler(*args, **kwargs):
             async with cls._cb_lock:
                 try:
-                    await callback(*args, **kwargs)
+                    if inspect.iscoroutinefunction(callback):
+                        await callback(*args, **kwargs)
+                    else:
+                        callback(*args, **kwargs)
                 except Exception:
                     logger.exception(f'LiveData Callback Exception {args} {kwargs}')
         return handler
