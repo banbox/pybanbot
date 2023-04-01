@@ -73,7 +73,7 @@ class LiveTrader(Trader):
             # 定时更新定价货币的价格
             [self.exchange.update_quote_price, 60, cur_time],
             # 定时检查整体损失是否触发限制
-            [self.order_hold.check_fatal_stop, 300, cur_time + 3]
+            [self.order_hold.check_fatal_stop, 300, cur_time + 300]
         ]
         while True:
             wait_list = sorted(biz_list, key=lambda x: x[2])
@@ -92,7 +92,7 @@ class LiveTrader(Trader):
             else:
                 biz_func()
             exec_cost = time.time() - start_time
-            if exec_cost >= interval * 0.9:
+            if exec_cost >= interval * 0.9 and not is_debug():
                 logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
                 interval = exec_cost * 1.5
                 wait_list[0][1] = interval

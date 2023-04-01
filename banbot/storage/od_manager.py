@@ -203,7 +203,6 @@ class OrderManager(metaclass=SingletonArg):
             if ext_tag := strategy.custom_exit(pair_arr, od):
                 self.exit_order(od, ext_tag)
 
-    @loop_forever
     def check_fatal_stop(self):
         for check_mins, bad_ratio in self.fatal_stop.items():
             fatal_loss = self.calc_fatal_loss(check_mins)

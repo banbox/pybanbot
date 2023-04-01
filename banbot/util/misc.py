@@ -8,6 +8,11 @@ import logging
 import sys
 
 
+def is_debug():
+    gettrace = getattr(sys, 'gettrace', None)
+    return gettrace and gettrace()
+
+
 def utime(secs: int = 0, as_ms: bool = True):
     multipler = 1000 if as_ms else 1
     return round((time.time() + secs) * multipler)
