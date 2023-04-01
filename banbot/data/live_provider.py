@@ -15,11 +15,11 @@ from asyncio import Lock, gather
 class LiveDataProvider(DataProvider):
     _cb_lock = Lock()
 
-    def __init__(self, exchange: CryptoExchange):
+    def __init__(self, config: Config, exchange: CryptoExchange):
         super(LiveDataProvider, self).__init__()
         self.exchange = exchange
-        self.pairlist: List[Tuple[str, str]] = cfg.get('pairlist')
-        self.holders = PairDataHolder.create_holders(self.pairlist, cfg.get('prefire'))
+        self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
+        self.holders = PairDataHolder.create_holders(self.pairlist, config.get('prefire'))
         self.min_interval = min(hold.min_interval for hold in self.holders)
 
     @classmethod

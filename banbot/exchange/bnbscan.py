@@ -18,7 +18,7 @@ from banbot.utils import *
 
 
 class BnbScan:
-    def __init__(self, full_odbook=False, log_his: bool = False):
+    def __init__(self, config: Config, full_odbook=False, log_his: bool = False):
         '''
         初始化一个币安高频逐秒信息更新端
         :param full_odbook: 是否维护一个完整的1000深度订单簿。False时100ms获取10档深度
@@ -28,8 +28,8 @@ class BnbScan:
         self._log_his = log_his
         self.listen_key = None
         self.listen_key_update = utime(-3600)
-        self.base_key, self.quote_key = cfg['pair'].split('/')
-        self.pair = cfg['pair'].replace('/', '').upper()
+        self.base_key, self.quote_key = config['pair'].split('/')
+        self.pair = config['pair'].replace('/', '').upper()
         self.position = 0  # 仓位。提交订单未成交时也算持仓，订单被取消或过期则对应缩减持仓
         auth_args, rest_args, stream_args = get_bnb_client_args()
         handlers = self.init_msg_handler()

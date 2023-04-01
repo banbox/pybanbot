@@ -50,6 +50,27 @@ def del_dict_prefix(data: dict, prefix: str, with_others=True) -> dict:
     return result
 
 
+def deep_merge_dicts(source, destination, allow_null_overrides: bool = True):
+    """
+    使用source的值覆盖destination
+    Values from Source override destination, destination is returned (and modified!!)
+    Sample:
+    >>> a = { 'first' : { 'rows' : { 'pass' : 'dog', 'number' : '1' } } }
+    >>> b = { 'first' : { 'rows' : { 'fail' : 'cat', 'number' : '5' } } }
+    >>> merge(b, a) == { 'first' : { 'rows' : { 'pass' : 'dog', 'fail' : 'cat', 'number' : '5' } } }
+    True
+    """
+    for key, value in source.items():
+        if isinstance(value, dict):
+            # get node or create one
+            node = destination.setdefault(key, {})
+            deep_merge_dicts(value, node, allow_null_overrides)
+        elif value is not None or allow_null_overrides:
+            destination[key] = value
+
+    return destination
+
+
 def nearly_group(data, max_pct=0.1, do_sort=True):
     '''
     近似分组方法，对于给定的一组数据，如果相邻之间相差在max_pct范围内，则认为是一组

@@ -12,18 +12,19 @@ from banbot.strategy.resolver import load_run_jobs
 
 
 class Trader:
-    def __init__(self):
-        self.pairlist: List[Tuple[str, str]] = cfg.get('pairlist')
+    def __init__(self, config: Config):
+        self.config = config
+        self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
         self.order_hold: OrderManager = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
 
     def _load_strategies(self):
-        run_jobs = load_run_jobs(cfg)
+        run_jobs = load_run_jobs(self.config)
         for pair, timeframe, cls_list in run_jobs:
             symbol = f'{pair}/{timeframe}'
             set_context(symbol)
-            self.symbol_stgs[symbol] = [cls(cfg) for cls in cls_list]
+            self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
 
     def on_data_feed(self, row: np.ndarray):
         strategy_list = self.symbol_stgs[symbol_tf.get()]

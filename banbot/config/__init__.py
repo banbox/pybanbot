@@ -6,12 +6,13 @@
 import os
 import orjson
 from typing import Tuple
-cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
-cfg: dict = orjson.loads(open(cfg_path, 'rb').read())
-is_prod = cfg["env"] == 'prod'
+from banbot.config.configuration import Configuration, Config
 
 
 def get_bnb_client_args() -> Tuple[dict, dict, dict]:
+    cfg_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    cfg: dict = orjson.loads(open(cfg_path, 'rb').read())
+    is_prod = cfg["env"] == 'prod'
     client_cfg = cfg['exchange'][f'credit_{cfg["env"]}']
     stream_args = dict()
     if client_cfg.get('stream_url'):

@@ -18,6 +18,7 @@
   "strategy_paths": [
     "banbot.strategy.macd_cross"
   ],
+  "add_config_files": [],
   "data_dir": "E:\\trade\\freqtd_data\\ban_data",
   "out_path": "E:\\trade\\freqtd_data\\ban_data\\result.json",
   "exchange": {

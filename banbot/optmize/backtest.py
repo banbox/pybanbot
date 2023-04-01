@@ -6,24 +6,24 @@
 import os.path
 
 from banbot.main.itrader import *
-from banbot.config import cfg
+from banbot.config import *
 data_dir = r'E:\trade\freqtd_data\user_data\data_recent\binance'
 
 
 class BackTest(Trader):
-    def __init__(self, max_num: int = 0):
+    def __init__(self, config: Config, max_num: int = 0):
         btime.run_mode = btime.RunMode.BACKTEST
-        super(BackTest, self).__init__()
+        super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
-        exg_name = cfg['exchange']['name']
-        self.order_hold = OrderManager(exg_name, self.wallets)
+        exg_name = config['exchange']['name']
+        self.order_hold = OrderManager(config, exg_name, self.wallets)
         self.max_num = max_num
-        self.data_dir: str = cfg['data_dir']
+        self.data_dir: str = config['data_dir']
         self.out_dir: str = os.path.join(self.data_dir, 'backtest')
         if not os.path.isdir(self.out_dir):
             os.mkdir(self.out_dir)
         self.result = dict()
-        self.stake_amount: float = cfg.get('stake_amount', 1000)
+        self.stake_amount: float = config.get('stake_amount', 1000)
         self._bar_listeners: List[Tuple[int, Callable]] = []
         self.max_open_orders = 1
         self.min_balance = 0

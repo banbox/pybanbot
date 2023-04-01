@@ -9,6 +9,7 @@ from banbot.exchange.crypto_exchange import *
 from banbot.data.live_provider import LiveDataProvider
 from banbot.storage.od_manager import *
 from banbot.util.misc import *
+from banbot.config import *
 from banbot.util import btime
 
 
@@ -17,12 +18,13 @@ class LiveTrader(Trader):
     实盘交易、实时模拟。模式:DRY_RUN LIVE
     '''
 
-    def __init__(self):
-        super(LiveTrader, self).__init__()
-        self.exchange = CryptoExchange(cfg)
-        self.data_hold = LiveDataProvider(self.exchange)
-        self.wallets = CryptoWallet(cfg, self.exchange)
-        self.order_hold = LiveOrderManager(cfg, self.exchange, self.wallets)
+    def __init__(self, config: Config):
+        btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
+        super(LiveTrader, self).__init__(config)
+        self.exchange = CryptoExchange(config)
+        self.data_hold = LiveDataProvider(config, self.exchange)
+        self.wallets = CryptoWallet(config, self.exchange)
+        self.order_hold = LiveOrderManager(config, self.exchange, self.wallets)
         self.data_hold.set_callback(self._make_invoke())
 
     def _make_invoke(self):
@@ -96,10 +98,3 @@ class LiveTrader(Trader):
                 interval = exec_cost * 1.5
                 wait_list[0][1] = interval
             wait_list[0][2] += interval
-
-
-if __name__ == '__main__':
-    btime.run_mode = btime.RunMode(cfg.get('run_mode', 'dry_run'))
-    logger.warning(f"Run Mode: {btime.run_mode.value}")
-    trader = LiveTrader()
-    call_async(trader.run)
