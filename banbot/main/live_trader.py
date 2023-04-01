@@ -19,7 +19,6 @@ class LiveTrader(Trader):
     '''
 
     def __init__(self, config: Config):
-        btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
         self.data_hold = LiveDataProvider(config, self.exchange)

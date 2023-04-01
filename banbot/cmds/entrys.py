@@ -26,6 +26,7 @@ def start_trading(args: Dict[str, Any]) -> int:
     try:
         config = Configuration(args, None).get_config()
         signal.signal(signal.SIGTERM, term_handler)
+        btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
         logger.warning(f"Run Mode: {btime.run_mode.value}")
         trader = LiveTrader(config)
         call_async(trader.run)
@@ -48,8 +49,10 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     # Import here to avoid loading backtesting module when it's not used
     from banbot.optmize.backtest import BackTest
     from banbot.config import Configuration
+    from banbot.util import btime
     config = Configuration(args, None).get_config()
 
+    btime.run_mode = btime.RunMode.BACKTEST
     # Initialize backtesting object
     backtesting = BackTest(config, 10000)
     backtesting.run()
