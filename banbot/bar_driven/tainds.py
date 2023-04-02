@@ -6,6 +6,12 @@
 '''
 上下文变量的归类：pair+timeframe
 跟策略无关，不考虑策略。（即pair+timeframe对应多个策略时，也是同一个上下文环境）
+请勿在以下协程方法中使用上下文变量，会创建新的上下文：
+get_event_loop
+create_task
+wait_fir
+wait
+gather
 '''
 from numbers import Number
 from contextvars import Context, ContextVar, copy_context

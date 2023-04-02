@@ -6,11 +6,11 @@
 import asyncio
 from banbot.main.itrader import *
 from banbot.exchange.crypto_exchange import *
-from banbot.data.live_provider import LiveDataProvider
 from banbot.storage.od_manager import *
 from banbot.util.misc import *
 from banbot.config import *
 from banbot.util import btime
+from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
 
 
 class LiveTrader(Trader):
@@ -25,13 +25,23 @@ class LiveTrader(Trader):
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_hold = LiveOrderManager(config, self.exchange, self.wallets)
         self.data_hold.set_callback(self._make_invoke())
+        self.rpc = RPCManager(self)
+        self._run_tasks: List[asyncio.Task] = []
 
-    def _make_invoke(self):
-        def invoke_pair(pair, timeframe, row):
-            set_context(f'{pair}/{timeframe}')
-            logger.info(f'{pair}/{timeframe} {row}')
-            self.on_data_feed(np.array(row))
-        return invoke_pair
+    def order_callback(self, od: InOutOrder, is_enter: bool):
+        msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
+        msg = dict(
+            type=msg_type,
+            enter_tag=od.enter_tag,
+            exit_tag=od.exit_tag,
+            amount=od.enter.amount,
+            price=od.enter.price,
+            strategy=od.strategy,
+            pair=od.symbol,
+            profit=od.profit,
+            profit_rate=od.profit_rate
+        )
+        self.rpc.send_msg(msg)
 
     async def init(self):
         self._load_strategies()
@@ -39,7 +49,9 @@ class LiveTrader(Trader):
         await self.exchange.update_quote_price()
         await self.wallets.init()
         await init_longvars(self.exchange, self.pairlist)
+        self.order_hold.callbacks.append(self.order_callback)
         logger.info('banbot init complete')
+        self.rpc.startup_messages()
 
     async def run(self):
         # 初始化
@@ -47,7 +59,15 @@ class LiveTrader(Trader):
         # 启动异步任务
         await self._start_tasks()
         # 轮训执行任务
-        await self._loop_tasks()
+        cur_time = time.time()
+        await self._loop_tasks([
+            # 轮询函数，轮询间隔(s)，下次执行时间
+            [self.data_hold.process, self.data_hold.min_interval, cur_time],
+            # 定时更新定价货币的价格
+            [self.exchange.update_quote_price, 60, cur_time],
+            # 定时检查整体损失是否触发限制
+            [self.order_hold.check_fatal_stop, 300, cur_time + 300]
+        ])
 
     def _bar_callback(self):
         if btime.run_mode != RunMode.LIVE:
@@ -56,44 +76,14 @@ class LiveTrader(Trader):
     async def _start_tasks(self):
         if btime.run_mode == RunMode.LIVE:
             # 仅实盘交易模式，监听钱包和订单状态更新
-            # 监听钱包更新
-            asyncio.create_task(self.wallets.update_forever())
-            # 监听订单更新
-            asyncio.create_task(self.order_hold.update_forever())
+            self._run_tasks.extend([
+                # 监听钱包更新
+                asyncio.create_task(self.wallets.update_forever()),
+                # 监听订单更新
+                asyncio.create_task(self.order_hold.update_forever())
+            ])
 
-    async def _loop_tasks(self):
-        '''
-        这里不能执行耗时的异步任务（比如watch_balance），
-        :return:
-        '''
-        cur_time = time.time()
-        biz_list = [
-            # 轮询函数，轮询间隔(s)，下次执行时间
-            [self.data_hold.process, self.data_hold.min_interval, cur_time],
-            # 定时更新定价货币的价格
-            [self.exchange.update_quote_price, 60, cur_time],
-            # 定时检查整体损失是否触发限制
-            [self.order_hold.check_fatal_stop, 300, cur_time + 300]
-        ]
-        while True:
-            wait_list = sorted(biz_list, key=lambda x: x[2])
-            biz_func, interval, next_start = wait_list[0]
-            wait_secs = next_start - time.time()
-            if wait_secs > 0:
-                await asyncio.sleep(wait_secs)
-            start_time = time.time()
-            if inspect.iscoroutinefunction(biz_func):
-                try:
-                    future = biz_func()
-                    if future:
-                        await asyncio.wait_for(future, interval)
-                except TimeoutError:
-                    raise RuntimeError(f'{biz_func.__qualname__} rum timeout: {interval:.3f}s')
-            else:
-                biz_func()
-            exec_cost = time.time() - start_time
-            if exec_cost >= interval * 0.9 and not is_debug():
-                logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
-                interval = exec_cost * 1.5
-                wait_list[0][1] = interval
-            wait_list[0][2] += interval
+    async def cleanup(self):
+        logger.info('Cleaning up trading...')
+        self.rpc.cleanup()
+        await self.exchange.close()

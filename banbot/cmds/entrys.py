@@ -3,6 +3,7 @@
 # File  : entrys.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import asyncio
 import signal
 from typing import *
 
@@ -14,7 +15,6 @@ def start_trading(args: Dict[str, Any]) -> int:
     # Import here to avoid loading worker module when it's not used
     from banbot.main.live_trader import LiveTrader
     from banbot.util import btime
-    from banbot.util.misc import call_async
     from banbot.util.common import logger
     from banbot.config import Configuration
 
@@ -29,7 +29,7 @@ def start_trading(args: Dict[str, Any]) -> int:
         btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
         logger.warning(f"Run Mode: {btime.run_mode.value}")
         trader = LiveTrader(config)
-        call_async(trader.run)
+        asyncio.run(trader.run())
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")
@@ -55,5 +55,5 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     btime.run_mode = btime.RunMode.BACKTEST
     # Initialize backtesting object
     backtesting = BackTest(config, 10000)
-    backtesting.run()
+    asyncio.run(backtesting.run())
 

@@ -24,5 +24,6 @@ setup(
         'jupyter-dash',
         'tabulate',
         'ccxt',
+        'orjson'
     ]
 )

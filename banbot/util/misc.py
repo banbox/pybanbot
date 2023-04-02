@@ -18,14 +18,6 @@ def utime(secs: int = 0, as_ms: bool = True):
     return round((time.time() + secs) * multipler)
 
 
-def call_async(async_fn, *args, **kwargs):
-    import asyncio
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(async_fn(*args, **kwargs))
-    loop.close()
-    return result
-
-
 def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):
     """
     Search a value in obj, return this if it's not None.

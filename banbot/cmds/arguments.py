@@ -68,7 +68,7 @@ class Arguments:
         self._build_args(optionlist=ARGS_TRADE, parser=trade_cmd)
 
         # Add backtesting subcommand
-        backtesting_cmd = subparsers.add_parser('backtesting', help='Backtesting module.',
+        backtesting_cmd = subparsers.add_parser('backtest', help='Backtesting module.',
                                                 parents=[_common_parser])
         backtesting_cmd.set_defaults(func=start_backtesting)
         self._build_args(optionlist=ARGS_BACKTEST, parser=backtesting_cmd)

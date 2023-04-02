@@ -8,6 +8,9 @@ from typing import Dict, Any
 MIN_STAKE_AMOUNT = 10
 MAX_FETCH_NUM = 1000  # 单次请求最大返回数量
 
+Config = Dict[str, Any]
+NATIVE_TFS = ['1s', '1m', '3m', '5m', '15m', '30m', '1h', '4h', '8h', '1d']
+
 
 class RunMode(Enum):
     """
@@ -26,4 +29,16 @@ class RunMode(Enum):
 TRADING_MODES = [RunMode.LIVE, RunMode.DRY_RUN]
 OPTIMIZE_MODES = [RunMode.BACKTEST, RunMode.HYPEROPT]
 
-Config = Dict[str, Any]
+
+class BotState(Enum):
+    """
+    Bot application states
+    """
+    RUNNING = 1
+    STOPPED = 2
+    RELOAD_CONFIG = 3
+
+    def __str__(self):
+        return f"{self.name.lower()}"
+
+

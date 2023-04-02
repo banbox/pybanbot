@@ -19,8 +19,7 @@
     "banbot.strategy.macd_cross"
   ],
   "add_config_files": [],
-  "data_dir": "E:\\trade\\freqtd_data\\ban_data",
-  "out_path": "E:\\trade\\freqtd_data\\ban_data\\result.json",
+  "data_dir": "E:\\trade\\ban_data",
   "exchange": {
     "name": "binance",
     "proxies": {
@@ -38,6 +37,23 @@
       "base_url": "https://testnet.binance.vision",
       "stream_url": "wss://testnet.binance.vision",
       "timeout": 3
+    }
+  },
+  "wework": {
+    "enabled": true,
+    "corpid": "ww0f524655066bfb7f",
+    "agentid": "1000004",
+    "corpsecret": "hbXBhPn5Kgv_bjg01RIA2ufFHryQ_hONzPiJZ-gmouA"
+  },
+  "webhook": {
+    "entry": {
+      "content": "[enter_tag] {side} {amount} with {price}"
+    },
+    "exit": {
+      "content": "[enter_tag] {side} {amount} with {price}"
+    },
+    "status": {
+      "content": "{status}"
     }
   }
 }

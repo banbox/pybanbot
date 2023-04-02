@@ -162,8 +162,9 @@ class InOutOrder:
             stoploss=self.stoploss,
             profit_rate=self.profit_rate,
             profit=self.profit,
-            duration=self.exit_at - self.enter_at,
         )
+        if self.exit_at:
+            result['duration'] = self.exit_at - self.enter_at
         result.update(add_dict_prefix(self.enter.to_dict(), 'enter_'))
         if self.exit:
             result.update(add_dict_prefix(self.exit.to_dict(), 'exit_'))

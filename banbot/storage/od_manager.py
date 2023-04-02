@@ -3,7 +3,9 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
+import asyncio
 import inspect
+import os
 
 import orjson
 
@@ -26,7 +28,7 @@ class OrderManager(metaclass=SingletonArg):
         self.his_list: List[InOutOrder] = []  # 历史已完成或取消的订单
         self.network_cost = 0.6  # 模拟网络延迟
         self.callbacks: List[Callable] = []
-        self.dump_path = config.get('out_path')
+        self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
         self.fatal_stop = dict()
         self._load_fatal_stop()
         self.disabled = False
@@ -38,13 +40,13 @@ class OrderManager(metaclass=SingletonArg):
         for k, v in fatal_cfg.items():
             self.fatal_stop[int(k)] = v
 
-    def _fire(self, key: str, enter: bool):
+    async def _fire(self, key: str, enter: bool):
         if key not in self.callbacks:
             return
         od = self.open_orders[key]
         for func in self.callbacks:
-            if inspect.iscoroutinefunction(func):
-                call_async(func(od, enter))
+            if asyncio.iscoroutinefunction(func):
+                await func(od, enter)
             else:
                 func(od, enter)
 
@@ -240,6 +242,8 @@ class OrderManager(metaclass=SingletonArg):
         amount = sum(self.wallets.data[symbol])
         if symbol.find('USD') >= 0:
             return amount
+        elif not amount:
+            return 0
         return amount * self._symbol_price(symbol)
 
     def get_legal_value(self, symbol: str = None):
@@ -282,7 +286,7 @@ class LiveOrderManager(OrderManager):
             if filled == 0:
                 logger.warning(f'{od} is {order_status} by {self.name}, no filled')
         if od.status > InOutStatus.Init:
-            self._fire(od.key, is_enter)
+            await self._fire(od.key, is_enter)
             self.try_dump()
 
     async def _enter_order(self, od: InOutOrder):
@@ -293,7 +297,7 @@ class LiveOrderManager(OrderManager):
         if btime.run_mode == btime.RunMode.LIVE:
             await self._create_exg_order(od, False)
 
-    def _update_bnb_order(self, od: Order, data: dict):
+    async def _update_bnb_order(self, od: Order, data: dict):
         info = data['info']
         state = info['X']
         if state == 'NEW':
@@ -320,7 +324,7 @@ class LiveOrderManager(OrderManager):
         else:
             logger.error(f'unknown bnb order status: {state}, {data}')
             return
-        self._fire(od.inout_key, od.enter)
+        await self._fire(od.inout_key, od.enter)
         self.try_dump()
 
     def _update_order(self, od: Order, data: dict):

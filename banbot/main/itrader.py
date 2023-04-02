@@ -5,18 +5,21 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
+from banbot.storage.common import *
 from banbot.strategy.base import *
-from banbot.config import *
 from banbot.storage.od_manager import *
+from banbot.data.data_provider import *
 from banbot.strategy.resolver import load_run_jobs
 
 
 class Trader:
     def __init__(self, config: Config):
+        BotGlobal.state = BotState.RUNNING
         self.config = config
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
         self.order_hold: OrderManager = None
+        self.data_hold: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
 
     def _load_strategies(self):
@@ -25,6 +28,12 @@ class Trader:
             symbol = f'{pair}/{timeframe}'
             set_context(symbol)
             self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
+
+    def _make_invoke(self):
+        def invoke_pair(pair, timeframe, row):
+            set_context(f'{pair}/{timeframe}')
+            self.on_data_feed(np.array(row))
+        return invoke_pair
 
     def on_data_feed(self, row: np.ndarray):
         strategy_list = self.symbol_stgs[symbol_tf.get()]
@@ -60,3 +69,36 @@ class Trader:
     def run(self):
         raise NotImplementedError('`run` is not implemented')
 
+    def cleanup(self):
+        pass
+
+    async def _loop_tasks(self, biz_list):
+        '''
+        这里不能执行耗时的异步任务（比如watch_balance），
+        :return:
+        '''
+        live_mode = btime.run_mode in TRADING_MODES
+        while True:
+            wait_list = sorted(biz_list, key=lambda x: x[2])
+            biz_func, interval, next_start = wait_list[0]
+            wait_secs = next_start - btime.time()
+            if wait_secs > 0:
+                if live_mode:
+                    await asyncio.sleep(wait_secs)
+                else:
+                    btime.add_secs(wait_secs)
+            start_time = time.time()
+            try:
+                if asyncio.iscoroutinefunction(biz_func):
+                    await biz_func()
+                else:
+                    biz_func()
+            except EOFError:
+                # 任意一个发出EOF错误时，终止循环
+                break
+            exec_cost = time.time() - start_time
+            if live_mode and exec_cost >= interval * 0.9 and not is_debug():
+                logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
+                interval = exec_cost * 1.5
+                wait_list[0][1] = interval
+            wait_list[0][2] += interval

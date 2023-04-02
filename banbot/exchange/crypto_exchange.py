@@ -3,7 +3,7 @@
 # File  : crypto_exchange.py
 # Author: anyongjin
 # Date  : 2023/3/29
-import inspect
+import asyncio
 
 import ccxt
 import ccxt.async_support as ccxt_async
@@ -24,7 +24,7 @@ def loop_forever(func):
     async def wrap(*args, **kwargs):
         while True:
             try:
-                if inspect.iscoroutinefunction(func):
+                if asyncio.iscoroutinefunction(func):
                     await func(*args, **kwargs)
                 else:
                     func(*args, **kwargs)
@@ -196,6 +196,10 @@ class CryptoExchange:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
 
+    async def close(self):
+        await self.api_async.close()
+        await self.api_ws.close()
+
     def __str__(self):
         return self.name
 
@@ -216,6 +220,7 @@ async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
         malong(pair_arr[i, ccol])
         natr(pair_arr[:i + 1, :])
         LongVar.update(pair_arr[:i + 1, :])
+    bar_num.set(0)
 
 
 async def init_longvars(exchange: CryptoExchange, pairlist: List[Tuple[str, str]]):
