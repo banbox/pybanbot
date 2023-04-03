@@ -17,6 +17,7 @@ class DataProvider:
     def __init__(self, config: Config):
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.holders: List[PairDataFeeder] = []
+        self.max_back_secs = 0
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
@@ -49,8 +50,7 @@ class DataProvider:
         return [feed_cls(pair, list(tf_set), **kwargs) for pair, tf_set in pair_groups.items()]
 
     async def process(self):
-        tasks = [hold.try_fetch() for hold in self.holders]
-        await gather(*tasks)
+        await gather(*[hold.try_fetch() for hold in self.holders])
         for hold in self.holders:
             await hold.try_update()
 
@@ -66,6 +66,7 @@ class LocalDataProvider(DataProvider):
         )
         self.holders = DataProvider.create_holders(LocalPairDataFeeder, self.pairlist, **kwargs)
         self.min_interval = min(hold.min_interval for hold in self.holders)
+        self.max_back_secs = min(hold.back_secs for hold in self.holders)
 
 
 class LiveDataProvider(DataProvider):
@@ -79,4 +80,5 @@ class LiveDataProvider(DataProvider):
         )
         self.holders = DataProvider.create_holders(LivePairDataFeader, self.pairlist, **kwargs)
         self.min_interval = min(hold.min_interval for hold in self.holders)
+        self.max_back_secs = min(hold.back_secs for hold in self.holders)
 

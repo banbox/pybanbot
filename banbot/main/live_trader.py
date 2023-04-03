@@ -5,7 +5,6 @@
 # Date  : 2023/2/28
 import asyncio
 from banbot.main.itrader import *
-from banbot.exchange.crypto_exchange import *
 from banbot.storage.od_manager import *
 from banbot.util.misc import *
 from banbot.config import *
@@ -48,12 +47,14 @@ class LiveTrader(Trader):
         await self.exchange.load_markets()
         await self.exchange.update_quote_price()
         await self.wallets.init()
-        await init_longvars(self.exchange, self.pairlist)
         logger.info('banbot init complete')
         await self.rpc.startup_messages()
 
     async def run(self):
-        cur_time = time.time()
+        # 需要预热数据
+        btime.run_mode = RunMode.OTHER
+        btime.cur_timestamp = time.time() - self.data_hold.max_back_secs
+        cur_time = btime.time()
         loop_tasks = [
             # 轮询函数，轮询间隔(s)，下次执行时间
             [self.data_hold.process, self.data_hold.min_interval, cur_time],

@@ -25,6 +25,7 @@ setup(
         'tabulate',
         'ccxt',
         'orjson',
-        'aiodns'
+        'aiodns',
+        'aiofiles'
     ]
 )

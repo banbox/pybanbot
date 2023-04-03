@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from banbot.storage.common import *
 from banbot.strategy.base import *
@@ -104,10 +105,12 @@ class Trader:
             wait_list = sorted(biz_list, key=lambda x: x[2])
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()
+            self._job_exp_end = next_start + interval * 2
             if wait_secs > 0:
+                if wait_secs > 30:
+                    logger.info(f'sleep {wait_secs} : {biz_func.__qualname__}')
                 await btime.sleep(wait_secs)
             job_start = time.time()
-            self._job_exp_end = job_start + interval
             try:
                 await run_async(biz_func)
             except EOFError:

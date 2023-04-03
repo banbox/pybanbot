@@ -109,6 +109,8 @@ class CryptoExchange:
         self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
 
     async def load_markets(self):
+        if btime.run_mode not in TRADING_MODES:
+            return
         markets = await self.api_async.load_markets()
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)
@@ -206,6 +208,8 @@ class CryptoExchange:
         return ohlc_arr
 
     async def update_quote_price(self):
+        if btime.run_mode not in TRADING_MODES:
+            return
         for symbol in self.quote_symbols:
             if symbol.find('USD') >= 0:
                 self.quote_prices[symbol] = 1
@@ -225,28 +229,3 @@ class CryptoExchange:
     def __str__(self):
         return self.name
 
-
-async def _init_longvars(exchange: CryptoExchange, pair: str, timeframe: str):
-    from banbot.bar_driven.tainds import LongVar, StaSMA, StaNATR, bar_num
-    ochl_data = await exchange.fetch_ohlcv_plus(pair, timeframe, limit=900)
-    pair_arr = np.array(ochl_data)
-    LongVar.get(LongVar.price_range)
-    LongVar.get(LongVar.vol_avg)
-    LongVar.get(LongVar.bar_len)
-    LongVar.get(LongVar.sub_malong)
-    LongVar.get(LongVar.atr_low)
-    malong = StaSMA(120)
-    natr = StaNATR()
-    for i in range(pair_arr.shape[0]):
-        bar_num.set(i + 1)
-        malong(pair_arr[i, ccol])
-        natr(pair_arr[:i + 1, :])
-        LongVar.update(pair_arr[:i + 1, :])
-    bar_num.set(0)
-
-
-async def init_longvars(exchange: CryptoExchange, pairlist: List[Tuple[str, str]]):
-    from banbot.bar_driven.tainds import set_context
-    for pair, timeframe in pairlist:
-        set_context(f'{pair}/{timeframe}')
-        await _init_longvars(exchange, pair, timeframe)

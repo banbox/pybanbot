@@ -34,6 +34,7 @@ class PairDataFeeder:
             assert tf_secs % tf_pairs[0][1] == 0, err_msg
         self.pair = pair
         self.states = [PairTFCache(tf, tf_sec) for tf, tf_sec in tf_pairs]
+        self.back_secs = self.states[-1].tf_secs * 900
         self.min_interval = min(s.check_interval for s in self.states)
         self.auto_prefire = auto_prefire
         self.callback = None
@@ -153,9 +154,30 @@ class LivePairDataFeader(PairDataFeeder):
         self.is_ws = self.min_interval <= 2
         self.exchange = exchange
         self.next_since = None
+        self.is_warmed = False
+        self.warm_data = None
+        self.warm_id = 0
+        self.back_rmode = btime.run_mode
 
     async def _get_feeds(self):
         state = self.states[0]
+        if not self.is_warmed:
+            # 先请求前900周期数据作为预热
+            btime.run_mode = RunMode.OTHER
+            if self.warm_data is None:
+                fetch_num = round(self.states[-1].tf_secs / state.tf_secs) * 900
+                self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
+                logger.warning(f'load warn up data: {len(self.warm_data)}')
+            if self.warm_id >= len(self.warm_data):
+                logger.warning('warm up complete')
+                self.is_warmed = True
+                del self.warm_data
+                btime.run_mode = self.back_rmode
+                btime.cur_timestamp = time.time()
+            else:
+                details = [self.warm_data[self.warm_id]]
+                self.warm_id += 1
+                return details, state.tf_secs
         if not self.is_ws:
             limit = state.check_interval * 2
             details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since, limit=limit)
