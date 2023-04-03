@@ -15,6 +15,7 @@ from banbot.util.common import logger
 from banbot.bar_driven.tainds import *
 from banbot.config.consts import *
 from banbot.util import btime
+from banbot.util.misc import *
 import numpy as np
 from typing import *
 
@@ -24,10 +25,7 @@ def loop_forever(func):
     async def wrap(*args, **kwargs):
         while True:
             try:
-                if asyncio.iscoroutinefunction(func):
-                    await func(*args, **kwargs)
-                else:
-                    func(*args, **kwargs)
+                await run_async(func, *args, **kwargs)
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
                     logger.warning(f'[{args}] watch balance get 1006, retry...')
@@ -85,6 +83,23 @@ def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.
     return exchange, exchange_async, exchange_ws
 
 
+def _copy_markets(exg_src, exg_dst):
+    exg_dst.reloading_markets = True
+    exg_dst.markets_by_id = exg_src.markets_by_id
+    exg_dst.markets = exg_src.markets
+    exg_dst.symbols = exg_src.symbols
+    exg_dst.ids = exg_src.ids
+    if exg_src.currencies:
+        exg_dst.currencies = exg_src.currencies
+    if exg_src.baseCurrencies:
+        exg_dst.baseCurrencies = exg_src.baseCurrencies
+        exg_dst.quoteCurrencies = exg_src.quoteCurrencies
+    if exg_src.currencies_by_id:
+        exg_dst.currencies_by_id = exg_src.currencies_by_id
+    exg_dst.codes = exg_src.codes
+    exg_dst.reloading_markets = False
+
+
 class CryptoExchange:
     def __init__(self, config: dict):
         self.api, self.api_async, self.api_ws = _init_exchange(config, True)
@@ -95,10 +110,14 @@ class CryptoExchange:
 
     async def load_markets(self):
         markets = await self.api_async.load_markets()
+        self.api_ws.markets_by_id = self.api_async.markets_by_id
+        _copy_markets(self.api_async, self.api_ws)
+        _copy_markets(self.api_async, self.api)
         logger.info(f'{len(markets)} markets loaded for {self.api.name}')
-        if self.api_ws:
-            markets = await self.api_ws.load_markets()
-            logger.info(f'{len(markets)} markets loaded for {self.api_ws.name} WebSocket')
+
+    def calc_funding_fee(self, symbol: str, od_type: str, side: str, amount: float, price: float, is_taker=True):
+        taker_maker = 'maker' if is_taker else 'taker'
+        return self.api_async.calculate_fee(symbol, od_type, side, amount, price, taker_maker)
 
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:
@@ -110,6 +129,9 @@ class CryptoExchange:
 
     async def fetch_balance(self, params={}):
         return await self.api_async.fetch_balance(params)
+
+    async def fetch_order_book(self, symbol, limit=None, params={}):
+        return await self.api_async.fetch_order_book(symbol, limit, params)
 
     async def watch_balance(self, params={}):
         '''

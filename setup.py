@@ -24,6 +24,7 @@ setup(
         'jupyter-dash',
         'tabulate',
         'ccxt',
-        'orjson'
+        'orjson',
+        'aiodns'
     ]
 )

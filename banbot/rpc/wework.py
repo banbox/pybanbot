@@ -3,8 +3,10 @@
 # File  : wework.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import asyncio
 from banbot.rpc.rpc import *
 from corpwechatbot.app import AppMsgSender
+from functools import partial
 
 
 class WeWork(Webhook):
@@ -15,5 +17,6 @@ class WeWork(Webhook):
         self._retries = 1
         self._retry_delay = 0.1
 
-    def _do_send_msg(self, payload: dict):
-        self.api.send_text(**payload)
+    async def _do_send_msg(self, payload: dict):
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, partial(self.api.send_text, **payload))

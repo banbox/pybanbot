@@ -3,6 +3,7 @@
 # File  : misc.py
 # Author: anyongjin
 # Date  : 2023/3/22
+import asyncio
 import time
 import logging
 import sys
@@ -16,6 +17,12 @@ def is_debug():
 def utime(secs: int = 0, as_ms: bool = True):
     multipler = 1000 if as_ms else 1
     return round((time.time() + secs) * multipler)
+
+
+async def run_async(func, *args, **kwargs):
+    if asyncio.iscoroutinefunction(func):
+        return await func(*args, **kwargs)
+    return func(*args, **kwargs)
 
 
 def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):

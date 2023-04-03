@@ -17,8 +17,8 @@ class BackTest(Trader):
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
         self.data_hold = LocalDataProvider(config)
-        self.data_hold.set_callback(self._make_invoke())
-        self.order_hold = OrderManager(config, exg_name, self.wallets)
+        self.data_hold.set_callback(self._pair_row_callback)
+        self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold)
         self.max_num = max_num
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
@@ -32,19 +32,17 @@ class BackTest(Trader):
         self.open_price = 0
         self.close_price = 0
 
-    def _make_invoke(self):
-        def invoke_pair(pair, timeframe, row):
-            self.bar_count += 1
-            set_context(f'{pair}/{timeframe}')
-            if self.first_data:
-                self.open_price = row[ocol]
-                self.result['date_from'] = btime.to_datestr(row[0])
-                self.first_data = False
-            else:
-                self.close_price = row[ccol]
-                self.result['date_to'] = btime.to_datestr(row[0])
-            self.on_data_feed(np.array(row))
-        return invoke_pair
+    async def _pair_row_callback(self, pair, timeframe, row):
+        self.bar_count += 1
+        set_context(f'{pair}/{timeframe}')
+        if self.first_data:
+            self.open_price = row[ocol]
+            self.result['date_from'] = btime.to_datestr(row[0])
+            self.first_data = False
+        else:
+            self.close_price = row[ccol]
+            self.result['date_to'] = btime.to_datestr(row[0])
+        await self.on_data_feed(np.array(row))
 
     def init(self):
         self.min_balance = self.stake_amount
@@ -66,17 +64,17 @@ class BackTest(Trader):
             [self.data_hold.process, self.data_hold.min_interval, cur_time],
         ])
         # 关闭未完成订单
-        self.force_exit_all()
+        await self.force_exit_all()
         self._calc_result_done()
 
         his_orders = self.order_hold.his_list
         od_list = [r.to_dict() for r in his_orders]
         print_backtest(pd.DataFrame(od_list), self.result)
-        BTAnalysis(his_orders, **self.result).save(self.out_dir)
+        await BTAnalysis(his_orders, **self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    def _bar_callback(self):
-        self.order_hold.fill_pending_orders(bar_arr.get())
+    async def _bar_callback(self):
+        await self.order_hold.fill_pending_orders(bar_arr.get())
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
         open_orders = self.order_hold.open_orders
@@ -119,9 +117,9 @@ class BackTest(Trader):
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
-    def force_exit_all(self):
-        self.order_hold.exit_open_orders(None, 'force_exit')
-        self.order_hold.fill_pending_orders(bar_arr.get())
+    async def force_exit_all(self):
+        await self.order_hold.exit_open_orders('force_exit', bar_arr.get()[-1, lcol])
+        await self.order_hold.fill_pending_orders(bar_arr.get())
 
 
 if __name__ == '__main__':

@@ -5,6 +5,8 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
+import time
+
 from banbot.storage.common import *
 from banbot.strategy.base import *
 from banbot.storage.od_manager import *
@@ -29,19 +31,19 @@ class Trader:
             set_context(symbol)
             self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
 
-    def _make_invoke(self):
-        def invoke_pair(pair, timeframe, row):
-            set_context(f'{pair}/{timeframe}')
-            self.on_data_feed(np.array(row))
-        return invoke_pair
+    async def _pair_row_callback(self, pair, timeframe, row):
+        set_context(f'{pair}/{timeframe}')
+        await self.on_data_feed(np.array(row))
 
-    def on_data_feed(self, row: np.ndarray):
+    async def on_data_feed(self, row: np.ndarray):
         strategy_list = self.symbol_stgs[symbol_tf.get()]
         pair, base_s, quote_s, timeframe = get_cur_symbol()
         pair_arr = append_new_bar(row)
-        self._bar_callback()
+        await self._bar_callback()
         self.order_hold.update_by_bar(pair_arr)
         start_time = time.time()
+        ext_tags: Dict[str, str] = dict()
+        enter_list, exit_list = [], []
         for strategy in strategy_list:
             stg_name = strategy.__class__.__name__
             strategy.state = dict()
@@ -53,17 +55,22 @@ class Trader:
                 logger.trade_info(f'[{stg_name}] enter: {entry_tag}  exit: {exit_tag}')
             if entry_tag and (not strategy.skip_enter_on_exit or not exit_tag):
                 cost = strategy.custom_cost(entry_tag)
-                price = pair_arr[-1][ccol]
-                self.order_hold.enter_order(stg_name, pair, entry_tag, cost, price)
+                enter_list.append((stg_name, entry_tag, cost))
             if not strategy.skip_exit_on_enter or not entry_tag:
                 if exit_tag:
-                    self.order_hold.exit_open_orders(stg_name, pair, exit_tag)
-                self.order_hold.check_custom_exits(pair_arr, strategy)
-        cost = time.time() - start_time
-        if cost > 0.05 and btime.run_mode in btime.TRADING_MODES:
+                    exit_list.append((stg_name, exit_tag))
+                ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
+        calc_end = time.time()
+        calc_cost = calc_end - start_time
+        if btime.run_mode in btime.TRADING_MODES:
+            logger.info(f'{pair} {timeframe} calc with {len(strategy_list)} strategies, cost: {calc_cost:.f} ms')
+        if enter_list or exit_list or ext_tags:
+            await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
+        cost = time.time() - calc_end
+        if cost > 0.001 and btime.run_mode in btime.TRADING_MODES:
             logger.info(f'handle bar {bar_end_time.get()} cost: {cost * 1000:.1f} ms')
 
-    def _bar_callback(self):
+    async def _bar_callback(self):
         pass
 
     def run(self):
@@ -83,16 +90,10 @@ class Trader:
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()
             if wait_secs > 0:
-                if live_mode:
-                    await asyncio.sleep(wait_secs)
-                else:
-                    btime.add_secs(wait_secs)
+                await btime.sleep(wait_secs)
             start_time = time.time()
             try:
-                if asyncio.iscoroutinefunction(biz_func):
-                    await biz_func()
-                else:
-                    biz_func()
+                await run_async(biz_func)
             except EOFError:
                 # 任意一个发出EOF错误时，终止循环
                 break

@@ -22,13 +22,14 @@ class LiveTrader(Trader):
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
         self.data_hold = LiveDataProvider(config, self.exchange)
+        self.data_hold.set_callback(self._pair_row_callback)
         self.wallets = CryptoWallet(config, self.exchange)
-        self.order_hold = LiveOrderManager(config, self.exchange, self.wallets)
-        self.data_hold.set_callback(self._make_invoke())
+        self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold)
+        self.order_hold.callbacks.append(self.order_callback)
         self.rpc = RPCManager(self)
         self._run_tasks: List[asyncio.Task] = []
 
-    def order_callback(self, od: InOutOrder, is_enter: bool):
+    async def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
         msg = dict(
             type=msg_type,
@@ -41,7 +42,7 @@ class LiveTrader(Trader):
             profit=od.profit,
             profit_rate=od.profit_rate
         )
-        self.rpc.send_msg(msg)
+        await self.rpc.send_msg(msg)
 
     async def init(self):
         self._load_strategies()
@@ -49,9 +50,8 @@ class LiveTrader(Trader):
         await self.exchange.update_quote_price()
         await self.wallets.init()
         await init_longvars(self.exchange, self.pairlist)
-        self.order_hold.callbacks.append(self.order_callback)
         logger.info('banbot init complete')
-        self.rpc.startup_messages()
+        await self.rpc.startup_messages()
 
     async def run(self):
         # 初始化
@@ -63,15 +63,17 @@ class LiveTrader(Trader):
         await self._loop_tasks([
             # 轮询函数，轮询间隔(s)，下次执行时间
             [self.data_hold.process, self.data_hold.min_interval, cur_time],
+            # 两小时更新一次货币行情信息
+            [self.exchange.load_markets, 7200, cur_time + 7200],
             # 定时更新定价货币的价格
             [self.exchange.update_quote_price, 60, cur_time],
             # 定时检查整体损失是否触发限制
             [self.order_hold.check_fatal_stop, 300, cur_time + 300]
         ])
 
-    def _bar_callback(self):
+    async def _bar_callback(self):
         if btime.run_mode != RunMode.LIVE:
-            self.order_hold.fill_pending_orders(bar_arr.get())
+            await self.order_hold.fill_pending_orders(bar_arr.get())
 
     async def _start_tasks(self):
         if btime.run_mode == RunMode.LIVE:
@@ -82,8 +84,9 @@ class LiveTrader(Trader):
                 # 监听订单更新
                 asyncio.create_task(self.order_hold.update_forever())
             ])
+            logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
         logger.info('Cleaning up trading...')
-        self.rpc.cleanup()
+        await self.rpc.cleanup()
         await self.exchange.close()

@@ -9,6 +9,7 @@ from banbot.util.common import *
 from enum import Enum
 from abc import abstractmethod
 from typing import *
+from banbot.util import btime
 
 
 class RPCException(Exception):
@@ -44,11 +45,11 @@ class RPCHandler:
         return self.__class__.__name__.lower()
 
     @abstractmethod
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """ Cleanup pending module resources """
 
     @abstractmethod
-    def send_msg(self, msg: Dict[str, str]) -> None:
+    async def send_msg(self, msg: Dict[str, str]) -> None:
         """ Sends a message to all registered rpc modules """
 
 
@@ -121,7 +122,7 @@ class Webhook(RPCHandler):
         self._retries = self._config['webhook'].get('retries', 0)
         self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """
         Cleanup pending module resources.
         This will do nothing for webhooks, they will simply not be called anymore
@@ -164,7 +165,7 @@ class Webhook(RPCHandler):
             return None
         return valuedict
 
-    def send_msg(self, msg: Dict[str, Any]) -> None:
+    async def send_msg(self, msg: Dict[str, Any]) -> None:
         """ Send a message to telegram channel """
         try:
 
@@ -175,15 +176,15 @@ class Webhook(RPCHandler):
                 return
 
             payload = {key: value.format(**msg) for (key, value) in valuedict.items()}
-            self._send_msg(payload)
+            await self._send_msg(payload)
         except KeyError as exc:
             logger.exception("Problem calling Webhook. Please check your webhook configuration. "
                              "Exception: %s", exc)
 
-    def _do_send_msg(self, payload: dict):
+    async def _do_send_msg(self, payload: dict):
         raise NotImplementedError('_do_send_msg not implemented')
 
-    def _send_msg(self, payload: dict) -> None:
+    async def _send_msg(self, payload: dict) -> None:
         """do the actual call to the webhook"""
 
         success = False
@@ -191,13 +192,13 @@ class Webhook(RPCHandler):
         while not success and attempts <= self._retries:
             if attempts:
                 if self._retry_delay:
-                    time.sleep(self._retry_delay)
+                    await btime.sleep(self._retry_delay)
                 logger.info("Retrying webhook...")
 
             attempts += 1
 
             try:
-                self._do_send_msg(payload)
+                await self._do_send_msg(payload)
                 success = True
 
             except Exception as exc:

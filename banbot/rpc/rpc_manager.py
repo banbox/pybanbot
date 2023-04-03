@@ -20,16 +20,16 @@ class RPCManager:
             from banbot.rpc.wework import WeWork
             self.channels.append(WeWork(self._rpc, config))
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         """ Stops all enabled rpc modules """
         logger.info('Cleaning up rpc modules ...')
         while self.channels:
             mod = self.channels.pop()
             logger.info('Cleaning up rpc.%s ...', mod.name)
-            mod.cleanup()
+            await mod.cleanup()
             del mod
 
-    def send_msg(self, msg: Dict[str, Any]) -> None:
+    async def send_msg(self, msg: Dict[str, Any]) -> None:
         """
         Send given message to all registered rpc modules.
         A message consists of one or more key value pairs of strings.
@@ -41,13 +41,13 @@ class RPCManager:
         for mod in self.channels:
             logger.debug('Forwarding message to rpc.%s', mod.name)
             try:
-                mod.send_msg(msg)
+                await mod.send_msg(msg)
             except NotImplementedError:
                 logger.error(f"Message type '{msg['type']}' not implemented by handler {mod.name}.")
             except Exception:
                 logger.exception('Exception occurred within RPC module %s', mod.name)
 
-    def process_msg_queue(self, queue: deque) -> None:
+    async def process_msg_queue(self, queue: deque) -> None:
         """
         Process all messages in the queue.
         """
@@ -55,16 +55,16 @@ class RPCManager:
             msg = queue.popleft()
             logger.info('Sending rpc strategy_msg: %s', msg)
             for mod in self.channels:
-                mod.send_msg({
+                await mod.send_msg({
                     'type': RPCMessageType.STRATEGY_MSG,
                     'msg': msg,
                 })
 
-    def startup_messages(self):
+    async def startup_messages(self):
         exg_name = self.config['exchange']['name']
         run_mode = btime.run_mode
         stake_amount = self.config['stake_amount']
-        self.send_msg({
+        await self.send_msg({
             'type': RPCMessageType.STARTUP,
             'status': f'Exchange: {exg_name}\nRun Mode:{run_mode}\nStake Amount: {stake_amount}'
         })

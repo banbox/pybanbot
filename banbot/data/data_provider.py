@@ -6,6 +6,7 @@
 from banbot.data.feeder import *
 from banbot.config import *
 from banbot.util.common import logger
+from banbot.util.misc import run_async
 from banbot.exchange.crypto_exchange import CryptoExchange
 from asyncio import Lock, gather
 
@@ -17,15 +18,18 @@ class DataProvider:
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.holders: List[PairDataFeeder] = []
 
+    def get_latest_ohlcv(self, pair: str):
+        for hold in self.holders:
+            if hold.pair == pair:
+                return hold.states[0].bar_row
+        raise ValueError(f'unknown pair to get price: {pair}')
+
     @classmethod
     def _wrap_callback(cls, callback: Callable):
         async def handler(*args, **kwargs):
             async with cls._cb_lock:
                 try:
-                    if asyncio.iscoroutinefunction(callback):
-                        await callback(*args, **kwargs)
-                    else:
-                        callback(*args, **kwargs)
+                    await run_async(callback, *args, **kwargs)
                 except Exception:
                     logger.exception(f'LiveData Callback Exception {args} {kwargs}')
         return handler

@@ -7,7 +7,7 @@
 分析回测结果，优化策略
 '''
 import os.path
-
+import aiofiles as aiof
 import orjson
 from banbot.storage.orders import *
 from pandas import DataFrame
@@ -18,23 +18,23 @@ class BTAnalysis:
         self.orders = orders
         self.result = kwargs
 
-    def save(self, save_dir: str):
+    async def save(self, save_dir: str):
         self.result['orders'] = [od.to_dict() for od in self.orders]
         dump_path = os.path.join(save_dir, 'backtest.json')
-        with open(dump_path, 'wb') as fout:
-            fout.write(orjson.dumps(self.result))
+        async with aiof.open(dump_path, 'wb') as fout:
+            await fout.write(orjson.dumps(self.result))
 
     @staticmethod
-    def load(save_dir: str) -> 'BTAnalysis':
+    async def load(save_dir: str) -> 'BTAnalysis':
         dump_path = os.path.join(save_dir, 'backtest.json')
-        with open(dump_path, 'rb') as fout:
-            data: dict = orjson.loads(fout.read())
+        async with aiof.open(dump_path, 'rb') as fout:
+            data: dict = orjson.loads(await fout.read())
             data['orders'] = [InOutOrder(**od) for od in data['orders']]
             return BTAnalysis(**data)
 
-    def to_dataframe(self) -> DataFrame:
+    async def to_dataframe(self) -> DataFrame:
         from banbot.optmize.backtest import BackTest
-        return BackTest.load_data()
+        return await BackTest.load_data()
 
     def to_plot(self) -> List[dict]:
         return [dict(
