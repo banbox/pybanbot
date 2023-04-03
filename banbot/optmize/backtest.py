@@ -64,7 +64,7 @@ class BackTest(Trader):
             [self.data_hold.process, self.data_hold.min_interval, cur_time],
         ])
         # 关闭未完成订单
-        await self.force_exit_all()
+        await self.cleanup()
         self._calc_result_done()
 
         his_orders = self.order_hold.his_list
@@ -117,8 +117,8 @@ class BackTest(Trader):
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
-    async def force_exit_all(self):
-        await self.order_hold.exit_open_orders('force_exit', bar_arr.get()[-1, lcol])
+    async def cleanup(self):
+        await self.order_hold.exit_open_orders('force_exit', 0)
         await self.order_hold.fill_pending_orders(bar_arr.get())
 
 

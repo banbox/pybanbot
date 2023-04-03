@@ -62,9 +62,9 @@ class RPCManager:
 
     async def startup_messages(self):
         exg_name = self.config['exchange']['name']
-        run_mode = btime.run_mode
+        run_mode = btime.run_mode.value
         stake_amount = self.config['stake_amount']
         await self.send_msg({
             'type': RPCMessageType.STARTUP,
-            'status': f'Exchange: {exg_name}\nRun Mode:{run_mode}\nStake Amount: {stake_amount}'
+            'status': f'Exg: {exg_name}\nMode: {run_mode}\nStake Amount: {stake_amount}'
         })

@@ -5,7 +5,7 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
-import time
+import asyncio
 
 from banbot.storage.common import *
 from banbot.strategy.base import *
@@ -23,6 +23,8 @@ class Trader:
         self.order_hold: OrderManager = None
         self.data_hold: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
+        self._job_exp_end = btime.time() + 5
+        self._run_tasks: List[asyncio.Task] = []
 
     def _load_strategies(self):
         run_jobs = load_run_jobs(self.config)
@@ -61,23 +63,36 @@ class Trader:
                     exit_list.append((stg_name, exit_tag))
                 ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
         calc_end = time.time()
-        calc_cost = calc_end - start_time
-        if btime.run_mode in btime.TRADING_MODES:
-            logger.info(f'{pair} {timeframe} calc with {len(strategy_list)} strategies, cost: {calc_cost:.f} ms')
+        calc_cost = (calc_end - start_time) * 1000
+        if calc_cost >= 1:
+            logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if enter_list or exit_list or ext_tags:
-            await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
-        cost = time.time() - calc_end
-        if cost > 0.001 and btime.run_mode in btime.TRADING_MODES:
-            logger.info(f'handle bar {bar_end_time.get()} cost: {cost * 1000:.1f} ms')
+            enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
+            if enter_ods or exit_ods:
+                post_cost = (time.time() - calc_end) * 1000
+                logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)} cost: {post_cost:.1f} ms')
 
     async def _bar_callback(self):
         pass
 
-    def run(self):
+    async def run(self):
         raise NotImplementedError('`run` is not implemented')
 
-    def cleanup(self):
+    async def cleanup(self):
         pass
+
+    def start_heartbeat_check(self, biz_list):
+        from threading import Thread
+        min_intv = min([l[1] for l in biz_list])
+
+        def handle():
+            while True:
+                time.sleep(min_intv * 0.3)
+                if self._job_exp_end < btime.time():
+                    logger.error('check loop tasks heartbeat fail, task stucked')
+                    time.sleep(30)
+
+        Thread(target=handle, daemon=True).start()
 
     async def _loop_tasks(self, biz_list):
         '''
@@ -91,13 +106,14 @@ class Trader:
             wait_secs = next_start - btime.time()
             if wait_secs > 0:
                 await btime.sleep(wait_secs)
-            start_time = time.time()
+            job_start = time.time()
+            self._job_exp_end = job_start + interval
             try:
                 await run_async(biz_func)
             except EOFError:
                 # 任意一个发出EOF错误时，终止循环
                 break
-            exec_cost = time.time() - start_time
+            exec_cost = time.time() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
                 logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
                 interval = exec_cost * 1.5

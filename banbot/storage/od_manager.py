@@ -72,7 +72,8 @@ class OrderManager(metaclass=SingletonArg):
             await fout.write(orjson.dumps(result))
 
     async def enter_exit_pair_orders(self, pair: str, enters: List[Tuple[str, str, float]],
-                                     exits: List[Tuple[str, str]], exit_keys: Dict[str, str]):
+                                     exits: List[Tuple[str, str]], exit_keys: Dict[str, str])\
+            -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
         :param pair: 交易对
@@ -82,21 +83,24 @@ class OrderManager(metaclass=SingletonArg):
         :return:
         '''
         price = self.data_hold.get_latest_ohlcv(pair)[ccol]
+        enter_ods, exit_ods = [], []
         if enters:
             for stg_name, enter_tag, cost in enters:
-                await self.enter_order(stg_name, pair, enter_tag, cost, price)
+                enter_ods.append(await self.enter_order(stg_name, pair, enter_tag, cost, price))
         if exits:
             for stg_name, exit_tag in exits:
-                await self.exit_open_orders(exit_tag, price, stg_name, pair)
+                exit_ods.extend(await self.exit_open_orders(exit_tag, price, stg_name, pair))
         if exit_keys:
             for key, ext_tag in exit_keys.items():
                 od = self.open_orders.get(key)
                 if not od:
                     logger.warning(f'order not found to exit: {key}')
                     continue
-                await self.exit_order(od, ext_tag, price)
+                if await self.exit_order(od, ext_tag, price):
+                    exit_ods.append(od)
+        return [od for od in enter_ods if od], exit_ods
 
-    async def enter_order(self, strategy: str, pair: str, tag: str, cost: float, price: float):
+    async def enter_order(self, strategy: str, pair: str, tag: str, cost: float, price: float) -> Optional[InOutOrder]:
         lock_key = f'{pair}_{tag}_{strategy}'
         if lock_key in self.open_orders:
             # 同一交易对，同一策略，同一信号，只允许一个订单
@@ -124,6 +128,7 @@ class OrderManager(metaclass=SingletonArg):
         TradeLock.lock(lock_key, btime.now() + btime.timedelta(minutes=1))
         logger.trade_info(f'order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
         await self._enter_order(od)
+        return od
 
     async def _enter_order(self, od: InOutOrder):
         pass
@@ -185,25 +190,33 @@ class OrderManager(metaclass=SingletonArg):
             elif od.status == InOutStatus.FullEnter and od.exit_tag:
                 await self._fill_pending_exit(arr, od)
 
-    async def exit_open_orders(self, exit_tag: str, price: float, strategy: str = None, pair: str = None):
+    async def exit_open_orders(self, exit_tag: str, price: float, strategy: str = None, pair: str = None)\
+            -> List[InOutOrder]:
         if not self.open_orders:
-            return
+            return []
+        result = []
         for key, od in self.open_orders.items():
             if pair and not key.startswith(pair):
                 continue
             if strategy and od.strategy != strategy:
                 continue
-            await self.exit_order(od, exit_tag, price)
+            if await self.exit_order(od, exit_tag, price):
+                result.append(od)
+        return result
 
-    async def exit_order(self, od: InOutOrder, exit_tag: str, price: float):
+    async def exit_order(self, od: InOutOrder, exit_tag: str, price: float) -> bool:
         if od.exit_tag:
-            return
+            return False
         od.exit_tag = exit_tag
-        # 默认以最低价卖出（即吃单方）
+        if not price:
+            # 为提供价格时，以最低价卖出（即吃单方）
+            hprice, lprice = bar_arr.get()[-1, hcol: ccol]
+            price = lprice * 2 - hprice
         od.update_exit(price=price)
         cost = od.exit.price * od.exit.amount
         logger.trade_info(f'exit {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
         await self._exit_order(od)
+        return True
 
     async def _exit_order(self, od: InOutOrder):
         '''
@@ -337,7 +350,7 @@ class LiveOrderManager(OrderManager):
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
         fees = self.exchange.calc_funding_fee(pair, 'limit', 'buy', vol_amount, close_price)
         is_market = fees['rate'] <= self.max_market_rate
-        depth = 1
+        depth, enter_ods, exit_ods = 1, [], []
         if not is_market:
             # 取过去300s数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
             his_ohlcvs = await self.exchange.fetch_ohlcv(pair, '1s', limit=300)
@@ -349,17 +362,19 @@ class LiveOrderManager(OrderManager):
                     price = high_price * 2 - low_price
                 else:
                     price = await self._get_odbook_price(pair, 'buy', depth)
-                await self.enter_order(stg_name, pair, enter_tag, cost, price)
+                enter_ods.append(await self.enter_order(stg_name, pair, enter_tag, cost, price))
         if exits:
             for stg_name, exit_tag in exits:
                 if is_market:
                     price = low_price * 2 - high_price
                 else:
                     price = await self._get_odbook_price(pair, 'sell', depth)
-                await self.exit_open_orders(exit_tag, price, stg_name, pair)
+                exit_ods.extend(await self.exit_open_orders(exit_tag, price, stg_name, pair))
         if exit_keys:
             for key, ext_tag in exit_keys.items():
                 od = self.open_orders.get(key)
+                if od.can_close():
+                    continue
                 if not od:
                     logger.warning(f'order not found to exit: {key}')
                     continue
@@ -367,7 +382,9 @@ class LiveOrderManager(OrderManager):
                     price = low_price * 2 - high_price
                 else:
                     price = await self._get_odbook_price(pair, 'sell', depth)
-                await self.exit_order(od, ext_tag, price)
+                if await self.exit_order(od, ext_tag, price):
+                    exit_ods.append(od)
+        return [od for od in enter_ods if od], exit_ods
 
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
@@ -387,9 +404,8 @@ class LiveOrderManager(OrderManager):
             od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
             if filled == 0:
                 logger.warning(f'{od} is {order_status} by {self.name}, no filled')
-        if od.status > InOutStatus.Init:
-            await self._fire(od.key, is_enter)
-            await self.try_dump()
+        await self._fire(od.key, is_enter)
+        await self.try_dump()
 
     async def _enter_order(self, od: InOutOrder):
         if btime.run_mode == btime.RunMode.LIVE:

@@ -27,7 +27,6 @@ class LiveTrader(Trader):
         self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold)
         self.order_hold.callbacks.append(self.order_callback)
         self.rpc = RPCManager(self)
-        self._run_tasks: List[asyncio.Task] = []
 
     async def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
@@ -54,13 +53,8 @@ class LiveTrader(Trader):
         await self.rpc.startup_messages()
 
     async def run(self):
-        # 初始化
-        await self.init()
-        # 启动异步任务
-        await self._start_tasks()
-        # 轮训执行任务
         cur_time = time.time()
-        await self._loop_tasks([
+        loop_tasks = [
             # 轮询函数，轮询间隔(s)，下次执行时间
             [self.data_hold.process, self.data_hold.min_interval, cur_time],
             # 两小时更新一次货币行情信息
@@ -69,7 +63,14 @@ class LiveTrader(Trader):
             [self.exchange.update_quote_price, 60, cur_time],
             # 定时检查整体损失是否触发限制
             [self.order_hold.check_fatal_stop, 300, cur_time + 300]
-        ])
+        ]
+        self.start_heartbeat_check(loop_tasks)
+        # 初始化
+        await self.init()
+        # 启动异步任务
+        await self._start_tasks()
+        # 轮训执行任务
+        await self._loop_tasks(loop_tasks)
 
     async def _bar_callback(self):
         if btime.run_mode != RunMode.LIVE:
@@ -87,6 +88,12 @@ class LiveTrader(Trader):
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
-        logger.info('Cleaning up trading...')
+        exit_ods = await self.order_hold.exit_open_orders('force_exit', 0)
+        if exit_ods:
+            logger.info(f'exit {len(exit_ods)} open trades')
+        await self.rpc.send_msg(dict(
+            type=RPCMessageType.STATUS,
+            status='Bot stopped'
+        ))
         await self.rpc.cleanup()
         await self.exchange.close()
