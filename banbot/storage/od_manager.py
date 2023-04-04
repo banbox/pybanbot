@@ -139,7 +139,7 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     async def _fill_pending_enter(self, arr: np.ndarray, od: InOutOrder):
-        enter_price = self._sim_market_price(arr)
+        enter_price = self._sim_market_price(od.symbol, arr)
         quote_amount = enter_price * od.enter.amount
         _, base_s, quote_s, timeframe = get_cur_symbol()
         self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: od.enter.amount})
@@ -156,7 +156,7 @@ class OrderManager(metaclass=SingletonArg):
         await self.try_dump()
 
     async def _fill_pending_exit(self, arr: np.ndarray, od: InOutOrder):
-        exit_price = self._sim_market_price(arr)
+        exit_price = self._sim_market_price(od.symbol, arr)
         quote_amount = exit_price * od.enter.amount
         pair, base_s, quote_s, timeframe = get_cur_symbol()
         self.wallets.update_wallets(**{quote_s: quote_amount, base_s: -od.enter.amount})
@@ -173,15 +173,20 @@ class OrderManager(metaclass=SingletonArg):
         await self._fire(od, False)
         await self.try_dump()
 
-    def _sim_market_price(self, arr: np.ndarray) -> float:
+    def _sim_market_price(self, pair: str, arr: np.ndarray) -> float:
         '''
         计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
         :return:
         '''
         rate = min(1, self.network_cost / timeframe_secs.get())
-        return arr[-1, ocol] * (1 - rate) + arr[-1, ccol] * rate
+        if arr is not None:
+            candle = arr[-1]
+            return candle[ocol] * (1 - rate) + candle[ccol] * rate
+        else:
+            candle = self.data_hold.get_latest_ohlcv(pair)
+            return candle[ocol]
 
-    async def fill_pending_orders(self, arr: np.ndarray):
+    async def fill_pending_orders(self, arr: Optional[np.ndarray]):
         '''
         填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
         :param arr:
@@ -190,10 +195,10 @@ class OrderManager(metaclass=SingletonArg):
         if btime.run_mode == btime.RunMode.LIVE:
             raise RuntimeError('fill_pending_orders unavaiable in LIVE mode')
         for od in list(self.open_orders.values()):
-            if od.status == InOutStatus.Init:
-                await self._fill_pending_enter(arr, od)
-            elif od.status == InOutStatus.FullEnter and od.exit_tag:
+            if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
                 await self._fill_pending_exit(arr, od)
+            elif od.enter.status != OrderStatus.Close:
+                await self._fill_pending_enter(arr, od)
 
     def get_open_orders(self, strategy: str = None, pair: str = None):
         if not self.open_orders:
@@ -223,7 +228,8 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_at = bar_num.get()
         if not price:
             # 为提供价格时，以最低价卖出（即吃单方）
-            hprice, lprice = bar_arr.get()[-1, hcol: ccol]
+            candle = self.data_hold.get_latest_ohlcv(od.symbol)
+            hprice, lprice = candle[hcol: ccol]
             price = lprice * 2 - hprice
         elif callable(price):
             price = await run_async(price)
@@ -523,18 +529,21 @@ class LiveOrderManager(OrderManager):
 
     @loop_forever
     async def trail_open_orders_forever(self):
-        await self._trail_open_orders()
-        timeouts = self.config.get('trade_timeout', 5)
-        await btime.sleep(timeouts)
+        timeouts = self.config.get('limit_vol_secs', 5) * 2
+        await self._trail_open_orders(timeouts)
+        if btime.run_mode != RunMode.LIVE:
+            # 非实盘模式下，这里应该用sleep，否则在预热阶段会出现死循环
+            await asyncio.sleep(timeouts)
+        else:
+            await btime.sleep(timeouts)
 
-    async def _trail_open_orders(self):
+    async def _trail_open_orders(self, timeouts: int):
         '''
         跟踪未关闭的订单，根据市场价格及时调整，避免长时间无法成交
         :return:
         '''
         if not self.open_orders or btime.run_mode != RunMode.LIVE:
             return
-        timeouts = self.config.get('trade_timeout', 5)
         exp_orders: Dict[str, List[InOutOrder]] = dict()
         for od in list(self.open_orders.values()):
             if od.exit and od.exit_tag and od.exit.filled < od.exit.amount:

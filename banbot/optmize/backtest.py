@@ -117,7 +117,7 @@ class BackTest(Trader):
 
     async def cleanup(self):
         await self.order_hold.exit_open_orders('force_exit', 0)
-        await self.order_hold.fill_pending_orders(bar_arr.get())
+        await self.order_hold.fill_pending_orders(None)
 
 
 if __name__ == '__main__':

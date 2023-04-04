@@ -65,6 +65,7 @@ def set_context(symbol: str):
         bar_num.set(0)
         pair_state.set(dict())
         bar_arr.set([])
+        bar_end_time.set('')
         timeframe_secs.set(timeframe_to_seconds(tf))
         _symbol_ctx[symbol] = copy_context()
     else:

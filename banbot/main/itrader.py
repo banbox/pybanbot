@@ -5,9 +5,6 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
-import asyncio
-import time
-
 from banbot.storage.common import *
 from banbot.strategy.base import *
 from banbot.storage.od_manager import *
@@ -84,9 +81,8 @@ class Trader:
     async def cleanup(self):
         pass
 
-    def start_heartbeat_check(self, biz_list):
+    def start_heartbeat_check(self, min_intv: float):
         from threading import Thread
-        min_intv = min([l[1] for l in biz_list])
 
         def handle():
             while True:
@@ -103,14 +99,15 @@ class Trader:
         :return:
         '''
         live_mode = btime.run_mode in TRADING_MODES
-        while True:
+        while BotGlobal.state == BotState.RUNNING:
             wait_list = sorted(biz_list, key=lambda x: x[2])
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()
             self._job_exp_end = next_start + interval * 2
+            func_name = biz_func.__qualname__
             if wait_secs > 0:
                 if wait_secs > 30:
-                    logger.info(f'sleep {wait_secs} : {biz_func.__qualname__}')
+                    logger.info(f'sleep {wait_secs} : {func_name}')
                 await btime.sleep(wait_secs)
             job_start = time.time()
             try:
@@ -120,7 +117,7 @@ class Trader:
                 break
             exec_cost = time.time() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
-                logger.warning(f'{biz_func.__qualname__} cost {exec_cost:.3f} > interval: {interval:.3f}')
+                logger.warning(f'{func_name} cost {exec_cost:.3f} > interval: {interval:.3f}')
                 interval = exec_cost * 1.5
                 wait_list[0][1] = interval
             wait_list[0][2] += interval

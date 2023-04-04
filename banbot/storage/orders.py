@@ -86,7 +86,7 @@ class Order:
         # 下面属性可能需要更新
         self.price: float = price  # 入场价格，市价单此项为空
         self.status: int = kwargs.get('status', OrderStatus.Init)
-        self.filled: float = kwargs.get('filled')  # 已成交数量
+        self.filled: float = kwargs.get('filled', 0)  # 已成交数量
         self.average: float = kwargs.get('average')  # 平均成交价格
         self.fee: float = kwargs.get('fee', 0)
         self.fee_type: str = kwargs.get('fee_type')

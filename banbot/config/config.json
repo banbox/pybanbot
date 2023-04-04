@@ -3,11 +3,10 @@
   "run_mode": "live",
   "prefire": true,
   "quote_base": "USDT",
-  "stake_amount": 100,
+  "stake_amount": 30,
   "max_market_rate": 0.0001,
-  "odbook_ttl": 500,
-  "limit_vol_secs": 7,
-  "trade_timeout": 5,
+  "odbook_ttl": 1000,
+  "limit_vol_secs": 5,
   "fatal_stop": {
     "30": 0.3,
     "180": 0.2,
@@ -51,10 +50,10 @@
   },
   "webhook": {
     "entry": {
-      "content": "[enter_tag] {side} {amount} with {price}"
+      "content": "[{enter_tag}] {side} {pair} at {price:.5f} with {value:.2f}"
     },
     "exit": {
-      "content": "[enter_tag] {side} {amount} with {price}"
+      "content": "[{exit_tag}] {side} {pair} at {price:.5f} with {value:.2f}"
     },
     "status": {
       "content": "{status}"

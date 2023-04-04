@@ -36,6 +36,7 @@ class LiveTrader(Trader):
             side=sub_od.side,
             amount=sub_od.amount,
             price=sub_od.price,
+            value=sub_od.amount * sub_od.price,
             strategy=od.strategy,
             pair=od.symbol,
             profit=od.profit,
@@ -51,6 +52,11 @@ class LiveTrader(Trader):
         await self.rpc.startup_messages()
 
     async def run(self):
+        self.start_heartbeat_check(3)
+        # 初始化
+        await self.init()
+        # 启动异步任务
+        await self._start_tasks()
         # 需要预热数据
         btime.run_mode = RunMode.OTHER
         btime.cur_timestamp = time.time() - self.data_hold.set_warmup(self._warmup_num)
@@ -65,11 +71,6 @@ class LiveTrader(Trader):
             # 定时检查整体损失是否触发限制
             [self.order_hold.check_fatal_stop, 300, cur_time + 300]
         ]
-        self.start_heartbeat_check(loop_tasks)
-        # 初始化
-        await self.init()
-        # 启动异步任务
-        await self._start_tasks()
         # 轮训执行任务
         await self._loop_tasks(loop_tasks)
 

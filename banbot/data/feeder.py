@@ -163,7 +163,6 @@ class LivePairDataFeader(PairDataFeeder):
         state = self.states[0]
         if not self.is_warmed:
             # 先请求前900周期数据作为预热
-            btime.run_mode = RunMode.OTHER
             if self.warm_data is None:
                 fetch_num = round(self.states[-1].tf_secs / state.tf_secs) * self.warmup_num
                 assert 0 < fetch_num <= 1000, 'fetch warmup num > 1000'
