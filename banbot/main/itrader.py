@@ -24,6 +24,7 @@ class Trader:
         self.order_hold: OrderManager = None
         self.data_hold: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
+        self._warmup_num = 0
         self._job_exp_end = btime.time() + 5
         self._run_tasks: List[asyncio.Task] = []
 
@@ -33,6 +34,7 @@ class Trader:
             symbol = f'{pair}/{timeframe}'
             set_context(symbol)
             self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
+            self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
 
     async def _pair_row_callback(self, pair, timeframe, row):
         set_context(f'{pair}/{timeframe}')
@@ -48,14 +50,12 @@ class Trader:
         ext_tags: Dict[str, str] = dict()
         enter_list, exit_list = [], []
         for strategy in strategy_list:
-            stg_name = strategy.__class__.__name__
+            stg_name = strategy.name
             strategy.state = dict()
             strategy.on_bar(pair_arr)
             # 调用策略生成入场和出场信号
             entry_tag = strategy.on_entry(pair_arr)
             exit_tag = strategy.on_exit(pair_arr)
-            if entry_tag or exit_tag:
-                logger.trade_info(f'[{stg_name}] enter: {entry_tag}  exit: {exit_tag}')
             if entry_tag and (not strategy.skip_enter_on_exit or not exit_tag):
                 cost = strategy.custom_cost(entry_tag)
                 enter_list.append((stg_name, entry_tag, cost))
@@ -68,6 +68,7 @@ class Trader:
         if calc_cost >= 1:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if enter_list or exit_list or ext_tags:
+            logger.trade_info(f'bar tags: {enter_list}  {exit_list}  {ext_tags}')
             enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
                 post_cost = (time.time() - calc_end) * 1000

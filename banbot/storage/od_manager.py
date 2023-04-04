@@ -262,7 +262,7 @@ class OrderManager(metaclass=SingletonArg):
         if not self.open_orders:
             return result
         pair, _, _, _ = get_cur_symbol()
-        cur_strategy = strategy.__class__.__name__
+        cur_strategy = strategy.name
         # 调用策略的自定义退出判断
         for od in list(self.open_orders.values()):
             if not od.can_close() or od.strategy != cur_strategy:

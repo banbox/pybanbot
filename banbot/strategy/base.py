@@ -32,7 +32,7 @@ def append_new_bar(row: np.ndarray) -> np.ndarray:
 
 
 class BaseStrategy:
-
+    warmup_num = 900
     skip_exit_on_enter = True
     skip_enter_on_exit = True
 
@@ -107,3 +107,7 @@ class BaseStrategy:
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         return None
+
+    @property
+    def name(self):
+        return self.__class__.__name__

@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/27
 from banbot.strategy.base import *
+from banbot.util.common import logger
 
 
 class MACDCross(BaseStrategy):
@@ -34,5 +35,6 @@ class MACDCross(BaseStrategy):
             return 'ent'
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
+        logger.info(f'check custom exit: {od.key}')
         return trail_stop_loss(arr, od)
 

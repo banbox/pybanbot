@@ -1,6 +1,6 @@
 {
   "env": "prod",
-  "run_mode": "dry_run",
+  "run_mode": "live",
   "prefire": true,
   "quote_base": "USDT",
   "stake_amount": 100,

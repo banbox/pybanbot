@@ -16,8 +16,7 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
-        self.data_hold = LocalDataProvider(config)
-        self.data_hold.set_callback(self._pair_row_callback)
+        self.data_hold = LocalDataProvider(config, self._pair_row_callback)
         self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold)
         self.max_num = max_num
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')

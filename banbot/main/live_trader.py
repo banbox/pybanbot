@@ -20,8 +20,7 @@ class LiveTrader(Trader):
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
-        self.data_hold = LiveDataProvider(config, self.exchange)
-        self.data_hold.set_callback(self._pair_row_callback)
+        self.data_hold = LiveDataProvider(config, self.exchange, self._pair_row_callback)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold)
         self.order_hold.callbacks.append(self.order_callback)
@@ -53,7 +52,7 @@ class LiveTrader(Trader):
     async def run(self):
         # 需要预热数据
         btime.run_mode = RunMode.OTHER
-        btime.cur_timestamp = time.time() - self.data_hold.max_back_secs
+        btime.cur_timestamp = time.time() - self.data_hold.set_warmup(self._warmup_num)
         cur_time = btime.time()
         loop_tasks = [
             # 轮询函数，轮询间隔(s)，下次执行时间

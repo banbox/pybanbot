@@ -17,13 +17,24 @@ class DataProvider:
     def __init__(self, config: Config):
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.holders: List[PairDataFeeder] = []
-        self.max_back_secs = 0
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
             if hold.pair == pair:
                 return hold.states[0].bar_row
         raise ValueError(f'unknown pair to get price: {pair}')
+
+    def set_warmup(self, count: int) -> int:
+        '''
+        设置数据源的预热数量，返回需要回顾的秒数
+        :param count:
+        :return:
+        '''
+        back_secs = 0
+        for hold in self.holders:
+            hold.warmup_num = count
+            back_secs = max(back_secs, hold.states[-1].tf_secs * count)
+        return back_secs
 
     @classmethod
     def _wrap_callback(cls, callback: Callable):
@@ -35,7 +46,7 @@ class DataProvider:
                     logger.exception(f'LiveData Callback Exception {args} {kwargs}')
         return handler
 
-    def set_callback(self, callback: Callable):
+    def _set_callback(self, callback: Callable):
         wrap_callback = self._wrap_callback(callback)
         for hold in self.holders:
             hold.callback = wrap_callback
@@ -57,7 +68,7 @@ class DataProvider:
 
 class LocalDataProvider(DataProvider):
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, callback: Callable):
         super(LocalDataProvider, self).__init__(config)
         exg_name = config['exchange']['name']
         kwargs = dict(
@@ -65,13 +76,13 @@ class LocalDataProvider(DataProvider):
             data_dir=os.path.join(config['data_dir'], exg_name)
         )
         self.holders = DataProvider.create_holders(LocalPairDataFeeder, self.pairlist, **kwargs)
+        self._set_callback(callback)
         self.min_interval = min(hold.min_interval for hold in self.holders)
-        self.max_back_secs = min(hold.back_secs for hold in self.holders)
 
 
 class LiveDataProvider(DataProvider):
 
-    def __init__(self, config: Config, exchange: CryptoExchange):
+    def __init__(self, config: Config, exchange: CryptoExchange, callback: Callable):
         super(LiveDataProvider, self).__init__(config)
         self.exchange = exchange
         kwargs = dict(
@@ -79,6 +90,6 @@ class LiveDataProvider(DataProvider):
             exchange=exchange
         )
         self.holders = DataProvider.create_holders(LivePairDataFeader, self.pairlist, **kwargs)
+        self._set_callback(callback)
         self.min_interval = min(hold.min_interval for hold in self.holders)
-        self.max_back_secs = min(hold.back_secs for hold in self.holders)
 
