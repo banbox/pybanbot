@@ -54,7 +54,7 @@
       "content": "{name}[{enter_tag}] {side} {pair} at {price:.5f} with {value:.2f}"
     },
     "exit": {
-      "content": "{name}[{exit_tag}] {side} {pair} at {price:.5f} with {value:.2f}"
+      "content": "{name}[{exit_tag}] {side} {pair} at {price:.5f} with {value:.2f}, profit: {profit:.2f}"
     },
     "status": {
       "content": "{name}: {status}"

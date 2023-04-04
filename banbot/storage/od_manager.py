@@ -359,7 +359,7 @@ class LiveOrderManager(OrderManager):
             self.odbooks[pair] = OrderBook(**od_res)
         return self.odbooks[pair].limit_price(side, depth)
 
-    async def calc_price(self, pair: str):
+    async def calc_price(self, pair: str, vol_secs=0):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
         candle = self.data_hold.get_latest_ohlcv(pair)
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
@@ -369,7 +369,9 @@ class LiveOrderManager(OrderManager):
             # 取过去300s数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
             his_ohlcvs = await self.exchange.fetch_ohlcv(pair, '1s', limit=300)
             vol_arr = np.array(his_ohlcvs)[:, vcol]
-            depth = min(np.average(vol_arr) * self.limit_vol_secs * 2, np.sum(vol_arr[-self.limit_vol_secs:]))
+            if not vol_secs:
+                vol_secs = self.limit_vol_secs
+            depth = min(np.average(vol_arr) * vol_secs * 2, np.sum(vol_arr[-vol_secs:]))
             buy_price = await self._get_odbook_price(pair, 'buy', depth)
             sell_price = await self._get_odbook_price(pair, 'sell', depth)
         else:
@@ -377,19 +379,19 @@ class LiveOrderManager(OrderManager):
             sell_price = low_price * 2 - high_price
         return buy_price, sell_price
 
-    def _make_async_price(self, pair: str):
+    def _make_async_price(self, pair: str, vol_sec=0):
         _buy_price, _sell_price = None, None
 
         async def buy_price():
             nonlocal _buy_price, _sell_price
             if _buy_price is None:
-                _buy_price, _sell_price = await self.calc_price(pair)
+                _buy_price, _sell_price = await self.calc_price(pair, vol_sec)
             return _buy_price
 
         async def sell_price():
             nonlocal _buy_price, _sell_price
             if _sell_price is None:
-                _buy_price, _sell_price = await self.calc_price(pair)
+                _buy_price, _sell_price = await self.calc_price(pair, vol_sec)
             return _sell_price
         return buy_price, sell_price
 
@@ -437,7 +439,6 @@ class LiveOrderManager(OrderManager):
 
     def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
-        logger.info(f'create order res: {order}')
         sub_od.order_id = order["id"]
         self.exg_orders[f'{od.symbol}_{sub_od.order_id}'] = sub_od
         order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))
@@ -544,14 +545,12 @@ class LiveOrderManager(OrderManager):
         '''
         if not self.open_orders or btime.run_mode != RunMode.LIVE:
             return
-        logger.info(f'trail open orders: {self.open_orders}')
         exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:
             return
         from itertools import groupby
-        logger.info(f'trail orders: {exp_orders}')
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
-            buy_price, sell_price = self._make_async_price(pair)
+            buy_price, sell_price = self._make_async_price(pair, round(self.limit_vol_secs * 0.5))
             buy_price = await buy_price()
             sell_price = await sell_price()
             for od in od_list:
