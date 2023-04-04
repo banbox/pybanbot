@@ -36,7 +36,7 @@ class OrderBook():
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, config: dict, exg_name: str, wallets: WalletsLocal, data_hd: DataProvider):
+    def __init__(self, config: dict, exg_name: str, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
         self.config = config
         self.name = exg_name
         self.wallets = wallets
@@ -45,7 +45,7 @@ class OrderManager(metaclass=SingletonArg):
         self.open_orders: Dict[str, InOutOrder] = dict()  # 尚未退出的订单
         self.his_list: List[InOutOrder] = []  # 历史已完成或取消的订单
         self.network_cost = 0.6  # 模拟网络延迟
-        self.callbacks: List[Callable] = []
+        self.callback = callback
         self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
         self.fatal_stop = dict()
         self._load_fatal_stop()
@@ -59,8 +59,7 @@ class OrderManager(metaclass=SingletonArg):
             self.fatal_stop[int(k)] = v
 
     async def _fire(self, od: InOutOrder, enter: bool):
-        for func in self.callbacks:
-            await run_async(func, od, enter)
+        await run_async(self.callback, od, enter)
 
     async def try_dump(self):
         if not self.dump_path:
@@ -335,8 +334,9 @@ class OrderManager(metaclass=SingletonArg):
 
 
 class LiveOrderManager(OrderManager):
-    def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider):
-        super(LiveOrderManager, self).__init__(config, exchange.name, wallets, data_hd)
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
+                 callback: Callable):
+        super(LiveOrderManager, self).__init__(config, exchange.name, wallets, data_hd, callback)
         self.exchange = exchange
         self.exg_orders: Dict[str, Order] = dict()
         self.max_market_rate = config.get('max_market_rate', 0.0001)
@@ -544,26 +544,13 @@ class LiveOrderManager(OrderManager):
         '''
         if not self.open_orders or btime.run_mode != RunMode.LIVE:
             return
-        exp_orders: Dict[str, List[InOutOrder]] = dict()
-        for od in list(self.open_orders.values()):
-            if od.exit and od.exit_tag and od.exit.filled < od.exit.amount:
-                # 未完全退出
-                if btime.time() - od.exit.timestamp < timeouts:
-                    # 尚未超时，本次不处理
-                    continue
-                if od.symbol not in exp_orders:
-                    exp_orders[od.symbol] = []
-                exp_orders[od.symbol].append(od)
-            elif od.enter.filled < od.enter.amount:
-                if btime.time() - od.enter.timestamp < timeouts:
-                    # 尚未超时，本次不处理
-                    continue
-                if od.symbol not in exp_orders:
-                    exp_orders[od.symbol] = []
-                exp_orders[od.symbol].append(od)
+        logger.info(f'trail open orders: {self.open_orders}')
+        exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:
             return
-        for pair, od_list in exp_orders.items():
+        from itertools import groupby
+        logger.info(f'trail orders: {exp_orders}')
+        for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
             buy_price, sell_price = self._make_async_price(pair)
             buy_price = await buy_price()
             sell_price = await sell_price()

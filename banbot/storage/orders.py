@@ -150,6 +150,18 @@ class InOutOrder:
     def can_close(self):
         return self.status > InOutStatus.Init and not self.exit_tag and bar_num.get() > self.enter_at
 
+    def pending_type(self, timeouts: int):
+        if self.exit and self.exit_tag:
+            if btime.time() - self.exit.timestamp < timeouts or self.exit.status == OrderStatus.Close:
+                # 尚未超时，或者订单已关闭，本次不处理
+                return
+            return 'exit'
+        elif self.enter.status != OrderStatus.Close:
+            if btime.time() - self.enter.timestamp < timeouts:
+                # 尚未超时，本次不处理
+                return
+            return 'enter'
+
     def to_dict(self) -> dict:
         result = dict(
             symbol=self.symbol,

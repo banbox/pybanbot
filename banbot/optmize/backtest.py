@@ -17,7 +17,7 @@ class BackTest(Trader):
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
         self.data_hold = LocalDataProvider(config, self._pair_row_callback)
-        self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold)
+        self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold, self.order_callback)
         self.max_num = max_num
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
@@ -50,7 +50,6 @@ class BackTest(Trader):
             base_s, quote_s = pair.split('/')
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
         self.result['start_balance'] = self.order_hold.get_legal_value()
-        self.order_hold.callbacks.append(self.order_callback)
 
     async def run(self):
         from banbot.optmize.reports import print_backtest

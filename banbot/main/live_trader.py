@@ -22,13 +22,14 @@ class LiveTrader(Trader):
         self.exchange = CryptoExchange(config)
         self.data_hold = LiveDataProvider(config, self.exchange, self._pair_row_callback)
         self.wallets = CryptoWallet(config, self.exchange)
-        self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold)
-        self.order_hold.callbacks.append(self.order_callback)
+        self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold, self.order_callback)
         self.rpc = RPCManager(self)
 
     async def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
         sub_od = od.enter if is_enter else od.exit
+        if sub_od.status != OrderStatus.Close:
+            return
         msg = dict(
             type=msg_type,
             enter_tag=od.enter_tag,
