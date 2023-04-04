@@ -28,12 +28,14 @@ class LiveTrader(Trader):
 
     async def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
+        sub_od = od.enter if is_enter else od.exit
         msg = dict(
             type=msg_type,
             enter_tag=od.enter_tag,
             exit_tag=od.exit_tag,
-            amount=od.enter.amount,
-            price=od.enter.price,
+            side=sub_od.side,
+            amount=sub_od.amount,
+            price=sub_od.price,
             strategy=od.strategy,
             pair=od.symbol,
             profit=od.profit,
