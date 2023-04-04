@@ -523,7 +523,7 @@ class LiveOrderManager(OrderManager):
         for data in orders:
             key = f"{data['symbol']}_{data['order']}"
             if key not in self.exg_orders:
-                logger.warning(f'update order {key} not found in {self.name}')
+                logger.warning(f'update order {key} not found in {self.name} {self.exg_orders.keys()}')
                 continue
             await self._update_order(self.exg_orders[key], data)
 
