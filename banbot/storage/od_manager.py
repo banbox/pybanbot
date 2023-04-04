@@ -510,9 +510,9 @@ class LiveOrderManager(OrderManager):
         await self._fire(inout_od, od.enter)
         await self.try_dump()
 
-    def _update_order(self, od: Order, data: dict):
+    async def _update_order(self, od: Order, data: dict):
         if self.name.find('binance') >= 0:
-            self._update_bnb_order(od, data)
+            await self._update_bnb_order(od, data)
         else:
             raise ValueError(f'unsupport exchange to update order: {self.name}')
 
@@ -524,8 +524,7 @@ class LiveOrderManager(OrderManager):
             if key not in self.exg_orders:
                 logger.warning(f'update order {key} not found in {self.name}')
                 continue
-            od = self.exg_orders[key]
-            self._update_order(od, data)
+            await self._update_order(self.exg_orders[key], data)
 
     @loop_forever
     async def trail_open_orders_forever(self):
