@@ -1,4 +1,5 @@
 {
+  "name": "ayj",
   "env": "prod",
   "run_mode": "live",
   "prefire": true,

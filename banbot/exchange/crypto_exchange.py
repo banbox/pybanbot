@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/29
 import asyncio
+import random
 
 import ccxt
 import ccxt.async_support as ccxt_async
@@ -101,8 +102,10 @@ def _copy_markets(exg_src, exg_dst):
 
 class CryptoExchange:
     def __init__(self, config: dict):
+        self.config = config
         self.api, self.api_async, self.api_ws = _init_exchange(config, True)
-        self.name = self.api.name
+        self.name = self.api.name.lower()
+        self.bot_name = config.get('name', 'noname')
         self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
@@ -229,7 +232,25 @@ class CryptoExchange:
     async def create_limit_order(self, symbol, side, amount, price, params={}):
         if btime.run_mode != btime.RunMode.LIVE:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
+        if self.name == 'binance':
+            params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
+
+    async def cancel_open_orders(self):
+        symbols = [pair for pair, timeframe in self.config.get('pairlist')]
+        symbols, success_cnt = set(symbols), 0
+        for symbol in symbols:
+            orders = await self.api_async.fetch_open_orders(symbol)
+            for od in orders:
+                if self.name == 'binance' and not od['clientOrderId'].startswith(self.bot_name):
+                    continue
+                res = await self.api_async.cancel_order(od['id'], symbol)
+                if res['status'] != 'canceled':
+                    logger.error(f'cancel order fail: {res}')
+                    continue
+                success_cnt += 1
+        if success_cnt:
+            logger.warning(f'canceled {success_cnt} unfill orders')
 
     async def close(self):
         await self.api_async.close()

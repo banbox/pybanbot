@@ -46,6 +46,7 @@ class LiveTrader(Trader):
 
     async def init(self):
         await self.exchange.load_markets()
+        await self.exchange.cancel_open_orders()
         await self.exchange.update_quote_price()
         await self.wallets.init()
         logger.info('banbot init complete')

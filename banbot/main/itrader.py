@@ -16,6 +16,8 @@ class Trader:
     def __init__(self, config: Config):
         BotGlobal.state = BotState.RUNNING
         self.config = config
+        self.name = config.get('name', 'noname')
+        logger.info(f'started bot:   >>>  {self.name}  <<<')
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
         self.order_hold: OrderManager = None
