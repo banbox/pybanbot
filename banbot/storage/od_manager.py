@@ -437,6 +437,7 @@ class LiveOrderManager(OrderManager):
 
     def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
+        logger.info(f'create order res: {order}')
         sub_od.order_id = order["id"]
         self.exg_orders[f'{od.symbol}_{sub_od.order_id}'] = sub_od
         order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))

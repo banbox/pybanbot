@@ -65,7 +65,7 @@ class Trader:
                 ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
         calc_end = time.time()
         calc_cost = (calc_end - start_time) * 1000
-        if calc_cost >= 1:
+        if calc_cost >= 10:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if enter_list or exit_list or ext_tags:
             logger.trade_info(f'bar tags: {enter_list}  {exit_list}  {ext_tags}')
