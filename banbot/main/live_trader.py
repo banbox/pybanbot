@@ -42,7 +42,6 @@ class LiveTrader(Trader):
         await self.rpc.send_msg(msg)
 
     async def init(self):
-        self._load_strategies()
         await self.exchange.load_markets()
         await self.exchange.update_quote_price()
         await self.wallets.init()

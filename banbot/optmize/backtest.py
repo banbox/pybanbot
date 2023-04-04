@@ -51,7 +51,6 @@ class BackTest(Trader):
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
         self.result['start_balance'] = self.order_hold.get_legal_value()
         self.order_hold.callbacks.append(self.order_callback)
-        self._load_strategies()
 
     async def run(self):
         from banbot.optmize.reports import print_backtest

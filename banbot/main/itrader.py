@@ -27,6 +27,7 @@ class Trader:
         self._warmup_num = 0
         self._job_exp_end = btime.time() + 5
         self._run_tasks: List[asyncio.Task] = []
+        self._load_strategies()
 
     def _load_strategies(self):
         run_jobs = load_run_jobs(self.config)

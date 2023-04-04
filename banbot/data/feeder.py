@@ -166,7 +166,7 @@ class LivePairDataFeader(PairDataFeeder):
             btime.run_mode = RunMode.OTHER
             if self.warm_data is None:
                 fetch_num = round(self.states[-1].tf_secs / state.tf_secs) * self.warmup_num
-                assert fetch_num <= 1000, 'fetch warmup num > 1000'
+                assert 0 < fetch_num <= 1000, 'fetch warmup num > 1000'
                 self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
                 logger.warning(f'load warn up data: {len(self.warm_data)}')
             if self.warm_id >= len(self.warm_data):
