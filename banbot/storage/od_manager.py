@@ -418,10 +418,10 @@ class LiveOrderManager(OrderManager):
         if exit_keys:
             for key, ext_tag in exit_keys.items():
                 od = self.open_orders.get(key)
-                if od.can_close():
-                    continue
                 if not od:
                     logger.warning(f'order not found to exit: {key}')
+                    continue
+                if not od.can_close():
                     continue
                 run_tasks.append(self.exit_order(od, ext_tag, sell_price))
         enter_ods, exit_ods = [], []
