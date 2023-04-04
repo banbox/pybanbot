@@ -23,16 +23,19 @@ class MACDCross(BaseStrategy):
         self.macd(arr[-1, ccol])
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
-        if np.isnan(self.ma5.arr[-1]) or np.isnan(LongVar.get(LongVar.bar_len).val):
-            return
-        fea_start = fea_col_start.get()
-        max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
-        len_ok = real > LongVar.get(LongVar.bar_len).val * 0.4 or solid_rate > 0.1
-        macd_up = self.macd.macd_arr[-1] > self.macd.singal_arr[-1]
-        ma5_up = self.ma5.arr[-1] > self.ma5.arr[-3]
-        price_up = arr[-1, ccol] > min(arr[-1, ocol], arr[-2, ccol])
-        if price_up and len_ok and ma5_up and macd_up:
-            return 'ent'
+        open_price, close_price = arr[-1, ocol], arr[-1, ccol]
+        if open_price < close_price:
+            return 'test'
+        # if np.isnan(self.ma5.arr[-1]) or np.isnan(LongVar.get(LongVar.bar_len).val):
+        #     return
+        # fea_start = fea_col_start.get()
+        # max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
+        # len_ok = real > LongVar.get(LongVar.bar_len).val * 0.4 or solid_rate > 0.1
+        # macd_up = self.macd.macd_arr[-1] > self.macd.singal_arr[-1]
+        # ma5_up = self.ma5.arr[-1] > self.ma5.arr[-3]
+        # price_up = arr[-1, ccol] > min(arr[-1, ocol], arr[-2, ccol])
+        # if price_up and len_ok and ma5_up and macd_up:
+        #     return 'ent'
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         return trail_stop_loss(arr, od)
