@@ -28,6 +28,7 @@ class RunMode(Enum):
 
 TRADING_MODES = [RunMode.LIVE, RunMode.DRY_RUN]
 OPTIMIZE_MODES = [RunMode.BACKTEST, RunMode.HYPEROPT]
+NORDER_MODES = [RunMode.PLOT, RunMode.WEBSERVER, RunMode.OTHER]
 
 
 class BotState(Enum):

@@ -82,7 +82,9 @@ class LiveTrader(Trader):
                 # 监听钱包更新
                 asyncio.create_task(self.wallets.update_forever()),
                 # 监听订单更新
-                asyncio.create_task(self.order_hold.update_forever())
+                asyncio.create_task(self.order_hold.listen_orders_forever()),
+                # 跟踪监听未成交订单，及时更新价格确保成交
+                asyncio.create_task(self.order_hold.trail_open_orders_forever())
             ])
             logger.info('listen websocket , watch wallets and order updates ...')
 

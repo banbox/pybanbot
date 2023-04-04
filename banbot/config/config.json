@@ -6,6 +6,7 @@
   "stake_amount": 100,
   "max_market_rate": 0.0001,
   "odbook_ttl": 500,
+  "trade_timeout": 5,
   "fatal_stop": {
     "30": 0.3,
     "180": 0.2,

@@ -12,7 +12,6 @@ import os
 import time
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
-from banbot.bar_driven.tainds import *
 from banbot.config.consts import *
 from banbot.util import btime
 from banbot.util.misc import *
@@ -107,6 +106,8 @@ class CryptoExchange:
         self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
+        # 记录每个交易对最近一次交易的费用类型，费率
+        self.pair_fees: Dict[str, Tuple[str, float]] = dict()
 
     async def load_markets(self):
         if btime.run_mode not in TRADING_MODES:
@@ -119,6 +120,9 @@ class CryptoExchange:
 
     def calc_funding_fee(self, symbol: str, od_type: str, side: str, amount: float, price: float, is_taker=True):
         taker_maker = 'maker' if is_taker else 'taker'
+        cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
+        if cache:
+            return dict(rate=cache[1])
         return self.api_async.calculate_fee(symbol, od_type, side, amount, price, taker_maker)
 
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
@@ -216,6 +220,9 @@ class CryptoExchange:
             else:
                 od_books = await self.api_async.fetch_order_book(f'{symbol}/USDT', limit=5)
                 self.quote_prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
+
+    async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
+        return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)
 
     async def create_limit_order(self, symbol, side, amount, price, params={}):
         if btime.run_mode != btime.RunMode.LIVE:

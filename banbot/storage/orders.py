@@ -82,6 +82,7 @@ class Order:
         self.inout_key: str = kwargs.get('inout_key')
         self.side: str = kwargs.get('side', 'buy')
         self.amount: float = kwargs['amount']  # 交易量，等同于volume；
+        self.timestamp = int(btime.time())
         # 下面属性可能需要更新
         self.price: float = price  # 入场价格，市价单此项为空
         self.status: int = kwargs.get('status', OrderStatus.Init)
@@ -108,6 +109,7 @@ class Order:
             side=self.side,
             price=to_pytypes(self.price),
             amount=to_pytypes(self.amount),
+            timestamp=self.timestamp,
             status=self.status,
             filled=to_pytypes(self.filled),
             average=to_pytypes(self.average),
@@ -134,7 +136,6 @@ class InOutOrder:
         self.enter_at: int = kwargs.get('enter_at')
         self.exit_tag: str = kwargs.get('exit_tag')
         self.exit_at: int = kwargs.get('exit_at')
-        self.timestamp = btime.time()
         self.strategy: str = kwargs.get('strategy')
         self.key = f'{self.symbol}_{self.enter_tag}_{self.strategy}'
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
@@ -158,7 +159,6 @@ class InOutOrder:
             enter_at=self.enter_at,
             exit_tag=self.exit_tag,
             exit_at=self.exit_at,
-            timestamp=self.timestamp,
             stoploss=self.stoploss,
             profit_rate=self.profit_rate,
             profit=self.profit,
