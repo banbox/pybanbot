@@ -336,6 +336,8 @@ class LiveOrderManager(OrderManager):
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
+        # 限价单的深度对应的秒级成交量
+        self.limit_vol_secs = config.get('limit_vol_secs', 10)
 
     async def _get_odbook_price(self, pair: str, side: str, depth: float):
         '''
@@ -361,7 +363,7 @@ class LiveOrderManager(OrderManager):
             # 取过去300s数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
             his_ohlcvs = await self.exchange.fetch_ohlcv(pair, '1s', limit=300)
             vol_arr = np.array(his_ohlcvs)[:, vcol]
-            depth = min(np.average(vol_arr) * 60, np.sum(vol_arr[-30:]))
+            depth = min(np.average(vol_arr) * self.limit_vol_secs * 2, np.sum(vol_arr[-self.limit_vol_secs:]))
             buy_price = await self._get_odbook_price(pair, 'buy', depth)
             sell_price = await self._get_odbook_price(pair, 'sell', depth)
         else:
