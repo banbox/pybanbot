@@ -14,6 +14,7 @@ class RPCManager:
         self._rpc = RPC(bot)
         self.channels: List[RPCHandler] = []
         config = bot.config
+        self.name = config.get('name', '')
 
         if config.get('wework', {}).get('enabled', False):
             logger.info('start rpc.wework ...')
@@ -38,6 +39,7 @@ class RPCManager:
             'status': 'stopping bot'
         }
         """
+        msg['name'] = self.name
         for mod in self.channels:
             logger.debug('Forwarding message to rpc.%s', mod.name)
             try:
