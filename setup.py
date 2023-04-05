@@ -26,6 +26,7 @@ setup(
         'ccxt',
         'orjson',
         'aiodns',
-        'aiofiles'
+        'aiofiles',
+        'arrow'
     ]
 )
