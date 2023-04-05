@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from banbot.cmds.cli_options import *
 
 
-ARGS_COMMON = ["logfile", "datadir"]
+ARGS_COMMON = ["logfile", "data_dir"]
 
 ARGS_TRADE = ["config", "dry_run", "dry_run_wallet", "fee"]
 

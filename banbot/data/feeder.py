@@ -8,6 +8,7 @@ import numpy as np
 from banbot.exchange.crypto_exchange import *
 from banbot.exchange.exchange_utils import *
 from banbot.util import btime
+from banbot.config.timerange import TimeRange
 
 
 class PairTFCache:
@@ -96,13 +97,15 @@ class PairDataFeeder:
 
 class LocalPairDataFeeder(PairDataFeeder):
 
-    def __init__(self, pair: str, timeframes: List[str], data_dir: str, auto_prefire=False):
+    def __init__(self, pair: str, timeframes: List[str], data_dir: str, auto_prefire=False,
+                 timerange: Optional[TimeRange] = None):
         import pandas as pd
         super(LocalPairDataFeeder, self).__init__(pair, timeframes, auto_prefire)
         self.data_dir = data_dir
         self.fetch_tfsecs = 0
         self.dataframe: Optional[pd.DataFrame] = None
         self.row_id = 0
+        self.timerange = timerange
         self._load_data()
         self.min_interval = max(self.min_interval, self.fetch_tfsecs)
 
@@ -129,6 +132,11 @@ class LocalPairDataFeeder(PairDataFeeder):
             raise ValueError(f'no data found, try: {try_list} in {self.data_dir}')
         df = pd.read_feather(fetch_path)
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
+        if self.timerange:
+            if self.timerange.startts:
+                df = df[df['date'] >= self.timerange.startts * 1000]
+            if self.timerange.stopts:
+                df = df[df['date'] <= self.timerange.stopts * 1000]
         self.dataframe = df
         logger.info(f'load data from {fetch_path}')
 

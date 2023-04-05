@@ -28,8 +28,8 @@ AVAILABLE_CLI_OPTIONS = {
              "See the documentation for more details.",
         metavar='FILE',
     ),
-    "datadir": Arg(
-        '-d', '--datadir', '--data-dir',
+    "data_dir": Arg(
+        '-d', '--datadir', '--data_dir', '--data-dir',
         help='Path to directory with historical backtesting data.',
         metavar='PATH',
     ),

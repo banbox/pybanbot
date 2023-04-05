@@ -10,15 +10,13 @@ from banbot.data.data_provider import *
 
 
 class BackTest(Trader):
-    def __init__(self, config: Config, max_num: int = 0):
+    def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
         btime.run_mode = btime.RunMode.BACKTEST
-        super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
         self.data_hold = LocalDataProvider(config, self._pair_row_callback)
         self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold, self.order_callback)
-        self.max_num = max_num
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
@@ -118,7 +116,3 @@ class BackTest(Trader):
         await self.order_hold.exit_open_orders('force_exit', 0)
         await self.order_hold.fill_pending_orders(None)
 
-
-if __name__ == '__main__':
-    bot = BackTest(10000)
-    bot.run()

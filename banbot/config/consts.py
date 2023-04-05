@@ -10,6 +10,7 @@ MAX_FETCH_NUM = 1000  # 单次请求最大返回数量
 
 Config = Dict[str, Any]
 NATIVE_TFS = ['1s', '1m', '3m', '5m', '15m', '30m', '1h', '4h', '8h', '1d']
+DATETIME_PRINT_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 class RunMode(Enum):

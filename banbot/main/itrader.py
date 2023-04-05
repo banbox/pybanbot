@@ -38,7 +38,8 @@ class Trader:
 
     async def _pair_row_callback(self, pair, timeframe, row):
         set_context(f'{pair}/{timeframe}')
-        await self.on_data_feed(np.array(row))
+        logger.info(f'{pair}/{timeframe}: {row}')
+        # await self.on_data_feed(np.array(row))
 
     async def on_data_feed(self, row: np.ndarray):
         strategy_list = self.symbol_stgs[symbol_tf.get()]
@@ -68,7 +69,6 @@ class Trader:
         if calc_cost >= 10:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if enter_list or exit_list or ext_tags:
-            logger.trade_info(f'bar tags: {enter_list}  {exit_list}  {ext_tags}')
             enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
                 post_cost = (time.time() - calc_end) * 1000
@@ -100,15 +100,15 @@ class Trader:
         这里不能执行耗时的异步任务（比如watch_balance），
         :return:
         '''
-        live_mode = btime.run_mode in TRADING_MODES
         while BotGlobal.state == BotState.RUNNING:
+            live_mode = btime.run_mode in TRADING_MODES
             wait_list = sorted(biz_list, key=lambda x: x[2])
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()
             self._job_exp_end = next_start + interval * 2
             func_name = biz_func.__qualname__
             if wait_secs > 0:
-                if wait_secs > 30:
+                if wait_secs > 30 and live_mode:
                     logger.info(f'sleep {wait_secs} : {func_name}')
                 await btime.sleep(wait_secs)
             job_start = time.time()

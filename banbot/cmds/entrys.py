@@ -10,6 +10,25 @@ from banbot.util.common import logger
 from banbot.storage.common import *
 
 
+def _get_config(args: dict) -> dict:
+    from banbot.config import Configuration
+    from banbot.util.misc import deep_merge_dicts
+    config = Configuration(args, None).get_config()
+    deep_merge_dicts(args, config, False)
+    if 'timerange' in config:
+        from banbot.config.timerange import TimeRange
+        config['timerange'] = TimeRange.parse_timerange(config['timerange'])
+    return config
+
+
+def term_handler(signum, frame):
+    # Raise KeyboardInterrupt - so we can handle it in the same way as Ctrl-C
+    raise KeyboardInterrupt()
+
+
+signal.signal(signal.SIGTERM, term_handler)
+
+
 def start_trading(args: Dict[str, Any]) -> int:
     """
     Main entry point for trading mode
@@ -17,15 +36,10 @@ def start_trading(args: Dict[str, Any]) -> int:
     # Import here to avoid loading worker module when it's not used
     from banbot.main.live_trader import LiveTrader
     from banbot.util import btime
-    from banbot.config import Configuration
 
-    def term_handler(signum, frame):
-        # Raise KeyboardInterrupt - so we can handle it in the same way as Ctrl-C
-        raise KeyboardInterrupt()
 
     # Create and run worker
-    config = Configuration(args, None).get_config()
-    signal.signal(signal.SIGTERM, term_handler)
+    config = _get_config(args)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
     logger.warning(f"Run Mode: {btime.run_mode.value}")
     trader = LiveTrader(config)
@@ -51,12 +65,11 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     """
     # Import here to avoid loading backtesting module when it's not used
     from banbot.optmize.backtest import BackTest
-    from banbot.config import Configuration
     from banbot.util import btime
-    config = Configuration(args, None).get_config()
 
+    config = _get_config(args)
     btime.run_mode = btime.RunMode.BACKTEST
-    backtesting = BackTest(config, 10000)
+    backtesting = BackTest(config)
     try:
         asyncio.run(backtesting.run())
     except Exception as e:
