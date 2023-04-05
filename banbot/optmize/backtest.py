@@ -12,7 +12,6 @@ from banbot.data.data_provider import *
 class BackTest(Trader):
     def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
-        btime.run_mode = btime.RunMode.BACKTEST
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
         self.data_hold = LocalDataProvider(config, self._pair_row_callback)

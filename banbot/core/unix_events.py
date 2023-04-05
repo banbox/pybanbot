@@ -15,7 +15,7 @@ class BanSelectorEventLoop(_UnixSelectorEventLoop):
     pass
 
 
-BanSelectorEventLoop.bcall_at = call_at
+BanSelectorEventLoop.call_at = call_at
 
 
 class BanSelectorEventLoopPolicy(_UnixDefaultEventLoopPolicy):
