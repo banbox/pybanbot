@@ -38,8 +38,8 @@ class Trader:
 
     async def _pair_row_callback(self, pair, timeframe, row):
         set_context(f'{pair}/{timeframe}')
-        logger.info(f'{pair}/{timeframe}: {row}')
-        # await self.on_data_feed(np.array(row))
+        # logger.info(f'{pair}/{timeframe}: {row}')
+        await self.on_data_feed(np.array(row))
 
     async def on_data_feed(self, row: np.ndarray):
         strategy_list = self.symbol_stgs[symbol_tf.get()]
