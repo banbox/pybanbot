@@ -59,17 +59,6 @@ def start_trading(args: Dict[str, Any]) -> int:
     return 0
 
 
-async def loop_main():
-    count = 0
-    while count < 8:
-        count += 1
-        print(btime.time())
-        await asyncio.sleep(5)
-        time.sleep(1)
-        if count >= 6:
-            btime.run_mode = btime.RunMode.LIVE
-
-
 def start_backtesting(args: Dict[str, Any]) -> None:
     """
     Start Backtesting script
@@ -82,17 +71,16 @@ def start_backtesting(args: Dict[str, Any]) -> None:
 
     config = _get_config(args)
     btime.run_mode = btime.RunMode.BACKTEST
-    # backtesting = BackTest(config)
+    backtesting = BackTest(config)
     try:
-        # asyncio.run(backtesting.run())
-        asyncio.run(loop_main())
+        asyncio.run(backtesting.run())
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")
     except (KeyboardInterrupt):
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
-        # asyncio.run(backtesting.cleanup())
+        asyncio.run(backtesting.cleanup())
     finally:
         logger.info("worker found ... calling exit")
 

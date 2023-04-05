@@ -532,11 +532,7 @@ class LiveOrderManager(OrderManager):
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
         await self._trail_open_orders(timeouts)
-        if btime.run_mode != RunMode.LIVE:
-            # 非实盘模式下，这里应该用sleep，否则在预热阶段会出现死循环
-            await asyncio.sleep(timeouts)
-        else:
-            await btime.sleep(timeouts)
+        await asyncio.sleep(timeouts)
 
     async def _trail_open_orders(self, timeouts: int):
         '''

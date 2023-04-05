@@ -110,7 +110,7 @@ class Trader:
             if wait_secs > 0:
                 if wait_secs > 30 and live_mode:
                     logger.info(f'sleep {wait_secs} : {func_name}')
-                await btime.sleep(wait_secs)
+                await asyncio.sleep(wait_secs)
             job_start = time.time()
             try:
                 await run_async(biz_func)

@@ -9,7 +9,7 @@ from banbot.util.common import *
 from enum import Enum
 from abc import abstractmethod
 from typing import *
-from banbot.util import btime
+import asyncio
 
 
 class RPCException(Exception):
@@ -192,7 +192,7 @@ class Webhook(RPCHandler):
         while not success and attempts <= self._retries:
             if attempts:
                 if self._retry_delay:
-                    await btime.sleep(self._retry_delay)
+                    await asyncio.sleep(self._retry_delay)
                 logger.info("Retrying webhook...")
 
             attempts += 1
