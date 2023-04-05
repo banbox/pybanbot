@@ -531,7 +531,8 @@ class LiveOrderManager(OrderManager):
     @loop_forever
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
-        await self._trail_open_orders(timeouts)
+        if btime.run_mode == RunMode.LIVE:
+            await self._trail_open_orders(timeouts)
         await asyncio.sleep(timeouts)
 
     async def _trail_open_orders(self, timeouts: int):
@@ -539,7 +540,7 @@ class LiveOrderManager(OrderManager):
         跟踪未关闭的订单，根据市场价格及时调整，避免长时间无法成交
         :return:
         '''
-        if not self.open_orders or btime.run_mode != RunMode.LIVE:
+        if not self.open_orders:
             return
         exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:

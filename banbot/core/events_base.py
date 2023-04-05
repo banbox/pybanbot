@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/5
 import time
+import heapq
 from asyncio.events import TimerHandle
 from banbot.util import btime
 
@@ -70,4 +71,19 @@ class BanTimerHandle(TimerHandle):
                     self._args == other._args and
                     self._cancelled == other._cancelled)
         return NotImplemented
+
+
+def call_at(self, when, callback, *args, context=None):
+    """copy from asyncio.base_events
+    """
+    self._check_closed()
+    if self._debug:
+        self._check_thread()
+        self._check_callback(callback, 'call_at')
+    timer = BanTimerHandle(when, callback, args, self, context)
+    if timer._source_traceback:
+        del timer._source_traceback[-1]
+    heapq.heappush(self._scheduled, timer)
+    timer._scheduled = True
+    return timer
 

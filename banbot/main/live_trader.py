@@ -50,7 +50,6 @@ class LiveTrader(Trader):
         await self.exchange.cancel_open_orders()
         await self.exchange.update_quote_price()
         await self.wallets.init()
-        logger.info('banbot init complete')
         await self.rpc.startup_messages()
 
     async def run(self):

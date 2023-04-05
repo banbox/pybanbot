@@ -23,11 +23,13 @@ class MACDCross(BaseStrategy):
         self.macd(arr[-1, ccol])
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
-        if np.isnan(self.ma5.arr[-1]) or np.isnan(LongVar.get(LongVar.bar_len).val):
+        long_bar_len = LongVar.get(LongVar.bar_len).val
+        logger.info(f'entry, long bar len: {long_bar_len}')
+        if np.isnan(self.ma5.arr[-1]) or np.isnan(long_bar_len):
             return
         fea_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
-        len_ok = real > LongVar.get(LongVar.bar_len).val * 0.4 or solid_rate > 0.1
+        len_ok = real > long_bar_len * 0.4 or solid_rate > 0.1
         macd_up = self.macd.macd_arr[-1] > self.macd.singal_arr[-1]
         ma5_up = self.ma5.arr[-1] > self.ma5.arr[-3]
         price_up = arr[-1, ccol] > min(arr[-1, ocol], arr[-2, ccol])
