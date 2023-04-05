@@ -7,31 +7,28 @@ import sys
 if sys.platform == 'win32':  # pragma: no cover
     raise ImportError('Signals are not really supported on Windows')
 import asyncio
-from selectors import *
-from asyncio.unix_events import *
-from banbot.util import btime
-
-
-class BanSelector(DefaultSelector):
-    def __init__(self):
-        super(BanSelector, self).__init__()
-
-    def select(self, timeout=None):
-        if btime.run_mode not in btime.TRADING_MODES:
-            btime.cur_timestamp += timeout
-            timeout = 0
-        return super(BanSelector, self).select(timeout)
+import heapq
+from banbot.core.events_base import *
+from asyncio.unix_events import _UnixSelectorEventLoop, _UnixDefaultEventLoopPolicy
 
 
 class BanSelectorEventLoop(_UnixSelectorEventLoop):
 
-    def __init__(self, selector=None):
-        if selector is None:
-            selector = BanSelector()
-        super(BanSelectorEventLoop, self).__init__(selector)
+    def call_at(self, when, callback, *args, context=None):
+        """Like call_later(), but uses an absolute time.
 
-    def time(self) -> float:
-        return btime.time()
+        Absolute time corresponds to the event loop's time() method.
+        """
+        self._check_closed()
+        if self._debug:
+            self._check_thread()
+            self._check_callback(callback, 'call_at')
+        timer = BanTimerHandle(when, callback, args, self, context)
+        if timer._source_traceback:
+            del timer._source_traceback[-1]
+        heapq.heappush(self._scheduled, timer)
+        timer._scheduled = True
+        return timer
 
 
 class BanSelectorEventLoopPolicy(_UnixDefaultEventLoopPolicy):
