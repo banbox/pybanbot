@@ -30,6 +30,9 @@
       "http": "http://127.0.0.1:10808",
       "https": "http://127.0.0.1:10808"
     },
+    "pair_fee_limits": {
+      "BTC/TUSD": 0.0
+    },
     "credit_prod": {
       "api_key": "H3OzezemPSWh6m7K5oVjQy2qCx3aLxsVVofaTjvZqkecvny6S8h2sYURjb03LzCs",
       "api_secret": "ZGPWcTzSrbA4ZbMy4mBc53gTeh343VevCtO1ibqA1KiAViGoQDXLjgPw8lDrgDzV",

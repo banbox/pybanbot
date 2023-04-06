@@ -50,6 +50,8 @@ class OrderManager(metaclass=SingletonArg):
         self.fatal_stop = dict()
         self._load_fatal_stop()
         self.disabled = False
+        self.forbid_pairs = set()
+        self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
 
     def _load_fatal_stop(self):
         fatal_cfg = self.config.get('fatal_stop')
@@ -61,6 +63,13 @@ class OrderManager(metaclass=SingletonArg):
     async def _fire(self, od: InOutOrder, enter: bool):
         async with TempContext(f'{od.symbol}/{od.timeframe}'):
             await run_async(self.callback, od, enter)
+
+    def allow_pair(self, pair: str) -> bool:
+        if self.disabled:
+            # 触发系统交易熔断时，禁止入场，允许出场
+            logger.warning(f'order enter forbid, fatal stop, {pair}')
+            return False
+        return pair not in self.forbid_pairs
 
     async def try_dump(self):
         if not self.dump_path:
@@ -115,11 +124,7 @@ class OrderManager(metaclass=SingletonArg):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             return
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost)
-        if not quote_cost:
-            return
-        if self.disabled:
-            # 触发系统交易熔断时，禁止入场，允许出场
-            logger.warning(f'order enter forbid, fatal stop, {strategy} {pair} {tag} {cost:.3f}')
+        if not quote_cost or not self.allow_pair(pair):
             return
         if callable(price):
             price = await run_async(price)
@@ -267,6 +272,10 @@ class OrderManager(metaclass=SingletonArg):
             od.exit.trades.clear()
         od.profit_rate = float(od.exit.price / od.enter.price) - 1
         od.profit = float((od.exit.price - od.enter.price) * od.enter.amount)
+        if self.pair_fee_limits and od.enter.fee and od.symbol not in self.forbid_pairs\
+                and od.enter.fee > self.pair_fee_limits.get(od.symbol, 0):
+            self.forbid_pairs.add(od.symbol)
+            logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
         self.his_list.append(od)
 
     def update_by_bar(self, pair_arr: np.ndarray):
@@ -421,14 +430,14 @@ class LiveOrderManager(OrderManager):
         :param exit_keys: Dict(order_key, exit_tag)
         :return:
         '''
-        if self.disabled and not (exits or exit_keys):
-            logger.warning('system enter disabled')
-            return
-        run_tasks = []
         ctx = get_context(pair_tf)
         pair, _, _, _ = get_cur_symbol(ctx)
+        allow_enter = self.allow_pair(pair)
+        if not allow_enter and not (exits or exit_keys):
+            return
+        run_tasks = []
         buy_price, sell_price = self._make_async_price(pair)
-        if enters and btime.run_mode not in NORDER_MODES:
+        if allow_enter and enters and btime.run_mode not in NORDER_MODES:
             for stg_name, enter_tag, cost in enters:
                 run_tasks.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
         if exits:
