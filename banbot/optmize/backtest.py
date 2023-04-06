@@ -73,7 +73,7 @@ class BackTest(Trader):
             self.max_balance = min(self.max_balance, balance)
 
     def _calc_result_done(self):
-        pair, base_s, quote_s, timeframe = get_cur_symbol()
+        quote_s = 'TUSD'
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
         his_orders = self.order_hold.his_list

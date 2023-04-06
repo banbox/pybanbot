@@ -26,9 +26,12 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
     max_price = np.max(arr[-elp_num:, ccol])
     cur_close = arr[-1, ccol]
     max_loss = min(cur_close - od.enter.price, cur_close - max_price)
-    bar_len = LongVar.get(LongVar.bar_len).val
+    bar_len = to_pytypes(LongVar.get(LongVar.bar_len).val)
     flen, slen, mlen, llen = odlens if odlens else 3, 5, 10, 15
-    pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres if loss_thres else -1, -0, 1.5, 2, 3.6
+    if loss_thres:
+        pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres
+    else:
+        pf_n2, pf_n1, pf_1, pf_2, pf_3 = -1., -0., 1.5, 2., 3.6
     if elp_num <= flen and max_loss < bar_len * pf_n2:
         return 'sm_ls'
     if flen < elp_num <= slen and max_loss < bar_len * pf_n1:
