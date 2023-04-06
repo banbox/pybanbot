@@ -560,6 +560,9 @@ class LiveOrderManager(OrderManager):
         '''
         if not self.open_orders:
             return
+        if btime.now().minute % 30 == 0:
+            od_dump = [od.to_dict() for od in list(self.open_orders.values())]
+            logger.warning(f'open orders: {od_dump}')
         exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:
             return

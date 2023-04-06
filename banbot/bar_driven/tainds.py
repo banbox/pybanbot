@@ -33,6 +33,7 @@ bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
 bar_end_time = ContextVar('bar_end_time')
 _symbol_ctx: Dict[str, Context] = dict()
+symbol_tf.set('')
 # 几个常用列的索引
 tcol, ocol, hcol, lcol, ccol, vcol = 0, 1, 2, 3, 4, 5
 
@@ -73,6 +74,14 @@ def set_context(symbol: str):
         # 保存旧的值到旧的上下文
         save_ctx = _symbol_ctx[symbol_tf.get()]
         save_ctx.run(_update_context, old_ctx.items())
+    if not symbol:
+        symbol_tf.set('')
+        bar_num.set(0)
+        pair_state.set(dict())
+        bar_arr.set([])
+        bar_end_time.set('')
+        timeframe_secs.set(0)
+        return
     if symbol not in _symbol_ctx:
         from banbot.exchange.exchange_utils import timeframe_to_seconds
         base_s, quote_s, tf = symbol.split('/')
