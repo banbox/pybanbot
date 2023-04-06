@@ -49,3 +49,18 @@ def to_utcstamp(dt):
 def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
     dt = to_datetime(timestamp)
     return dt.strftime(fmt)
+
+
+class TempRunMode:
+    def __init__(self, mode: RunMode):
+        self.tmp_mode = mode
+        self.bak_mode = run_mode
+
+    def __enter__(self):
+        global run_mode
+        run_mode = self.tmp_mode
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        global run_mode
+        run_mode = self.bak_mode
+

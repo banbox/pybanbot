@@ -151,7 +151,7 @@ def calc_clus_feas(df_list: List[DataFrame], inds: List[TFeature], profit_off: i
     merge_list = []
     # 每个pair的数据需要单独计算指标、收益等列，因为会依赖前面n行的数据
     logger.warning(f'calc inds for {len(df_list)} pairs')
-    last_time = time.time()
+    last_time = time.monotonic()
     for i, df in enumerate(df_list):
         if not len(df):
             logger.warning(f'empty data found for {i}')
@@ -171,9 +171,9 @@ def calc_clus_feas(df_list: List[DataFrame], inds: List[TFeature], profit_off: i
         to_low_precision(df)
         update_df_valid_range(df, col_names)
         merge_list.append(df[df.valid_start: df.valid_end][col_names])
-        if time.time() - last_time > 5:
+        if time.monotonic() - last_time > 5:
             logger.warning(f'process {i} pair complete')
-            last_time = time.time()
+            last_time = time.monotonic()
 
     # 将所有数据表合并为一个，此后所有操作应是行间无关操作
     merge_df = pd.concat(merge_list, ignore_index=True, sort=False)
@@ -325,7 +325,7 @@ def profile_ind_group(df: pd.DataFrame, feas: List[TFeature], pos_thres: int = 3
 
 def statistic_pos_neg_ids(df: DataFrame, gp_names: list, save_stas: dict, price_thres: int):
     print(f'statistic_pos_neg_ids: {gp_names}', end=' ')
-    start = time.time()
+    start = time.monotonic()
     pos_thres, neg_thres = abs(price_thres), - abs(price_thres)
     # 统计正负样本的ID
     np_arr = df[gp_names + ['profit']].to_numpy(dtype=np.int64)
@@ -352,7 +352,7 @@ def statistic_pos_neg_ids(df: DataFrame, gp_names: list, save_stas: dict, price_
     neg_true_ids = np.where(neg_arr[:, -2] <= neg_thres)[0]
     neg_true = neg_arr[neg_true_ids, -1].tolist()
     neg_false = np.delete(neg_arr, neg_true_ids, axis=0)[:, -1].tolist()
-    cost = time.time() - start
+    cost = time.monotonic() - start
     print(f'cost: {cost: .2f}s')
     return set(pos_true), set(pos_false), set(neg_true), set(neg_false)
 

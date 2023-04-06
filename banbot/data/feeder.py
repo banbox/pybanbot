@@ -175,16 +175,14 @@ class LivePairDataFeader(PairDataFeeder):
                 fetch_num = round(self.states[-1].tf_secs / state.tf_secs) * self.warmup_num
                 assert 0 < fetch_num <= 1000, 'fetch warmup num > 1000'
                 # 这里请求网络，内部有超时逻辑，故临时切换到实时模式
-                back_mode = btime.run_mode
-                btime.run_mode = RunMode.DRY_RUN
-                self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
-                btime.run_mode = back_mode
+                with btime.TempRunMode(RunMode.DRY_RUN):
+                    self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
             if self.warm_id >= len(self.warm_data):
                 logger.info(f'warm up complete with {self.warmup_num}')
                 self.is_warmed = True
                 del self.warm_data
                 btime.run_mode = self.back_rmode
-                btime.cur_timestamp = time.time()
+                btime.cur_timestamp = btime.time()
             else:
                 details = [self.warm_data[self.warm_id]]
                 self.warm_id += 1

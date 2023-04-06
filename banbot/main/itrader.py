@@ -5,6 +5,8 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
+import time
+
 from banbot.storage.common import *
 from banbot.strategy.base import *
 from banbot.storage.od_manager import *
@@ -47,7 +49,7 @@ class Trader:
         pair_arr = append_new_bar(row)
         await self._bar_callback()
         self.order_hold.update_by_bar(pair_arr)
-        start_time = time.time()
+        start_time = time.monotonic()
         ext_tags: Dict[str, str] = dict()
         enter_list, exit_list = [], []
         for strategy in strategy_list:
@@ -64,14 +66,14 @@ class Trader:
                 if exit_tag:
                     exit_list.append((stg_name, exit_tag))
                 ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
-        calc_end = time.time()
+        calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if enter_list or exit_list or ext_tags:
             enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
-                post_cost = (time.time() - calc_end) * 1000
+                post_cost = (time.monotonic() - calc_end) * 1000
                 logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)} cost: {post_cost:.1f} ms')
 
     async def _bar_callback(self):
@@ -87,6 +89,7 @@ class Trader:
         from threading import Thread
 
         def handle():
+            time.sleep(5)
             while True:
                 time.sleep(min_intv * 0.3)
                 if self._job_exp_end < btime.time():
@@ -111,13 +114,13 @@ class Trader:
                 if wait_secs > 30 and live_mode:
                     logger.info(f'sleep {wait_secs} : {func_name}')
                 await asyncio.sleep(wait_secs)
-            job_start = time.time()
+            job_start = time.monotonic()
             try:
                 await run_async(biz_func)
             except EOFError:
                 # 任意一个发出EOF错误时，终止循环
                 break
-            exec_cost = time.time() - job_start
+            exec_cost = time.monotonic() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
                 logger.warning(f'{func_name} cost {exec_cost:.3f} > interval: {interval:.3f}')
                 interval = exec_cost * 1.5

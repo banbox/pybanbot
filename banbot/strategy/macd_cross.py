@@ -24,7 +24,7 @@ class MACDCross(BaseStrategy):
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         long_bar_len = LongVar.get(LongVar.bar_len).val
-        logger.info(f'entry, long bar len: {long_bar_len}')
+        # logger.info(f'entry, long bar len: {long_bar_len}')
         if np.isnan(self.ma5.arr[-1]) or np.isnan(long_bar_len):
             return
         fea_start = fea_col_start.get()

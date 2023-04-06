@@ -103,7 +103,7 @@ def mean_cluster_col(col: Series, cls_num: int, val_handle, min_val: int, max_va
     :param max_val:
     :return:
     '''
-    start = time.time()
+    start = time.monotonic()
     cls_step = (max_val - min_val) / cls_num
     cur_center = min_val + cls_step / 2
     case_list, centers = [], []
@@ -118,7 +118,7 @@ def mean_cluster_col(col: Series, cls_num: int, val_handle, min_val: int, max_va
         cur_center += cls_step
 
     new_col = col_range_map(col, case_list)
-    cost = time.time() - start
+    cost = time.monotonic() - start
     if cost >= 0.05:
         logger.warning(f'mean cluster col {col.name}, cost: {cost: .2f}, centers: {centers}')
     return new_col, centers
@@ -170,7 +170,7 @@ def cluster_col_kmeans(timeframe: str, col: Series, cls_num: int, val_handle, cl
     :param clus_key: 聚类缓存key，避免同样的数据重复聚类
     :return:
     '''
-    start = time.time()
+    start = time.monotonic()
     if not clus_key:
         clus_key = col.name
     cache_key = f'clus_{clus_key}_{cls_num}'
@@ -184,7 +184,7 @@ def cluster_col_kmeans(timeframe: str, col: Series, cls_num: int, val_handle, cl
         cache_cfg = do_cluster(timeframe, col, cls_num, val_handle, cache_key)
     pos_list = cache_cfg.get('range_map')
     new_col = col_range_map(col, pos_list)
-    cost = time.time() - start
+    cost = time.monotonic() - start
     centers = cache_cfg.get("centers")
     if cost >= 0.05:
         logger.warning(f'kmeans cluster col {col.name}, cost: {cost: .2f}, centers: {centers}')
@@ -251,7 +251,7 @@ def load_all_pairs(timeframe: str = '5m', min_len=1000, pair_num: int = 0) -> Li
     names = [n for n in names if n.find(f'-{timeframe}.') > 0]
     df_list, total_rows, merge_offs = [], 0, []
     # read cache
-    start = time.time()
+    start = time.monotonic()
     pair_max_row = int(max_df_rows / len(names))
     if cache_path.is_file():
         merge_df = pd.read_feather(cache_path)
@@ -270,13 +270,13 @@ def load_all_pairs(timeframe: str = '5m', min_len=1000, pair_num: int = 0) -> Li
             update_df_valid_range(df)
             df_list.append(df)
         if not new_names:
-            load_cost = time.time() - start
+            load_cost = time.monotonic() - start
             if pair_num:
                 df_list = df_list[:pair_num]
             logger.warning(f'{len(df_list)} pairs loaded from cache, total {total_rows} rows, cost: {load_cost:.2f}s')
             return df_list
         logger.warning(f'{len(df_list)} pairs loaded from cache, new {len(new_names)} pairs loading...')
-        start = time.time()
+        start = time.monotonic()
         names = sorted(new_names)
     before_num = len(df_list)
     for name in names:
@@ -299,7 +299,7 @@ def load_all_pairs(timeframe: str = '5m', min_len=1000, pair_num: int = 0) -> Li
         df_list.append(df)
     if not df_list:
         raise ValueError(f'no of {len(names)} pairs loaded')
-    load_cost = time.time() - start
+    load_cost = time.monotonic() - start
     new_load = len(df_list) - before_num
     logger.warning(f'{new_load} new pairs loaded, total {total_rows} rows, cost: {load_cost:.2f}s')
     if new_load:

@@ -111,12 +111,12 @@ class CryptoExchange:
         self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
-        self.markets_at = time.time() - 7200
+        self.markets_at = time.monotonic() - 7200
 
     async def load_markets(self):
-        if btime.run_mode not in TRADING_MODES or time.time() - self.markets_at < 1800:
+        if btime.run_mode not in TRADING_MODES or time.monotonic() - self.markets_at < 1800:
             return
-        self.markets_at = time.time()
+        self.markets_at = time.monotonic()
         markets = await self.api_async.load_markets()
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)

@@ -48,10 +48,10 @@ class MeasureTime:
         self.history: List[Tuple[str, float]] = []
 
     def start_for(self, name: str):
-        self.history.append((self.prefix + name, time.time()))
+        self.history.append((self.prefix + name, time.monotonic()))
 
     def print_all(self, top_n: int = 0):
-        self.history.append((self.prefix + 'end', time.time()))
+        self.history.append((self.prefix + 'end', time.monotonic()))
         cost_list = []
         for i in range(len(self.history) - 1):
             item, nt = self.history[i], self.history[i + 1]

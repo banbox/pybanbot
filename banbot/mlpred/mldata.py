@@ -50,7 +50,7 @@ def _load_train_df(timeframe: str, pos_thres: int = 35, neg_thres: int = -30, pr
         mw = MicroWave(timeframe)
         pairs = load_all_pairs(timeframe)
         pair_datas = []
-        last_time = time.time()
+        last_time = time.monotonic()
         for i, sam_df in enumerate(pairs):
             calc_next_profit(sam_df, pred_off)
             handled = mw.compute_prob(sam_df)
@@ -64,7 +64,7 @@ def _load_train_df(timeframe: str, pos_thres: int = 35, neg_thres: int = -30, pr
                 del_row_ids = np.random.choice(norm_ids, del_num, replace=False)
                 handled.drop(del_row_ids, inplace=True)
             pair_datas.append(handled)
-            cur_time = time.time()
+            cur_time = time.monotonic()
             if cur_time - last_time > 5:
                 logger.warning(f'process {i+1} pair data ok')
                 last_time = cur_time

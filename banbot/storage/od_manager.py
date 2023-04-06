@@ -354,7 +354,7 @@ class LiveOrderManager(OrderManager):
         :return:
         '''
         odbook = self.odbooks.get(pair)
-        if not odbook or odbook.timestamp + self.odbook_ttl < time.time() * 1000:
+        if not odbook or odbook.timestamp + self.odbook_ttl < time.monotonic() * 1000:
             od_res = await self.exchange.fetch_order_book(pair, 1000)
             self.odbooks[pair] = OrderBook(**od_res)
         return self.odbooks[pair].limit_price(side, depth)
