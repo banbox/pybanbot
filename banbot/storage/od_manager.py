@@ -467,6 +467,9 @@ class LiveOrderManager(OrderManager):
         async with sub_od.lock:
             if order['trades'] and any(td for td in sub_od.trades if td['id'] == order['trades'][0]['id']):
                 return
+            if sub_od.order_id:
+                # 如修改订单价格，order_id会变化
+                del self.exg_orders[f'{od.symbol}_{sub_od.order_id}']
             sub_od.trades.extend(order['trades'])
             sub_od.order_id = order["id"]
             self.exg_orders[f'{od.symbol}_{sub_od.order_id}'] = sub_od
@@ -612,7 +615,7 @@ class LiveOrderManager(OrderManager):
                         left_amount = od.exit.amount - od.exit.filled
                         res = await self.exchange.edit_limit_order(od.exit.order_id, od.symbol, od.exit.side,
                                                                    left_amount, sell_price)
-                        self._update_subod_by_ccxtres(od, False, res)
+                        await self._update_subod_by_ccxtres(od, False, res)
                 else:
                     if buy_price <= od.enter.price:
                         continue
@@ -625,4 +628,4 @@ class LiveOrderManager(OrderManager):
                         left_amount = od.enter.amount - od.enter.filled
                         res = await self.exchange.edit_limit_order(od.enter.order_id, od.symbol, od.enter.side,
                                                                    left_amount, buy_price)
-                        self._update_subod_by_ccxtres(od, True, res)
+                        await self._update_subod_by_ccxtres(od, True, res)
