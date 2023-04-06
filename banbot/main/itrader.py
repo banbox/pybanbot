@@ -34,50 +34,47 @@ class Trader:
         run_jobs = load_run_jobs(self.config)
         for pair, timeframe, cls_list in run_jobs:
             symbol = f'{pair}/{timeframe}'
-            set_context(symbol)
-            self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
-            self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
+            with TempContext(symbol):
+                self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
+                self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
 
-    async def _pair_row_callback(self, pair, timeframe, row):
-        set_context(f'{pair}/{timeframe}')
-        # logger.info(f'{pair}/{timeframe}: {row}')
-        await self.on_data_feed(np.array(row))
-
-    async def on_data_feed(self, row: np.ndarray):
-        strategy_list = self.symbol_stgs[symbol_tf.get()]
-        pair, base_s, quote_s, timeframe = get_cur_symbol()
-        pair_arr = append_new_bar(row)
-        await self._bar_callback()
-        self.order_hold.update_by_bar(pair_arr)
-        start_time = time.monotonic()
-        ext_tags: Dict[str, str] = dict()
-        enter_list, exit_list = [], []
-        for strategy in strategy_list:
-            stg_name = strategy.name
-            strategy.state = dict()
-            strategy.on_bar(pair_arr)
-            # 调用策略生成入场和出场信号
-            entry_tag = strategy.on_entry(pair_arr)
-            exit_tag = strategy.on_exit(pair_arr)
-            if entry_tag and (not strategy.skip_enter_on_exit or not exit_tag):
-                cost = strategy.custom_cost(entry_tag)
-                enter_list.append((stg_name, entry_tag, cost))
-            if not strategy.skip_exit_on_enter or not entry_tag:
-                if exit_tag:
-                    exit_list.append((stg_name, exit_tag))
-                ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
-        calc_end = time.monotonic()
+    async def on_data_feed(self, pair, timeframe, row: np.ndarray):
+        pair_tf = f'{pair}/{timeframe}'
+        async with TempContext(pair_tf):
+            # 策略计算部分，会用到上下文变量
+            strategy_list = self.symbol_stgs[symbol_tf.get()]
+            pair_arr = append_new_bar(row)
+            self.order_hold.update_by_bar(pair_arr)
+            start_time = time.monotonic()
+            ext_tags: Dict[str, str] = dict()
+            enter_list, exit_list = [], []
+            for strategy in strategy_list:
+                stg_name = strategy.name
+                strategy.state = dict()
+                strategy.on_bar(pair_arr)
+                # 调用策略生成入场和出场信号
+                entry_tag = strategy.on_entry(pair_arr)
+                exit_tag = strategy.on_exit(pair_arr)
+                if entry_tag and (not strategy.skip_enter_on_exit or not exit_tag):
+                    cost = strategy.custom_cost(entry_tag)
+                    enter_list.append((stg_name, entry_tag, cost))
+                if not strategy.skip_exit_on_enter or not entry_tag:
+                    if exit_tag:
+                        exit_list.append((stg_name, exit_tag))
+                    ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
+            calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
+        if btime.run_mode != RunMode.LIVE:
+            # 模拟模式，填充未成交订单
+            await self.order_hold.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:
-            enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(pair, enter_list, exit_list, ext_tags)
+            enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(
+                pair_tf, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
                 post_cost = (time.monotonic() - calc_end) * 1000
                 logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)} cost: {post_cost:.1f} ms')
-
-    async def _bar_callback(self):
-        pass
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')

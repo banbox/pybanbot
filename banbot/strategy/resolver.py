@@ -85,7 +85,11 @@ def load_run_jobs(config: dict) -> List[Tuple[str, str, List[Type[BaseStrategy]]
         strategy_cls = strategy_map.get(policy['name'])
         if not strategy_cls:
             raise RuntimeError(f'unknown Strategy: {policy["name"]}')
+        stg_pairs = set()
         for pair, timeframe in pairlist:
+            if pair in stg_pairs:
+                raise ValueError('one strategy can only handle one timeframe for pair')
+            stg_pairs.add(pair)
             key = f'{pair}_{timeframe}'
             if key not in result:
                 result[key] = []

@@ -132,6 +132,7 @@ class InOutOrder:
     def __init__(self, **kwargs):
         self.symbol: str = kwargs['symbol']
         self.status: int = kwargs.get('status', InOutStatus.Init)
+        self.timeframe: str = kwargs.get('timeframe')
         self.enter_tag: str = kwargs.get('enter_tag')
         self.enter_at: int = kwargs.get('enter_at')
         self.exit_tag: str = kwargs.get('exit_tag')
@@ -148,7 +149,8 @@ class InOutOrder:
         self.profit: float = kwargs.get('profit', 0.0)
 
     def can_close(self):
-        return self.status > InOutStatus.Init and not self.exit_tag and bar_num.get() > self.enter_at
+        cur_bar_num = get_context(f'{self.symbol}/{self.timeframe}')[bar_num]
+        return self.status > InOutStatus.Init and not self.exit_tag and cur_bar_num > self.enter_at
 
     def pending_type(self, timeouts: int):
         if self.exit and self.exit_tag:
@@ -165,6 +167,7 @@ class InOutOrder:
     def to_dict(self) -> dict:
         result = dict(
             symbol=self.symbol,
+            timeframe=self.timeframe,
             status=self.status,
             key=self.key,
             enter_tag=self.enter_tag,
@@ -172,8 +175,8 @@ class InOutOrder:
             exit_tag=self.exit_tag,
             exit_at=self.exit_at,
             stoploss=self.stoploss,
-            profit_rate=self.profit_rate,
-            profit=self.profit,
+            profit_rate=to_pytypes(self.profit_rate),
+            profit=to_pytypes(self.profit),
         )
         if self.exit_at:
             result['duration'] = self.exit_at - self.enter_at

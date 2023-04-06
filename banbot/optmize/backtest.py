@@ -14,7 +14,7 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         exg_name = config['exchange']['name']
-        self.data_hold = LocalDataProvider(config, self._pair_row_callback)
+        self.data_hold = LocalDataProvider(config, self.on_data_feed)
         self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
@@ -28,9 +28,8 @@ class BackTest(Trader):
         self.open_price = 0
         self.close_price = 0
 
-    async def _pair_row_callback(self, pair, timeframe, row):
+    async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
-        set_context(f'{pair}/{timeframe}')
         if self.first_data:
             self.open_price = row[ocol]
             self.result['date_from'] = btime.to_datestr(row[0])
@@ -38,7 +37,7 @@ class BackTest(Trader):
         else:
             self.close_price = row[ccol]
             self.result['date_to'] = btime.to_datestr(row[0])
-        await self.on_data_feed(np.array(row))
+        await super(BackTest, self).on_data_feed(pair, timeframe, row)
 
     def init(self):
         self.min_balance = self.stake_amount
@@ -63,15 +62,12 @@ class BackTest(Trader):
         await BTAnalysis(his_orders, **self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    async def _bar_callback(self):
-        await self.order_hold.fill_pending_orders(bar_arr.get())
-
     def order_callback(self, od: InOutOrder, is_enter: bool):
         open_orders = self.order_hold.open_orders
         if is_enter:
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
         elif not open_orders:
-            _, base_s, quote_s, timeframe = get_cur_symbol()
+            quote_s = od.symbol.split('/')[1]
             balance = sum(self.wallets.get(quote_s))
             self.min_balance = min(self.min_balance, balance)
             self.max_balance = min(self.max_balance, balance)
@@ -109,5 +105,5 @@ class BackTest(Trader):
 
     async def cleanup(self):
         await self.order_hold.exit_open_orders('force_exit', 0)
-        await self.order_hold.fill_pending_orders(None)
+        await self.order_hold.fill_pending_orders()
 

@@ -87,6 +87,8 @@ def get_logger(level=logging.INFO) -> TradeLogger:
         return log
     # 定义handler的输出格式
     formatter = logging.Formatter(fmt='%(asctime)s %(process)d %(levelname)s %(message)s')
+    # 使用UTC时间
+    formatter.converter = time.gmtime
     low_handler = logging.StreamHandler(sys.stdout)
     low_handler.setLevel(level)
     low_handler.setFormatter(formatter)

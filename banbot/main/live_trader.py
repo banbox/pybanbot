@@ -20,7 +20,7 @@ class LiveTrader(Trader):
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
-        self.data_hold = LiveDataProvider(config, self.exchange, self._pair_row_callback)
+        self.data_hold = LiveDataProvider(config, self.exchange, self.on_data_feed)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_hold = LiveOrderManager(config, self.exchange, self.wallets, self.data_hold, self.order_callback)
         self.rpc = RPCManager(self)
@@ -67,10 +67,6 @@ class LiveTrader(Trader):
             # 定时检查整体损失是否触发限制
             [self.order_hold.check_fatal_stop, 300, 300]
         ])
-
-    async def _bar_callback(self):
-        if btime.run_mode != RunMode.LIVE:
-            await self.order_hold.fill_pending_orders(bar_arr.get())
 
     async def _start_tasks(self):
         if btime.run_mode == RunMode.LIVE:

@@ -15,6 +15,7 @@ gather
 '''
 from numbers import Number
 from contextvars import Context, ContextVar, copy_context
+from asyncio import Lock
 from typing import *
 
 import pandas as pd
@@ -22,6 +23,8 @@ import pandas as pd
 from banbot.util.num_utils import *
 
 
+# 所有对上下文变量的数据访问，均应先获取锁，避免协程交互访问时发生混乱
+ctx_lock = Lock()
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
 timeframe_secs = ContextVar('timeframe_secs')
@@ -39,9 +42,21 @@ def _update_context(kwargs):
         key.set(val)
 
 
-def get_cur_symbol() -> Tuple[str, str, str, str]:
-    base_symbol, quote_symbol, timeframe = symbol_tf.get().split('/')
+def get_cur_symbol(ctx: Optional[Context] = None) -> Tuple[str, str, str, str]:
+    pair_tf = ctx[symbol_tf] if ctx else symbol_tf.get()
+    base_symbol, quote_symbol, timeframe = pair_tf.split('/')
     return f'{base_symbol}/{quote_symbol}', base_symbol, quote_symbol, timeframe
+
+
+def get_context(pair_tf: str) -> Context:
+    '''
+    此方法获取一个缓存的上下文环境。仅可用于读取，不可用于写入。
+    :param pair_tf:
+    :return:
+    '''
+    if symbol_tf.get() == pair_tf:
+        return copy_context()
+    return _symbol_ctx[pair_tf]
 
 
 def set_context(symbol: str):
@@ -71,6 +86,42 @@ def set_context(symbol: str):
     else:
         # 从新的上下文恢复上次的状态
         _update_context(_symbol_ctx[symbol].items())
+
+
+class TempContext:
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+        self.is_locked = False
+        self.back_symbol = None
+
+    def __enter__(self):
+        self.back_symbol = symbol_tf.get()
+        if self.back_symbol != self.symbol:
+            self.back_symbol = symbol_tf.get()
+            self.is_locked = True
+            set_context(self.symbol)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.is_locked:
+            return
+        set_context(self.back_symbol)
+        self.is_locked = False
+
+    async def __aenter__(self):
+        self.back_symbol = symbol_tf.get()
+        if self.back_symbol != self.symbol:
+            # 仅当和当前环境的上下文不同时，才尝试获取协程锁；允许相同环境嵌套TempContext
+            await ctx_lock.acquire()
+            self.back_symbol = symbol_tf.get()
+            self.is_locked = True
+            set_context(self.symbol)
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if not self.is_locked:
+            return
+        set_context(self.back_symbol)
+        ctx_lock.release()
+        self.is_locked = False
 
 
 def avg_in_range(view_arr, start_rate=0.25, end_rate=0.75, is_abs=True) -> float:
