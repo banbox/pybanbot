@@ -58,22 +58,15 @@ class LiveTrader(Trader):
         await self.init()
         # 启动异步任务
         await self._start_tasks()
-        # 需要预热数据
-        btime.run_mode = RunMode.OTHER
-        btime.cur_timestamp = time.time() - self.data_hold.set_warmup(self._warmup_num)
-        cur_time = btime.time()
-        loop_tasks = [
-            # 轮询函数，轮询间隔(s)，下次执行时间
-            [self.data_hold.process, self.data_hold.min_interval, cur_time],
-            # 两小时更新一次货币行情信息
-            [self.exchange.load_markets, 7200, cur_time + 7200],
-            # 定时更新定价货币的价格
-            [self.exchange.update_quote_price, 60, cur_time],
-            # 定时检查整体损失是否触发限制
-            [self.order_hold.check_fatal_stop, 300, cur_time + 300]
-        ]
         # 轮训执行任务
-        await self._loop_tasks(loop_tasks)
+        await self._loop_tasks([
+            # 两小时更新一次货币行情信息
+            [self.exchange.load_markets, 7200, 7200],
+            # 定时更新定价货币的价格
+            [self.exchange.update_quote_price, 60, 0],
+            # 定时检查整体损失是否触发限制
+            [self.order_hold.check_fatal_stop, 300, 300]
+        ])
 
     async def _bar_callback(self):
         if btime.run_mode != RunMode.LIVE:

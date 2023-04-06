@@ -15,8 +15,10 @@ class DataProvider:
     _cb_lock = Lock()
 
     def __init__(self, config: Config):
+        self.config = config
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.holders: List[PairDataFeeder] = []
+        self.min_interval = 1
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
@@ -26,7 +28,7 @@ class DataProvider:
 
     def set_warmup(self, count: int) -> int:
         '''
-        设置数据源的预热数量，返回需要回顾的秒数
+        设置数据源的预热数量，返回需要回顾的秒数。用于LIVE、DRY_RUN
         :param count:
         :return:
         '''
@@ -64,6 +66,28 @@ class DataProvider:
         await gather(*[hold.try_fetch() for hold in self.holders])
         for hold in self.holders:
             await hold.try_update()
+
+    async def first_call(self, warmup_num: int):
+        back_secs = self.set_warmup(warmup_num)
+        ts_inited = True
+        if btime.run_mode in TRADING_MODES:
+            btime.cur_timestamp = time.time() - back_secs
+            btime.run_mode = RunMode.OTHER
+        else:
+            timerange: TimeRange = self.config.get('timerange')
+            if timerange and timerange.startts:
+                timerange.startts -= back_secs
+                btime.cur_timestamp = timerange.startts
+            else:
+                ts_inited = False
+        await self.process()
+        if not ts_inited:
+            # 计算第一个bar的实际对应的系统时间戳
+            ts_val = 0
+            for hold in self.holders:
+                state = hold.states[0]
+                ts_val = max(ts_val, state.bar_row[0] + state.tf_secs - hold.prefire_secs)
+            btime.cur_timestamp = ts_val
 
 
 class LocalDataProvider(DataProvider):

@@ -36,6 +36,7 @@ class PairDataFeeder:
         self.pair = pair
         self.states = [PairTFCache(tf, tf_sec) for tf, tf_sec in tf_pairs]
         self.warmup_num = 600  # 默认前600个作为预热，可根据策略设置
+        self.prefire_secs = 0
         self.min_interval = min(s.check_interval for s in self.states)
         self.auto_prefire = auto_prefire
         self.callback = None
@@ -67,8 +68,10 @@ class PairDataFeeder:
         if fetch_intv < state.tf_secs:
             ohlcvs = [state.bar_row] if state.bar_row else []
             ohlcvs = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
+            self.prefire_secs = prefire * state.tf_secs
         else:
             ohlcvs = details
+            self.prefire_secs = 0
         state.last_check = btime.time()
         if not state.bar_row or ohlcvs[-1][0] == state.bar_row[0]:
             state.bar_row = ohlcvs[-1]
@@ -104,15 +107,14 @@ class LocalPairDataFeeder(PairDataFeeder):
         self.data_dir = data_dir
         self.fetch_tfsecs = 0
         self.dataframe: Optional[pd.DataFrame] = None
+        self.data_path: Optional[str] = None
         self.row_id = 0
         self.timerange = timerange
-        self._load_data()
+        self._check_data()
         self.min_interval = max(self.min_interval, self.fetch_tfsecs)
 
-    def _load_data(self):
-        import pandas as pd
+    def _check_data(self):
         req_tfsecs = self.states[0].tf_secs
-        fetch_path = None
         base_s, quote_s = self.pair.split('/')
         try_list = []
         for tf in NATIVE_TFS:
@@ -125,22 +127,33 @@ class LocalPairDataFeeder(PairDataFeeder):
             data_path = os.path.join(self.data_dir, f'{base_s}_{quote_s}-{tf}.feather')
             if not os.path.isfile(data_path):
                 continue
-            fetch_path = data_path
+            self.data_path = data_path
             self.fetch_tfsecs = cur_secs
             break
-        if not fetch_path:
+        if not self.data_path:
             raise ValueError(f'no data found, try: {try_list} in {self.data_dir}')
-        df = pd.read_feather(fetch_path)
+
+    def _load_data(self):
+        import pandas as pd
+        logger.info(f'loading data from {self.data_path}')
+        df = pd.read_feather(self.data_path)
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
         if self.timerange:
             if self.timerange.startts:
                 df = df[df['date'] >= self.timerange.startts * 1000]
             if self.timerange.stopts:
                 df = df[df['date'] <= self.timerange.stopts * 1000]
+            if len(df):
+                tfrom, tto = btime.to_datestr(df.iloc[0]["date"]), btime.to_datestr(df.iloc[-1]["date"])
+                logger.info(f'truncate data from {tfrom} to {tto}')
+            else:
+                tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
+                raise ValueError(f'no data found after truncate from {tfrom} to {tto}')
         self.dataframe = df
-        logger.info(f'load data from {fetch_path}')
 
     async def _get_feeds(self):
+        if self.dataframe is None:
+            self._load_data()
         if self.row_id >= len(self.dataframe):
             raise EOFError()
         req_tfsecs = self.states[0].tf_secs

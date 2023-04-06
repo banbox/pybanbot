@@ -51,12 +51,8 @@ class BackTest(Trader):
     async def run(self):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
-        set_context(f'BTC/TUSD/1m')
         self.init()
-        cur_time = btime.time()
-        await self._loop_tasks([
-            [self.data_hold.process, self.data_hold.min_interval, cur_time],
-        ])
+        await self._loop_tasks()
         # 关闭未完成订单
         await self.cleanup()
         self._calc_result_done()

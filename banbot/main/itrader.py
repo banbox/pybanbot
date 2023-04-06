@@ -98,11 +98,23 @@ class Trader:
 
         Thread(target=handle, daemon=True).start()
 
-    async def _loop_tasks(self, biz_list):
+    async def _loop_tasks(self, biz_list: List[List[Callable, float, float]] = None):
         '''
-        这里不能执行耗时的异步任务（比如watch_balance），
+        这里不能执行耗时的异步任务（比如watch_balance）
+        :param biz_list: [(func, interval, start_delay), ...]
         :return:
         '''
+        if not biz_list:
+            biz_list = []
+        # 先调用一次数据加载，确保预热阶段、数据加载等应用完成
+        await self.data_hold.first_call(self._warmup_num)
+        # 将第三个参数改为期望下次执行时间
+        cur_time = btime.time()
+        data_intv = self.data_hold.min_interval
+        biz_list.append([self.data_hold.process, data_intv, data_intv])
+        for job in biz_list:
+            job[2] += cur_time
+        # 轮询执行任务
         while BotGlobal.state == BotState.RUNNING:
             live_mode = btime.run_mode in TRADING_MODES
             wait_list = sorted(biz_list, key=lambda x: x[2])
