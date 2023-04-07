@@ -19,7 +19,8 @@ class Trader:
         BotGlobal.state = BotState.RUNNING
         self.config = config
         self.name = config.get('name', 'noname')
-        logger.info(f'started bot:   >>>  {self.name}  <<<')
+        if btime.run_mode in TRADING_MODES:
+            logger.info(f'started bot:   >>>  {self.name}  <<<')
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
         self.order_hold: OrderManager = None

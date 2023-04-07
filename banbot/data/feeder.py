@@ -133,7 +133,7 @@ class LocalPairDataFeeder(PairDataFeeder):
         if not self.data_path:
             raise ValueError(f'no data found, try: {try_list} in {self.data_dir}')
 
-    def _load_data(self):
+    def load_data(self):
         import pandas as pd
         logger.info(f'loading data from {self.data_path}')
         df = pd.read_feather(self.data_path)
@@ -150,10 +150,11 @@ class LocalPairDataFeeder(PairDataFeeder):
                 tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
                 raise ValueError(f'no data found after truncate from {tfrom} to {tto}')
         self.dataframe = df
+        return df
 
     async def _get_feeds(self):
         if self.dataframe is None:
-            self._load_data()
+            self.load_data()
         if self.row_id >= len(self.dataframe):
             raise EOFError()
         req_tfsecs = self.states[0].tf_secs

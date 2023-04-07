@@ -32,10 +32,6 @@ class BTAnalysis:
             data['orders'] = [InOutOrder(**od) for od in data['orders']]
             return BTAnalysis(**data)
 
-    async def to_dataframe(self) -> DataFrame:
-        from banbot.optmize.backtest import BackTest
-        return await BackTest.load_data()
-
     def to_plot(self) -> List[dict]:
         return [dict(
             col='open',
@@ -45,5 +41,5 @@ class BTAnalysis:
             enter_tag=[od.enter_tag for od in self.orders],
             exit_tag=[od.exit_tag for od in self.orders],
             enter_price=[od.enter.price for od in self.orders],
-            exit_price=[od.exit.price for od in self.orders],
+            exit_price=[(od.exit.price if od.exit else od.enter.price) for od in self.orders],
         )]

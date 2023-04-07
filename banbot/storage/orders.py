@@ -142,9 +142,12 @@ class InOutOrder:
         self.strategy: str = kwargs.get('strategy')
         self.key = f'{self.symbol}_{self.enter_tag}_{self.strategy}'
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
-        self.enter: Order = Order(**enter_kwargs, inout_key=self.key, enter=True)
-        # exit_kwargs = del_dict_prefix(kwargs, 'exit_')
+        enter_kwargs['inout_key'] = self.key
+        self.enter: Order = Order(**enter_kwargs, enter=True)
         self.exit: Optional[Order] = None
+        if 'exit_amount' in kwargs:
+            exit_kwargs = del_dict_prefix(kwargs, 'exit_')
+            self.exit = Order(**exit_kwargs)
 
         self.stoploss: float = kwargs.get('stoploss')
         self.profit_rate: float = kwargs.get('profit_rate', 0.0)

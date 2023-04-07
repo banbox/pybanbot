@@ -6,26 +6,18 @@
 from banbot.storage.orders import *
 
 
-def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, loss_thres: List[float] = None,
-                    back_rates: List[float] = None) -> Optional[str]:
-    '''
-    跟踪止损。
-    3周期内，价格跌破bar_len出场
-    3-5周期内收益为0出场；
-    5-10周期内（或价格突破bar_len的1.5倍）跌破最高收益的50%出场
-    10-15周期内（或价格突破bar_len的2倍）跌破最高收益的30%出场
-    >15周期内（或价格突破bar_len的3.6倍）跌破最高收益的20%出场
-    :param arr: K线数据
-    :param od: 订单对象
-    :param odlens: 周期分割点，4个，分割出5个区间，默认：3,5,10,15
-    :param loss_thres: 5个区间的价格止损倍数（基于bar_len），默认：-1, 0, 1.5, 2, 3.6
-    :param back_rates: 回撤比率。默认：0.47, 0.28, 0.18
-    :return:
-    '''
-    elp_num = bar_num.get() - od.enter_at
+def trail_info(arr: np.ndarray, elp_num: int, enter_price: float):
     max_price = np.max(arr[-elp_num:, hcol])
     cur_close = arr[-1, ccol]
-    max_loss = min(cur_close - od.enter.price, cur_close - max_price)
+    max_loss = cur_close - max(enter_price, max_price)
+    dust = min(0.00001, cur_close * 0.0001)
+    max_updiff = max(dust, max_price - enter_price)
+    back_rate = (max_price - cur_close) / max_updiff
+    return max_loss, max_updiff, back_rate
+
+
+def trail_stop_loss_core(elp_num: int, max_up: float, max_loss: float, back_rate: float,
+                         odlens: List[int] = None, loss_thres: List[float] = None, back_rates: List[float] = None):
     bar_len = to_pytypes(LongVar.get(LongVar.bar_len).val)
     if odlens:
         flen, slen, mlen, llen = odlens
@@ -41,12 +33,30 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
         return 'loss6'
     if not back_rates:
         back_rates = 0.47, 0.28, 0.18
-    dust = min(0.00001, cur_close * 0.0001)
-    max_change = max(dust, max_price - od.enter.price)
-    back_rate = (max_price - cur_close) / max_change
-    if back_rate >= back_rates[0] and (slen < elp_num <= mlen or max_change > bar_len * pf_1):
+    if back_rate >= back_rates[0] and (slen < elp_num <= mlen or max_up > bar_len * pf_1):
         return 'back.5'
-    elif back_rate >= back_rates[1] and (mlen < elp_num <= llen or max_change > bar_len * pf_2):
+    elif back_rate >= back_rates[1] and (mlen < elp_num <= llen or max_up > bar_len * pf_2):
         return 'back.3'
-    elif back_rate >= back_rates[2] and (llen < elp_num or max_change > bar_len * pf_3):
+    elif back_rate >= back_rates[2] and (llen < elp_num or max_up > bar_len * pf_3):
         return 'back.2'
+
+
+def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, odlens: List[int] = None,
+                    loss_thres: List[float] = None, back_rates: List[float] = None) -> Optional[str]:
+    '''
+    跟踪止损。
+    3周期内，价格跌破bar_len出场
+    3-5周期内收益为0出场；
+    5-10周期内（或价格突破bar_len的1.5倍）跌破最高收益的50%出场
+    10-15周期内（或价格突破bar_len的2倍）跌破最高收益的30%出场
+    >15周期内（或价格突破bar_len的3.6倍）跌破最高收益的20%出场
+    :param arr: K线数据
+    :param enter_price: 订单对象
+    :param elp_num:
+    :param odlens: 周期分割点，4个，分割出5个区间，默认：3,5,10,15
+    :param loss_thres: 5个区间的价格止损倍数（基于bar_len），默认：-1, 0, 1.5, 2, 3.6
+    :param back_rates: 回撤比率。默认：0.47, 0.28, 0.18
+    :return:
+    '''
+    max_loss, max_up, back_rate = trail_info(arr, elp_num, enter_price)
+    return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens, loss_thres, back_rates)
