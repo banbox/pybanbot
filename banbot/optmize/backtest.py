@@ -36,7 +36,7 @@ class BackTest(Trader):
             self.first_data = False
         else:
             self.close_price = row[ccol]
-            self.result['date_to'] = btime.to_datestr(row[0])
+            self.result['date_to'] = row[0]
         await super(BackTest, self).on_data_feed(pair, timeframe, row)
 
     def init(self):
@@ -74,6 +74,7 @@ class BackTest(Trader):
 
     def _calc_result_done(self):
         quote_s = 'TUSD'
+        self.result['date_to'] = btime.to_datestr(self.result['date_to'])
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
         his_orders = self.order_hold.his_list

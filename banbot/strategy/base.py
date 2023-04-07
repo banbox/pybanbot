@@ -26,7 +26,6 @@ def append_new_bar(row: np.ndarray) -> np.ndarray:
     else:
         result = np.append(result, exp_crow, axis=0)
     bar_arr.set(result)
-    bar_end_time.set(btime.to_datestr(row[0] / 1000 + timeframe_secs.get() - 1))
     LongVar.update(result)
     return result
 

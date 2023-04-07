@@ -150,8 +150,10 @@ class InOutOrder:
         self.profit_rate: float = kwargs.get('profit_rate', 0.0)
         self.profit: float = kwargs.get('profit', 0.0)
 
-    def can_close(self):
-        cur_bar_num = get_context(f'{self.symbol}/{self.timeframe}')[bar_num]
+    def can_close(self, ctx: Optional[Context] = None):
+        if not ctx:
+            ctx = get_context(f'{self.symbol}/{self.timeframe}')
+        cur_bar_num = ctx[bar_num]
         return self.status > InOutStatus.Init and not self.exit_tag and cur_bar_num > self.enter_at
 
     def pending_type(self, timeouts: int):
@@ -199,7 +201,7 @@ class InOutOrder:
             ))
             if not kwargs.get('amount'):
                 # 未提供时，默认全部卖出
-                kwargs['amount'] = self.enter.amount
+                kwargs['amount'] = self.enter.filled
             self.exit = Order(**kwargs)
         else:
             self.exit.update(**kwargs)

@@ -31,7 +31,6 @@ timeframe_secs = ContextVar('timeframe_secs')
 pair_state = ContextVar('bar_state')
 bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
-bar_end_time = ContextVar('bar_end_time')
 _symbol_ctx: Dict[str, Context] = dict()
 symbol_tf.set('')
 # 几个常用列的索引
@@ -79,7 +78,6 @@ def set_context(symbol: str):
         bar_num.set(0)
         pair_state.set(dict())
         bar_arr.set([])
-        bar_end_time.set('')
         timeframe_secs.set(0)
         return
     if symbol not in _symbol_ctx:
@@ -89,7 +87,6 @@ def set_context(symbol: str):
         bar_num.set(0)
         pair_state.set(dict())
         bar_arr.set([])
-        bar_end_time.set('')
         timeframe_secs.set(timeframe_to_seconds(tf))
         _symbol_ctx[symbol] = copy_context()
     else:

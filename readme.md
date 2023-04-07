@@ -12,6 +12,14 @@
 numpy中涉及循环的，尽量使用numba
 
 
+# 性能测试优化
+如需测试各个函数耗时，可在`cmds/entrys.py`中执行下面命令：
+```python
+import cProfile
+cProfile.runctx('asyncio.run(backtesting.run())', globals(), locals(), sort='tottime')
+```
+
+
 # 部署
 ```shell
 # 启动机器人

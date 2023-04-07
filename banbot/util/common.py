@@ -74,8 +74,8 @@ class TradeLogger(logging.Logger):
         from banbot.util import btime
         if btime.run_mode not in btime.TRADING_MODES:
             return
-        from banbot.bar_driven.tainds import symbol_tf, bar_end_time
-        prefix = f'{bar_end_time.get()}/{symbol_tf.get()} '
+        from banbot.bar_driven.tainds import symbol_tf
+        prefix = symbol_tf.get() + ' '
         self.info(prefix + msg, *args, **kwargs)
 
 

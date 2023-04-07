@@ -72,7 +72,7 @@ class OrderManager(metaclass=SingletonArg):
         return pair not in self.forbid_pairs
 
     async def try_dump(self):
-        if not self.dump_path:
+        if not self.dump_path or btime.run_mode not in TRADING_MODES:
             return
         try:
             result = dict(
@@ -229,8 +229,15 @@ class OrderManager(metaclass=SingletonArg):
                                pair: str = None) -> List[InOutOrder]:
         order_list = self.get_open_orders(strategy, pair)
         result = []
+        is_force = exit_tag == 'force_exit'
         for od in order_list:
             ctx = get_context(f'{od.symbol}/{od.timeframe}')
+            if not od.can_close(ctx):
+                if not is_force:
+                    continue
+                if not od.enter.filled:
+                    del self.open_orders[od.key]
+                    continue
             if await self.exit_order(ctx, od, exit_tag, price):
                 result.append(od)
         return result
