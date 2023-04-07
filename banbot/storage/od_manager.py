@@ -371,6 +371,7 @@ class LiveOrderManager(OrderManager):
         super(LiveOrderManager, self).__init__(config, exchange.name, wallets, data_hd, callback)
         self.exchange = exchange
         self.exg_orders: Dict[str, Order] = dict()
+        self.unmatch_trades: Dict[str, dict] = dict()
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
@@ -479,7 +480,8 @@ class LiveOrderManager(OrderManager):
                 del self.exg_orders[f'{od.symbol}_{sub_od.order_id}']
             sub_od.trades.extend(order['trades'])
             sub_od.order_id = order["id"]
-            self.exg_orders[f'{od.symbol}_{sub_od.order_id}'] = sub_od
+            exg_key = f'{od.symbol}_{sub_od.order_id}'
+            self.exg_orders[exg_key] = sub_od
             logger.info(f'create order: {od.symbol} {sub_od.order_id} {order}')
             order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))
             if filled > 0:
@@ -501,6 +503,12 @@ class LiveOrderManager(OrderManager):
                     logger.warning(f'{od} is {order_status} by {self.name}, no filled')
             if od.status == InOutStatus.FullExit:
                 self._finish_order(od)
+            if self.unmatch_trades.get(exg_key):
+                trade = self.unmatch_trades.pop(exg_key)
+                if sub_od.status == OrderStatus.Close:
+                    return
+                logger.info(f'exec unmatch trade: {trade}')
+                await self._update_order(sub_od, trade)
 
     def _finish_order(self, od: InOutOrder):
         super(LiveOrderManager, self)._finish_order(od)
@@ -580,9 +588,16 @@ class LiveOrderManager(OrderManager):
         for data in trades:
             key = f"{data['symbol']}_{data['order']}"
             if key not in self.exg_orders:
-                logger.warning(f'update order {key} not found in {self.name} {self.exg_orders.keys()}')
+                self.unmatch_trades[key] = data
                 continue
             await self._update_order(self.exg_orders[key], data)
+        exp_unmatchs = []
+        for key, trade in list(self.unmatch_trades.items()):
+            if btime.time() - trade['timestamp'] / 1000 >= 10:
+                exp_unmatchs.append(trade)
+                del self.unmatch_trades[key]
+        if exp_unmatchs:
+            logger.warning(f'expired unmatch orders: {exp_unmatchs}')
 
     @loop_forever
     async def trail_open_orders_forever(self):
