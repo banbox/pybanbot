@@ -159,13 +159,13 @@ class LocalPairDataFeeder(PairDataFeeder):
             raise EOFError()
         req_tfsecs = self.states[0].tf_secs
         if req_tfsecs == self.fetch_tfsecs:
-            ret_arr = self.dataframe.iloc[self.row_id].to_list()
+            ret_arr = [self.dataframe.iloc[self.row_id].values.tolist()]
             self.row_id += 1
         else:
             back_len = round(req_tfsecs / self.fetch_tfsecs)
-            ret_arr = self.dataframe.iloc[self.row_id: self.row_id + back_len].to_list()
+            ret_arr = self.dataframe.iloc[self.row_id: self.row_id + back_len].values.tolist()
             self.row_id += back_len
-        return [ret_arr], self.fetch_tfsecs
+        return ret_arr, self.fetch_tfsecs
 
 
 class LivePairDataFeader(PairDataFeeder):

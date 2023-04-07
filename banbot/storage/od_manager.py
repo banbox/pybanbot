@@ -36,9 +36,10 @@ class OrderBook():
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, config: dict, exg_name: str, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
         self.config = config
-        self.name = exg_name
+        self.name = exchange.name
+        self.exchange = exchange
         self.wallets = wallets
         self.data_hold = data_hd
         self.prices = dict()  # 所有产品对法币的价格
@@ -151,7 +152,12 @@ class OrderManager(metaclass=SingletonArg):
         quote_amount = enter_price * od.enter.amount
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: od.enter.amount})
+        fees = self.exchange.calc_funding_fee(od.enter)
+        if fees['rate']:
+            od.enter.fee = fees['rate']
+            od.enter.fee_type = fees['currency']
+        base_amt = od.enter.amount * (1 - od.enter.fee)
+        self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
         od.status = InOutStatus.FullEnter
         od.enter_at = ctx[bar_num]
         od.enter.filled = od.enter.amount
@@ -159,16 +165,20 @@ class OrderManager(metaclass=SingletonArg):
         od.enter.status = OrderStatus.Close
         if not od.enter.price:
             od.enter.price = enter_price
-        # TODO: 根据交易对情况设置手续费
         await self._fire(od, True)
         await self.try_dump()
 
     async def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
         quote_amount = exit_price * od.enter.amount
+        fees = self.exchange.calc_funding_fee(od.exit)
+        if fees['rate']:
+            od.exit.fee = fees['rate']
+            od.exit.fee_type = fees['currency']
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        self.wallets.update_wallets(**{quote_s: quote_amount, base_s: -od.enter.amount})
+        quote_amt = quote_amount * (1 - od.exit.fee)
+        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.enter.amount})
         od.status = InOutStatus.FullExit
         od.exit_at = ctx[bar_num]
         od.update_exit(
@@ -177,7 +187,6 @@ class OrderManager(metaclass=SingletonArg):
             filled=od.enter.amount,
             average=exit_price,
         )
-        # TODO: 根据交易对情况设置手续费
         self._finish_order(od)
         await self._fire(od, False)
         await self.try_dump()
@@ -277,12 +286,14 @@ class OrderManager(metaclass=SingletonArg):
         if od.exit:
             del od.exit.lock
             od.exit.trades.clear()
-        od.profit_rate = float(od.exit.price / od.enter.price) - 1
-        od.profit = float((od.exit.price - od.enter.price) * od.enter.amount)
-        if self.pair_fee_limits and od.enter.fee and od.symbol not in self.forbid_pairs\
-                and od.enter.fee > self.pair_fee_limits.get(od.symbol, 0):
-            self.forbid_pairs.add(od.symbol)
-            logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
+        fee_rate = od.enter.fee + od.exit.fee
+        od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
+        od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
+        if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
+            limit_fee = self.pair_fee_limits.get(od.symbol)
+            if limit_fee is not None and fee_rate > limit_fee * 2:
+                self.forbid_pairs.add(od.symbol)
+                logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
         self.his_list.append(od)
 
     def update_by_bar(self, pair_arr: np.ndarray):
@@ -368,7 +379,7 @@ class OrderManager(metaclass=SingletonArg):
 class LiveOrderManager(OrderManager):
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
                  callback: Callable):
-        super(LiveOrderManager, self).__init__(config, exchange.name, wallets, data_hd, callback)
+        super(LiveOrderManager, self).__init__(config, exchange, wallets, data_hd, callback)
         self.exchange = exchange
         self.exg_orders: Dict[str, Order] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
@@ -396,7 +407,8 @@ class LiveOrderManager(OrderManager):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
         candle = self.data_hold.get_latest_ohlcv(pair)
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
-        fees = self.exchange.calc_funding_fee(pair, 'limit', 'buy', vol_amount, close_price)
+        od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
+        fees = self.exchange.calc_funding_fee(od)
         if fees['rate'] > self.max_market_rate and btime.run_mode in TRADING_MODES:
             # 手续费率超过指定市价单费率，使用限价单
             # 取过去300s数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
@@ -488,8 +500,8 @@ class LiveOrderManager(OrderManager):
                 filled_price = safe_value_fallback(order, 'average', 'price', sub_od.price)
                 sub_od.update(average=filled_price, filled=filled, status=OrderStatus.PartOk)
                 od.status = InOutStatus.PartEnter if is_enter else InOutStatus.PartExit
-                if fee and fee.get('cost'):
-                    sub_od.fee = fee.get('cost')
+                if fee and fee.get('rate'):
+                    sub_od.fee = fee.get('rate')
                     sub_od.fee_type = fee.get('currency')
                 # 下单后立刻有成交的，认为是taker方（ccxt返回的信息中未明确）
                 fee_key = f'{od.symbol}_taker'
@@ -546,14 +558,14 @@ class LiveOrderManager(OrderManager):
         inout_od = self.open_orders[od.inout_key]
         if state in {'FILLED', 'PARTIALLY_FILLED'}:
             od_status = OrderStatus.Close if state == 'FILLED' else OrderStatus.PartOk
-            filled, total_cost, fee_val = float(info['z']), float(info['Z']), float(info['n'])
+            filled, total_cost = float(info['z']), float(info['Z'])
+            fee_val, last_amt = float(info['n']), float(info['l'])
             kwargs = dict(status=od_status, order_type=info['o'], filled=filled, average=total_cost/filled)
             if od_status == OrderStatus.Close:
                 kwargs['price'] = kwargs['average']
-            if info['N']:
-                kwargs['fee_type'] = info['N']
             if fee_val:
-                kwargs['fee'] = od.fee + fee_val
+                kwargs['fee_type'] = info['N']
+                kwargs['fee'] = fee_val / last_amt
             od.update(**kwargs)
             mtaker = 'maker' if info['m'] else 'taker'
             fee_key = f'{od.symbol}_{mtaker}'

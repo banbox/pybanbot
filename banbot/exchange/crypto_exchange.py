@@ -16,7 +16,7 @@ from banbot.util.common import logger
 from banbot.config.consts import *
 from banbot.util import btime
 from banbot.util.misc import *
-import numpy as np
+from banbot.storage.orders import Order
 from typing import *
 
 
@@ -112,9 +112,10 @@ class CryptoExchange:
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.monotonic() - 7200
+        self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
 
     async def load_markets(self):
-        if btime.run_mode not in TRADING_MODES or time.monotonic() - self.markets_at < 1800:
+        if time.monotonic() - self.markets_at < 1800:
             return
         self.markets_at = time.monotonic()
         markets = await self.api_async.load_markets()
@@ -123,12 +124,21 @@ class CryptoExchange:
         _copy_markets(self.api_async, self.api)
         logger.info(f'{len(markets)} markets loaded for {self.api.name}')
 
-    def calc_funding_fee(self, symbol: str, od_type: str, side: str, amount: float, price: float, is_taker=True):
-        taker_maker = 'maker' if is_taker else 'taker'
-        cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
+    def calc_funding_fee(self, od: Order):
+        '''
+        {'type': 'taker', 'currency': 'USDT', 'rate': 0.001, 'cost': 0.029733297910755734}
+        :param od:
+        :return:
+        '''
+        taker_maker = 'maker' if od.order_type == 'limit' else 'taker'
+        cache = self.pair_fees.get(f'{od.symbol}_{taker_maker}')
         if cache:
-            return dict(rate=cache[1])
-        return self.api_async.calculate_fee(symbol, od_type, side, amount, price, taker_maker)
+            return dict(rate=cache[1], currency=od.symbol.split('/')[0])
+        if self.pair_fee_limits and btime.run_mode != RunMode.LIVE:
+            fee_rate = self.pair_fee_limits.get(od.symbol)
+            if fee_rate is not None:
+                return dict(rate=fee_rate, currency=od.symbol.split('/')[0])
+        return self.api_async.calculate_fee(od.symbol, od.order_type, od.side, od.amount, od.price, taker_maker)
 
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:

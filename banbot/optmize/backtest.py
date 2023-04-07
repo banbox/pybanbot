@@ -13,9 +13,9 @@ class BackTest(Trader):
     def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
-        exg_name = config['exchange']['name']
+        self.exchange = CryptoExchange(config)
         self.data_hold = LocalDataProvider(config, self.on_data_feed)
-        self.order_hold = OrderManager(config, exg_name, self.wallets, self.data_hold, self.order_callback)
+        self.order_hold = OrderManager(config, self.exchange, self.wallets, self.data_hold, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
@@ -39,7 +39,9 @@ class BackTest(Trader):
             self.result['date_to'] = row[0]
         await super(BackTest, self).on_data_feed(pair, timeframe, row)
 
-    def init(self):
+    async def init(self):
+        with btime.TempRunMode(RunMode.DRY_RUN):
+            await self.exchange.load_markets()
         self.min_balance = self.stake_amount
         self.max_balance = self.stake_amount
         for pair, tf in self.pairlist:
@@ -50,7 +52,7 @@ class BackTest(Trader):
     async def run(self):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
-        self.init()
+        await self.init()
         await self._loop_tasks()
         # 关闭未完成订单
         await self.cleanup()
@@ -86,8 +88,10 @@ class BackTest(Trader):
         self.result['start_balance'] = f"{start_balance:.3f} {quote_s}"
         self.result['abs_profit'] = f"{abs_profit:.3f} {quote_s}"
         self.result['total_profit_pct'] = f"{abs_profit / start_balance * 100:.2f}%"
-        tot_amount = sum(r.enter.amount * r.enter.price for r in his_orders)
         if his_orders:
+            total_fee = sum((od.enter.fee + od.exit.fee) * od.enter.amount * od.enter.price for od in his_orders)
+            self.result['total_fee'] = f"{total_fee:.3f} {quote_s}"
+            tot_amount = sum(r.enter.amount * r.enter.price for r in his_orders)
             self.result['avg_profit_pct'] = f"{abs_profit / start_balance / len(his_orders) * 1000:.3f}%o"
             self.result['avg_stake_amount'] = f"{tot_amount / len(his_orders):.3f} {quote_s}"
             self.result['tot_stake_amount'] = f"{tot_amount:.3f} {quote_s}"
@@ -95,6 +99,7 @@ class BackTest(Trader):
             self.result['best_trade'] = f"{od_sort[-1].symbol} {od_sort[-1].profit_rate * 100:.2f}%"
             self.result['worst_trade'] = f"{od_sort[0].symbol} {od_sort[0].profit_rate * 100:.2f}%"
         else:
+            self.result['total_fee'] = f"0 {quote_s}"
             self.result['avg_profit_pct'] = '0'
             self.result['avg_stake_amount'] = f"0 {quote_s}"
             self.result['tot_stake_amount'] = f"0 {quote_s}"
