@@ -12,9 +12,9 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
     跟踪止损。
     3周期内，价格跌破bar_len出场
     3-5周期内收益为0出场；
-    5-10周期内跌破最高收益的50%出场（价格突破bar_len的1.5倍时也执行此项）
-    10-15周期内跌破最高收益的30%出场（价格突破bar_len的2倍时也执行此项）
-    >15周期内跌破最高收益的20%出场（价格突破bar_len的3.6倍时也执行此项）
+    5-10周期内（或价格突破bar_len的1.5倍）跌破最高收益的50%出场
+    10-15周期内（或价格突破bar_len的2倍）跌破最高收益的30%出场
+    >15周期内（或价格突破bar_len的3.6倍）跌破最高收益的20%出场
     :param arr: K线数据
     :param od: 订单对象
     :param odlens: 周期分割点，4个，分割出5个区间，默认：3,5,10,15
@@ -23,11 +23,14 @@ def trail_stop_loss(arr: np.ndarray, od: InOutOrder, odlens: List[int] = None, l
     :return:
     '''
     elp_num = bar_num.get() - od.enter_at
-    max_price = np.max(arr[-elp_num:, ccol])
+    max_price = np.max(arr[-elp_num:, hcol])
     cur_close = arr[-1, ccol]
     max_loss = min(cur_close - od.enter.price, cur_close - max_price)
     bar_len = to_pytypes(LongVar.get(LongVar.bar_len).val)
-    flen, slen, mlen, llen = odlens if odlens else 3, 5, 10, 15
+    if odlens:
+        flen, slen, mlen, llen = odlens
+    else:
+        flen, slen, mlen, llen = 3, 5, 10, 15
     if loss_thres:
         pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres
     else:

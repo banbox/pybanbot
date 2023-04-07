@@ -82,7 +82,7 @@ class BackTest(Trader):
         fin_balance = self.wallets.get(quote_s)[0]
         start_balance = self.result['start_balance']
         self.result['final_balance'] = f"{fin_balance:.3f} {quote_s}"
-        abs_profit = fin_balance - start_balance
+        abs_profit = sum(od.profit for od in his_orders) if his_orders else 0
         self.result['start_balance'] = f"{start_balance:.3f} {quote_s}"
         self.result['abs_profit'] = f"{abs_profit:.3f} {quote_s}"
         self.result['total_profit_pct'] = f"{abs_profit / start_balance * 100:.2f}%"

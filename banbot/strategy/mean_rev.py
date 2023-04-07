@@ -75,7 +75,11 @@ class MeanRev(BaseStrategy):
         self._is_debug = self.debug_ids and bar_num.get() - 1 in self.debug_ids
         self.patterns.append(detect_pattern(arr))
         # 记录均线极值点
-        log_ma_extrems(self.extrems_ma5, self.extrems_ma20, self.extrems_ma120, self.ma5, self.ma20, self.ma120)
+        log_ma_extrems([
+            (self.extrems_ma5, self.ma5, 2),
+            (self.extrems_ma20, self.ma20, 1),
+            (self.extrems_ma120, self.ma120, 0.5),
+        ])
         # 记录MA5和MA20的交叉点
         self._log_ma_cross(self.ma5, self.ma20)
 

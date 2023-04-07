@@ -28,20 +28,18 @@ def _log_extrem(log_list: list, ma: StaSMA, min_dist: float = 0):
         del log_list[:50]
 
 
-def log_ma_extrems(log_ma5, log_ma20, log_ma120, ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
+def log_ma_extrems(ma_list: List[Tuple[List, StaSMA, float]]):
     '''
     检查当前是否出现极值点并记录。
     :return:
     '''
     bar_len_val = LongVar.get(LongVar.bar_len).val
-    if len(ma120.arr) < 3 or np.isnan(bar_len_val):
+    if len(ma_list[-1][1].arr) < 3 or np.isnan(bar_len_val):
         return
-    if not np.isnan(ma5.arr[-3]):
-        _log_extrem(log_ma5, ma5, bar_len_val * 2)
-    if not np.isnan(ma20.arr[-3]):
-        _log_extrem(log_ma20, ma20, bar_len_val)
-    if not np.isnan(ma120.arr[-3]):
-        _log_extrem(log_ma120, ma120, bar_len_val * 0.5)
+    for item in ma_list:
+        log_ma, ma, fac = item
+        if not np.isnan(ma.arr[-3]):
+            _log_extrem(log_ma, ma, bar_len_val * fac)
 
 
 def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll):
