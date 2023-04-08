@@ -691,7 +691,7 @@ class LiveOrderManager(OrderManager):
                     if sell_price >= od.exit.price:
                         continue
                     od.exit.timestamp = btime.time()
-                    logger.info(f'change exit order {od.key} price: {od.exit.price} -> {sell_price}')
+                    logger.info(f'change price exit {od.key} price: {od.exit.price} -> {sell_price}')
                     od.exit.price = sell_price
                     if not od.exit.order_id:
                         await self._exit_order(od)
@@ -704,7 +704,7 @@ class LiveOrderManager(OrderManager):
                     if buy_price <= od.enter.price:
                         continue
                     od.enter.timestamp = btime.time()
-                    logger.info(f'change enter order {od.key} price: {od.enter.price} -> {buy_price}')
+                    logger.info(f'change price enter {od.key} price: {od.enter.price} -> {buy_price}')
                     od.enter.price = buy_price
                     if not od.enter.order_id:
                         await self._enter_order(od)
