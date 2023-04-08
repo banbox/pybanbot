@@ -510,6 +510,36 @@ class LiveOrderManager(OrderManager):
             sub_od.trades.append(trade)
         return len(trades) - handled_cnt, handled_cnt
 
+    def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
+        sub_od = od.enter if is_enter else od.exit
+        order_status, fee, filled = data.get('status'), data.get('fee'), float(data.get('filled', 0))
+        if filled > 0:
+            filled_price = safe_value_fallback(data, 'average', 'price', sub_od.price)
+            sub_od.update(average=filled_price, filled=filled, status=OrderStatus.PartOk)
+            od.status = InOutStatus.PartEnter if is_enter else InOutStatus.PartExit
+            if fee and fee.get('rate'):
+                sub_od.fee = fee.get('rate')
+                sub_od.fee_type = fee.get('currency')
+            # 下单后立刻有成交的，认为是taker方（ccxt返回的信息中未明确）
+            fee_key = f'{od.symbol}_taker'
+            self.exchange.pair_fees[fee_key] = sub_od.fee_type, sub_od.fee
+        if order_status in {'expired', 'rejected', 'closed', 'canceled'}:
+            sub_od.status = OrderStatus.Close
+            if sub_od.filled and sub_od.average:
+                sub_od.price = sub_od.average
+            if filled == 0:
+                if is_enter:
+                    # 入场订单，0成交，被关闭；整体状态为：完全退出
+                    od.status = InOutStatus.FullExit
+                else:
+                    # 出场订单，0成交，被关闭，整体状态为：已入场
+                    od.status = InOutStatus.FullEnter
+                logger.warning(f'{od} is {order_status} by {self.name}, no filled')
+            else:
+                od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
+        if od.status == InOutStatus.FullExit:
+            self._finish_order(od)
+
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
         async with sub_od.lock:
@@ -521,37 +551,9 @@ class LiveOrderManager(OrderManager):
             self.exg_orders[exg_key] = sub_od
             logger.info(f'create order: {od.symbol} {sub_od.order_id} {order}')
             new_num, old_num = self._check_new_trades(sub_od, order['trades'])
-            if not new_num:
-                await self._consume_unmatchs(sub_od)
-                return
-            order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))
-            if filled > 0:
-                filled_price = safe_value_fallback(order, 'average', 'price', sub_od.price)
-                sub_od.update(average=filled_price, filled=filled, status=OrderStatus.PartOk)
-                od.status = InOutStatus.PartEnter if is_enter else InOutStatus.PartExit
-                if fee and fee.get('rate'):
-                    sub_od.fee = fee.get('rate')
-                    sub_od.fee_type = fee.get('currency')
-                # 下单后立刻有成交的，认为是taker方（ccxt返回的信息中未明确）
-                fee_key = f'{od.symbol}_taker'
-                self.exchange.pair_fees[fee_key] = sub_od.fee_type, sub_od.fee
-            if order_status in {'expired', 'rejected', 'closed', 'canceled'}:
-                sub_od.status = OrderStatus.Close
-                if sub_od.filled and sub_od.average:
-                    sub_od.price = sub_od.average
-                if filled == 0:
-                    if is_enter:
-                        # 入场订单，0成交，被关闭；整体状态为：完全退出
-                        od.status = InOutStatus.FullExit
-                    else:
-                        # 出场订单，0成交，被关闭，整体状态为：已入场
-                        od.status = InOutStatus.FullEnter
-                    logger.warning(f'{od} is {order_status} by {self.name}, no filled')
-                else:
-                    od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
-            if od.status == InOutStatus.FullExit:
-                self._finish_order(od)
-            await self._consume_unmatchs(sub_od)
+            if new_num:
+                self._update_order_res(od, is_enter, order)
+        await self._consume_unmatchs(sub_od)
 
     def _finish_order(self, od: InOutOrder):
         super(LiveOrderManager, self)._finish_order(od)
