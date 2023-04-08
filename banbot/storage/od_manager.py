@@ -6,6 +6,7 @@
 import asyncio
 
 import aiofiles as aiof
+from collections import OrderedDict
 
 from banbot.storage.orders import *
 from banbot.util.common import logger, SingletonArg
@@ -383,6 +384,7 @@ class LiveOrderManager(OrderManager):
         self.exchange = exchange
         self.exg_orders: Dict[str, Order] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
+        self.handled_trades: Dict[str, int] = OrderedDict()
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
@@ -482,19 +484,43 @@ class LiveOrderManager(OrderManager):
                 exit_ods.append(od)
         return enter_ods, exit_ods
 
+    async def _consume_unmatchs(self, sub_od: Order):
+        for trade in list(self.unmatch_trades.values()):
+            if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
+                continue
+            del self.unmatch_trades[f"{trade['symbol']}_{trade['id']}"]
+            if sub_od.status == OrderStatus.Close:
+                continue
+            logger.info(f'exec unmatch trade: {trade}')
+            await self._update_order(sub_od, trade)
+
+    def _check_new_trades(self, sub_od: Order, trades: List[dict]):
+        if not trades:
+            return 0, 0
+        handled_cnt = 0
+        for trade in trades:
+            od_key = f"{trade['symbol']}_{trade['id']}"
+            if od_key in self.handled_trades:
+                handled_cnt += 1
+                continue
+            self.handled_trades[od_key] = 1
+            sub_od.trades.append(trade)
+        return len(trades) - handled_cnt, handled_cnt
+
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
         async with sub_od.lock:
-            if order['trades'] and any(td for td in sub_od.trades if td['id'] == order['trades'][0]['id']):
-                return
             if sub_od.order_id:
                 # 如修改订单价格，order_id会变化
                 del self.exg_orders[f'{od.symbol}_{sub_od.order_id}']
-            sub_od.trades.extend(order['trades'])
             sub_od.order_id = order["id"]
             exg_key = f'{od.symbol}_{sub_od.order_id}'
             self.exg_orders[exg_key] = sub_od
             logger.info(f'create order: {od.symbol} {sub_od.order_id} {order}')
+            new_num, old_num = self._check_new_trades(sub_od, order['trades'])
+            if not new_num:
+                await self._consume_unmatchs(sub_od)
+                return
             order_status, fee, filled = order.get('status'), order.get('fee'), float(order.get('filled', 0))
             if filled > 0:
                 filled_price = safe_value_fallback(order, 'average', 'price', sub_od.price)
@@ -515,12 +541,7 @@ class LiveOrderManager(OrderManager):
                     logger.warning(f'{od} is {order_status} by {self.name}, no filled')
             if od.status == InOutStatus.FullExit:
                 self._finish_order(od)
-            if self.unmatch_trades.get(exg_key):
-                trade = self.unmatch_trades.pop(exg_key)
-                if sub_od.status == OrderStatus.Close:
-                    return
-                logger.info(f'exec unmatch trade: {trade}')
-                await self._update_order(sub_od, trade)
+            await self._consume_unmatchs(sub_od)
 
     def _finish_order(self, od: InOutOrder):
         super(LiveOrderManager, self)._finish_order(od)
@@ -585,8 +606,6 @@ class LiveOrderManager(OrderManager):
 
     async def _update_order(self, od: Order, data: dict):
         async with od.lock:
-            if any(td for td in od.trades if td['id'] == data['id']):
-                return
             od.trades.append(data)
             if self.name.find('binance') >= 0:
                 await self._update_bnb_order(od, data)
@@ -597,17 +616,26 @@ class LiveOrderManager(OrderManager):
     async def listen_orders_forever(self):
         trades = await self.exchange.watch_my_trades()
         logger.info(f'get my trades: {trades}')
+        related_ods = set()
         for data in trades:
-            key = f"{data['symbol']}_{data['order']}"
-            if key not in self.exg_orders:
-                self.unmatch_trades[key] = data
+            trade_key = f"{data['symbol']}_{data['id']}"
+            if trade_key in self.handled_trades:
                 continue
-            await self._update_order(self.exg_orders[key], data)
+            self.handled_trades[trade_key] = 1
+            od_key = f"{data['symbol']}_{data['order']}"
+            if od_key not in self.exg_orders:
+                self.unmatch_trades[trade_key] = data
+                continue
+            sub_od = self.exg_orders[od_key]
+            await self._update_order(sub_od, data)
+            related_ods.add(sub_od)
+        for sub_od in related_ods:
+            await self._consume_unmatchs(sub_od)
         exp_unmatchs = []
-        for key, trade in list(self.unmatch_trades.items()):
+        for trade_key, trade in list(self.unmatch_trades.items()):
             if btime.time() - trade['timestamp'] / 1000 >= 10:
                 exp_unmatchs.append(trade)
-                del self.unmatch_trades[key]
+                del self.unmatch_trades[trade_key]
         if exp_unmatchs:
             logger.warning(f'expired unmatch orders: {exp_unmatchs}')
 
