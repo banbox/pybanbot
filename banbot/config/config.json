@@ -14,7 +14,7 @@
     "1440": 0.1
   },
   "pairlist": [
-    ["ATOM/USDT", "15m"]
+    ["BTC/TUSD", "1m"]
   ],
   "run_policy": [
     {"name": "MACDCross"}

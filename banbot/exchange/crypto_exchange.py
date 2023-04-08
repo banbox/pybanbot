@@ -239,6 +239,9 @@ class CryptoExchange:
     async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
         return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)
 
+    async def cancel_order(self, id: str, symbol: str, params={}):
+        return await self.api_async.cancel_order(id, symbol, params)
+
     async def create_limit_order(self, symbol, side, amount, price, params={}):
         if btime.run_mode != btime.RunMode.LIVE:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
@@ -254,11 +257,14 @@ class CryptoExchange:
             for od in orders:
                 if self.name == 'binance' and not od['clientOrderId'].startswith(self.bot_name):
                     continue
-                res = await self.api_async.cancel_order(od['id'], symbol)
-                if res['status'] != 'canceled':
-                    logger.error(f'cancel order fail: {res}')
+                try:
+                    res = await self.api_async.cancel_order(od['id'], symbol)
+                    if res['status'] != 'canceled':
+                        logger.error(f'cancel order fail: {res}')
+                        continue
+                    success_cnt += 1
+                except ccxt.OrderNotFound:
                     continue
-                success_cnt += 1
         if success_cnt:
             logger.warning(f'canceled {success_cnt} unfill orders')
 

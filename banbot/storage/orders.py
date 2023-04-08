@@ -156,8 +156,7 @@ class InOutOrder:
     def can_close(self, ctx: Optional[Context] = None):
         if not ctx:
             ctx = get_context(f'{self.symbol}/{self.timeframe}')
-        cur_bar_num = ctx[bar_num]
-        return self.status > InOutStatus.Init and not self.exit_tag and cur_bar_num > self.enter_at
+        return not self.exit_tag and ctx[bar_num] > self.enter_at
 
     def pending_type(self, timeouts: int):
         if self.exit and self.exit_tag:
@@ -226,8 +225,6 @@ class InOutOrder:
         '''
         if self.status in {InOutStatus.Init, InOutStatus.FullExit}:
             return
-        if self.status < InOutStatus.FullEnter:
-            self.enter_at = bar_num.get()
         # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
         self.profit = (arr[-1, ccol] - self.enter.price) * self.enter.amount
         self.profit_rate = arr[-1, ccol] / self.enter.price - 1

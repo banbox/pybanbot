@@ -37,7 +37,8 @@ class OrderBook():
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider,
+                 callback: Callable):
         self.config = config
         self.name = exchange.name
         self.exchange = exchange
@@ -141,7 +142,7 @@ class OrderManager(metaclass=SingletonArg):
             strategy=strategy
         )
         self.open_orders[lock_key] = od
-        logger.trade_info(f'order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
+        logger.trade_info(f'enter order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
         await self._enter_order(od)
         return od
 
@@ -267,7 +268,7 @@ class OrderManager(metaclass=SingletonArg):
             price = await run_async(price)
         od.update_exit(price=price)
         cost = od.exit.price * od.exit.amount
-        logger.trade_info(f'exit {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
+        logger.trade_info(f'exit order {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
         await self._exit_order(od)
         return od
 
@@ -295,7 +296,8 @@ class OrderManager(metaclass=SingletonArg):
             if limit_fee is not None and fee_rate > limit_fee * 2:
                 self.forbid_pairs.add(od.symbol)
                 logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
-        self.his_list.append(od)
+        if od.enter.filled > 0:
+            self.his_list.append(od)
 
     def update_by_bar(self, pair_arr: np.ndarray):
         if self.open_orders:
@@ -532,13 +534,20 @@ class LiveOrderManager(OrderManager):
                 # 下单后立刻有成交的，认为是taker方（ccxt返回的信息中未明确）
                 fee_key = f'{od.symbol}_taker'
                 self.exchange.pair_fees[fee_key] = sub_od.fee_type, sub_od.fee
-            if order_status in {'expired', 'rejected', 'closed'}:
+            if order_status in {'expired', 'rejected', 'closed', 'canceled'}:
                 sub_od.status = OrderStatus.Close
                 if sub_od.filled and sub_od.average:
                     sub_od.price = sub_od.average
-                od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
                 if filled == 0:
+                    if is_enter:
+                        # 入场订单，0成交，被关闭；整体状态为：完全退出
+                        od.status = InOutStatus.FullExit
+                    else:
+                        # 出场订单，0成交，被关闭，整体状态为：已入场
+                        od.status = InOutStatus.FullEnter
                     logger.warning(f'{od} is {order_status} by {self.name}, no filled')
+                else:
+                    od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
             if od.status == InOutStatus.FullExit:
                 self._finish_order(od)
             await self._consume_unmatchs(sub_od)
@@ -566,8 +575,21 @@ class LiveOrderManager(OrderManager):
             await self._create_exg_order(od, True)
 
     async def _exit_order(self, od: InOutOrder):
-        if btime.run_mode == btime.RunMode.LIVE:
-            await self._create_exg_order(od, False)
+        if btime.run_mode != btime.RunMode.LIVE:
+            return
+        if od.enter.filled < od.enter.amount:
+            try:
+                res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
+                await self._update_subod_by_ccxtres(od, True, res)
+            except ccxt.OrderNotFound:
+                pass
+            if not od.enter.filled:
+                od.update_exit(price=od.enter.price)
+                self._finish_order(od)
+                return
+            await self._fire(od, True)
+        # 检查入场订单是否已成交，如未成交则直接取消
+        await self._create_exg_order(od, False)
 
     async def _update_bnb_order(self, od: Order, data: dict):
         info = data['info']
