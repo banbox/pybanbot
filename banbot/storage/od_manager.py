@@ -490,8 +490,9 @@ class LiveOrderManager(OrderManager):
         for trade in list(self.unmatch_trades.values()):
             if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
                 continue
-            del self.unmatch_trades[f"{trade['symbol']}_{trade['id']}"]
-            if sub_od.status == OrderStatus.Close:
+            trade_key = f"{trade['symbol']}_{trade['id']}"
+            del self.unmatch_trades[trade_key]
+            if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
             logger.info(f'exec unmatch trade: {trade}')
             await self._update_order(sub_od, trade)

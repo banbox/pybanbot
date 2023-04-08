@@ -20,7 +20,8 @@
     {"name": "MACDCross"}
   ],
   "strategy_paths": [
-    "banbot.strategy.macd_cross"
+    "banbot.strategy.macd_cross",
+    "banbot.strategy.mean_rev"
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

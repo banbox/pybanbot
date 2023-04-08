@@ -234,7 +234,8 @@ class MeanRev(BaseStrategy):
         :param od:
         :return:
         '''
-        return trail_stop_loss(arr, od)
+        elp_num = bar_num.get() - od.enter_at
+        return trail_stop_loss(arr, od.enter.price, elp_num)
         # profit = arr[-1, ccol] - od.price
         # stable_score = profit / LongVar.get(LongVar.sub_malong).val
         # if stable_score < 1:
