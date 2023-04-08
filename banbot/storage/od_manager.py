@@ -580,7 +580,7 @@ class LiveOrderManager(OrderManager):
     async def _exit_order(self, od: InOutOrder):
         if btime.run_mode != btime.RunMode.LIVE:
             return
-        if od.enter.filled < od.enter.amount:
+        if od.enter.filled < od.enter.amount and od.enter.status < OrderStatus.Close:
             try:
                 res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
                 await self._update_subod_by_ccxtres(od, True, res)
