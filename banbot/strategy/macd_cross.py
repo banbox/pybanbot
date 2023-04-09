@@ -13,6 +13,8 @@ class MACDCross(BaseStrategy):
     当MA5处于上升通道，当前bar阳线，且MACD也上升时，入场。
     使用跟踪止损出场
     '''
+    warmup_num = 600
+
     def __init__(self, config: dict):
         super(MACDCross, self).__init__(config)
         self.macd = StaMACD(11, 38, 14)

@@ -71,6 +71,7 @@ class Trader:
             # 模拟模式，填充未成交订单
             await self.order_hold.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:
+            logger.debug(f'bar signals: {enter_list} {exit_list} {ext_tags}')
             enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(
                 pair_tf, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:

@@ -121,14 +121,19 @@ class OrderManager(metaclass=SingletonArg):
 
     async def enter_order(self, ctx: Context, strategy: str, tag: str, cost: float, price: Union[float, Callable]
                           ) -> Optional[InOutOrder]:
+        if btime.run_mode in NORDER_MODES:
+            return
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
         lock_key = f'{pair}_{tag}_{strategy}'
-        if lock_key in self.open_orders or btime.run_mode in NORDER_MODES:
+        if lock_key in self.open_orders:
             # 同一交易对，同一策略，同一信号，只允许一个订单
+            logger.debug(f'order lock, enter forbid: {lock_key}')
             return
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost)
         if not quote_cost or not self.allow_pair(pair):
+            logger.debug(f'wallet empty or pair disable: {quote_cost}')
             return
+        self.open_orders[lock_key] = None
         if callable(price):
             price = await run_async(price)
         amount = quote_cost / price
@@ -458,12 +463,16 @@ class LiveOrderManager(OrderManager):
         pair, _, _, _ = get_cur_symbol(ctx)
         allow_enter = self.allow_pair(pair)
         if not allow_enter and not (exits or exit_keys):
+            logger.debug(f'pair enter disable: {pair} {enters}')
             return
         run_tasks = []
         buy_price, sell_price = self._make_async_price(pair)
-        if allow_enter and enters and btime.run_mode not in NORDER_MODES:
-            for stg_name, enter_tag, cost in enters:
-                run_tasks.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
+        if enters and btime.run_mode not in NORDER_MODES:
+            if allow_enter:
+                for stg_name, enter_tag, cost in enters:
+                    run_tasks.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
+            else:
+                logger.debug(f'pair enter not allow: {enters}')
         if exits:
             for stg_name, exit_tag in exits:
                 for od in self.get_open_orders(stg_name, pair):
