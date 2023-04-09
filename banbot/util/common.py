@@ -103,4 +103,4 @@ def get_logger(level=logging.INFO) -> TradeLogger:
 
 
 logging.setLoggerClass(TradeLogger)
-logger = get_logger()
+logger = get_logger(logging.DEBUG)
