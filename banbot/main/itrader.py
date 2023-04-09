@@ -40,6 +40,7 @@ class Trader:
                 self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
 
     async def on_data_feed(self, pair, timeframe, row: np.ndarray):
+        logger.debug(f'data_feed {pair} {timeframe} {row}')
         pair_tf = f'{pair}/{timeframe}'
         async with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
