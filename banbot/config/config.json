@@ -17,11 +17,12 @@
     ["BTC/TUSD", "1m"]
   ],
   "run_policy": [
-    {"name": "MACDCross"}
+    {"name": "HorzBreak"}
   ],
   "strategy_paths": [
     "banbot.strategy.macd_cross",
-    "banbot.strategy.mean_rev"
+    "banbot.strategy.mean_rev",
+    "banbot.strategy.horz_break"
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/28
 import numpy as np
+import pandas as pd
 
 from banbot.exchange.crypto_exchange import *
 from banbot.exchange.exchange_utils import *
@@ -133,7 +134,7 @@ class LocalPairDataFeeder(PairDataFeeder):
         if not self.data_path:
             raise ValueError(f'no data found, try: {try_list} in {self.data_dir}')
 
-    def load_data(self):
+    def _load_sml_data(self):
         import pandas as pd
         logger.info(f'loading data from {self.data_path}')
         df = pd.read_feather(self.data_path)
@@ -154,7 +155,7 @@ class LocalPairDataFeeder(PairDataFeeder):
 
     async def _get_feeds(self):
         if self.dataframe is None:
-            self.load_data()
+            self._load_sml_data()
         if self.row_id >= len(self.dataframe):
             raise EOFError()
         req_tfsecs = self.states[0].tf_secs
@@ -166,6 +167,24 @@ class LocalPairDataFeeder(PairDataFeeder):
             ret_arr = self.dataframe.iloc[self.row_id: self.row_id + back_len].values.tolist()
             self.row_id += back_len
         return ret_arr, self.fetch_tfsecs
+
+    def load_data(self, timeframe: Optional[str] = None):
+        '''
+        加载指定timeframe的数据，返回DataFrame。仅用于jupyter-lab中测试。
+        :param timeframe:
+        :return:
+        '''
+        if not timeframe:
+            timeframe = self.states[0].timeframe
+        tf_secs = timeframe_to_seconds(timeframe)
+        df = self._load_sml_data()
+        if self.fetch_tfsecs == tf_secs:
+            return df
+        if tf_secs % self.fetch_tfsecs > 0:
+            raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {self.fetch_tfsecs}')
+        details = df.values.tolist()
+        rows = build_ohlcvc(details, tf_secs)
+        return pd.DataFrame(rows[:-1], columns=df.columns.tolist())
 
 
 class LivePairDataFeader(PairDataFeeder):

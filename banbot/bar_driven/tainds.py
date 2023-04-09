@@ -27,8 +27,6 @@ from banbot.util.num_utils import *
 ctx_lock = Lock()
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
-timeframe_secs = ContextVar('timeframe_secs')
-pair_state = ContextVar('bar_state')
 bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
 _symbol_ctx: Dict[str, Context] = dict()
@@ -76,18 +74,12 @@ def set_context(symbol: str):
     if not symbol:
         symbol_tf.set('')
         bar_num.set(0)
-        pair_state.set(dict())
         bar_arr.set([])
-        timeframe_secs.set(0)
         return
     if symbol not in _symbol_ctx:
-        from banbot.exchange.exchange_utils import timeframe_to_seconds
-        base_s, quote_s, tf = symbol.split('/')
         symbol_tf.set(symbol)
         bar_num.set(0)
-        pair_state.set(dict())
         bar_arr.set([])
-        timeframe_secs.set(timeframe_to_seconds(tf))
         _symbol_ctx[symbol] = copy_context()
     else:
         # 从新的上下文恢复上次的状态

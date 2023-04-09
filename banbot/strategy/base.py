@@ -31,6 +31,10 @@ def append_new_bar(row: np.ndarray) -> np.ndarray:
 
 
 class BaseStrategy:
+    '''
+    策略基类。每个交易对，每种时间帧，每个策略，对应一个策略实例。
+    可直接在策略的__init__中存储本策略在此交易对和交易维度上的缓存信息。不会和其他交易对冲突。
+    '''
     warmup_num = 900
     skip_exit_on_enter = True
     skip_enter_on_exit = True
