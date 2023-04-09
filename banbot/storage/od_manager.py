@@ -578,6 +578,7 @@ class LiveOrderManager(OrderManager):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         order = await self.exchange.create_limit_order(od.symbol, side, amount, price)
+        # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         await self._update_subod_by_ccxtres(od, is_enter, order)
         await self._fire(od, is_enter)
         await self.try_dump()
@@ -598,6 +599,7 @@ class LiveOrderManager(OrderManager):
             if not od.enter.filled:
                 od.update_exit(price=od.enter.price)
                 self._finish_order(od)
+                # 这里未入场直接退出的，不应该fire
                 return
             await self._fire(od, True)
         # 检查入场订单是否已成交，如未成交则直接取消
@@ -655,7 +657,6 @@ class LiveOrderManager(OrderManager):
             trade_key = f"{data['symbol']}_{data['id']}"
             if trade_key in self.handled_trades:
                 continue
-            self.handled_trades[trade_key] = 1
             od_key = f"{data['symbol']}_{data['order']}"
             if od_key not in self.exg_orders:
                 self.unmatch_trades[trade_key] = data
@@ -665,6 +666,9 @@ class LiveOrderManager(OrderManager):
             related_ods.add(sub_od)
         for sub_od in related_ods:
             await self._consume_unmatchs(sub_od)
+        if len(self.handled_trades) > 500:
+            cut_keys = list(self.handled_trades.keys())[-300:]
+            self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
         exp_unmatchs = []
         for trade_key, trade in list(self.unmatch_trades.items()):
             if btime.time() - trade['timestamp'] / 1000 >= 10:

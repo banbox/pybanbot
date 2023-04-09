@@ -107,7 +107,6 @@ class Order:
             symbol=self.symbol,
             order_id=self.order_id,
             order_type=self.order_type,
-            inout_key=self.inout_key,
             side=self.side,
             price=to_pytypes(self.price),
             amount=to_pytypes(self.amount),

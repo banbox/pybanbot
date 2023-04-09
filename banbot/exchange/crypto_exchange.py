@@ -118,7 +118,7 @@ class CryptoExchange:
         if time.monotonic() - self.markets_at < 1800:
             return
         self.markets_at = time.monotonic()
-        markets = await self.api_async.load_markets()
+        markets = await self.api_async.load_markets(True)
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)
         _copy_markets(self.api_async, self.api)
