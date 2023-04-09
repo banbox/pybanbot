@@ -78,7 +78,7 @@ class PairDataFeeder:
         elif ohlcvs[0][0] == state.bar_row[0]:
             state.bar_row = ohlcvs[0]
         if ohlcvs[-1][0] > state.bar_row[0] or fetch_intv == state.tf_secs:
-            await self.callback(self.pair, state.timeframe, np.array(state.bar_row))
+            await self.callback(self.pair, state.timeframe, state.bar_row)
             state.bar_row = ohlcvs[-1]
         else:
             # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
@@ -94,7 +94,7 @@ class PairDataFeeder:
             cur_ohlcvs = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
             state.last_check = btime.time()
             if state.bar_row and cur_ohlcvs[-1][0] > state.bar_row[0]:
-                await self.callback(self.pair, state.timeframe, np.array(state.bar_row))
+                await self.callback(self.pair, state.timeframe, state.bar_row)
             state.bar_row = cur_ohlcvs[-1]
 
 
