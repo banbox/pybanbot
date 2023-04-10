@@ -88,7 +88,7 @@ class Order:
         self.price: float = price  # 入场价格，市价单此项为空
         self.amount: float = kwargs['amount']  # 交易量，等同于volume；由于手续费，交易量可能会变化
         self.status: int = kwargs.get('status', OrderStatus.Init)
-        self.filled: float = kwargs.get('filled', 0)  # 已成交数量
+        self.filled: float = kwargs.get('filled', 0)  # 已成交数量，这里不用扣除手续费，完全成交时和amount相等
         self.average: float = kwargs.get('average')  # 平均成交价格
         self.fee: float = kwargs.get('fee', 0)
         self.fee_type: str = kwargs.get('fee_type')
@@ -207,8 +207,8 @@ class InOutOrder:
                 side='sell' if self.enter.side == 'buy' else 'buy',
             ))
             if not kwargs.get('amount'):
-                # 未提供时，默认全部卖出
-                kwargs['amount'] = self.enter.filled
+                # 未提供时，默认全部卖出。（这里模拟手续费扣除）
+                kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)
             self.exit = Order(**kwargs)
         else:
             self.exit.update(**kwargs)

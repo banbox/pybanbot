@@ -280,13 +280,18 @@ class OrderManager(metaclass=SingletonArg):
             return
         od.exit_tag = exit_tag
         od.exit_at = ctx[bar_num]
+        _, base_s, quote_s, _ = get_cur_symbol(ctx)
         if not price:
             # 为提供价格时，以最低价卖出（即吃单方）
             candle = self.data_hold.get_latest_ohlcv(od.symbol)
             hprice, lprice = candle[hcol: ccol]
             price = lprice * 2 - hprice
-        od.update_exit(price=price)
-        cost = od.exit.price * od.exit.amount
+        ava_amt, lock_amt = self.wallets.get(base_s)
+        exit_amount = od.enter.amount
+        if 0 < ava_amt < exit_amount or abs(ava_amt - exit_amount) / exit_amount <= 0.03:
+            exit_amount = ava_amt
+        od.update_exit(price=price, amount=exit_amount)
+        cost = od.exit.price * exit_amount
         logger.trade_info(f'exit order {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
         self._put_order(od, False)
         return od
