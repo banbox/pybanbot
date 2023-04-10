@@ -86,7 +86,7 @@ class Order:
         self.trades: List[dict] = []
         # 下面属性可能需要更新
         self.price: float = price  # 入场价格，市价单此项为空
-        self.amount: float = kwargs['amount']  # 交易量，等同于volume；由于手续费，交易量可能会变化
+        self.amount: float = kwargs.get('amount')  # 交易量，等同于volume；由于手续费，交易量可能会变化
         self.status: int = kwargs.get('status', OrderStatus.Init)
         self.filled: float = kwargs.get('filled', 0)  # 已成交数量，这里不用扣除手续费，完全成交时和amount相等
         self.average: float = kwargs.get('average')  # 平均成交价格
