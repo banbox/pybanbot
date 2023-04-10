@@ -102,7 +102,7 @@ class PairDataFeeder:
         if state.bar_row[0] + state.tf_secs * 2 < btime.time():
             # 当蜡烛的触发时间过于滞后时，输出错误信息
             logger.error(f'{self.pair}/{state.timeframe} bar is too late {state.bar_row[0]}')
-        self.callback(self.pair, state.timeframe, state.bar_row)
+        await self.callback(self.pair, state.timeframe, state.bar_row)
 
 
 class LocalPairDataFeeder(PairDataFeeder):
