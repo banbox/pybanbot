@@ -77,14 +77,17 @@ class LiveTrader(Trader):
                 # 监听订单更新
                 asyncio.create_task(self.order_hold.listen_orders_forever()),
                 # 跟踪监听未成交订单，及时更新价格确保成交
-                asyncio.create_task(self.order_hold.trail_open_orders_forever())
+                asyncio.create_task(self.order_hold.trail_open_orders_forever()),
+                # 订单异步消费队列
+                asyncio.create_task(self.order_hold.consume_queue())
             ])
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
-        exit_ods = await self.order_hold.exit_open_orders('force_exit', 0)
+        exit_ods = self.order_hold.exit_open_orders('force_exit', 0)
         if exit_ods:
             logger.info(f'exit {len(exit_ods)} open trades')
+        await self.order_hold.order_q.join()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,
             status='Bot stopped'

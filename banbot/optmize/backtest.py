@@ -58,7 +58,7 @@ class BackTest(Trader):
         await self.cleanup()
         self._calc_result_done()
 
-        his_orders = self.order_hold.his_list
+        his_orders = self.order_hold.his_orders
         od_list = [r.to_dict() for r in his_orders]
         print_backtest(pd.DataFrame(od_list), self.result)
         await BTAnalysis(his_orders, **self.result).save(self.out_dir)
@@ -79,7 +79,7 @@ class BackTest(Trader):
         self.result['date_to'] = btime.to_datestr(self.result['date_to'])
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
-        his_orders = self.order_hold.his_list
+        his_orders = self.order_hold.his_orders
         self.result['orders_num'] = len(his_orders)
         fin_balance = self.wallets.get(quote_s)[0]
         start_balance = self.result['start_balance']
@@ -110,6 +110,6 @@ class BackTest(Trader):
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
     async def cleanup(self):
-        await self.order_hold.exit_open_orders('force_exit', 0)
+        self.order_hold.exit_open_orders('force_exit', 0)
         await self.order_hold.fill_pending_orders()
 

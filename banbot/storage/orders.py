@@ -81,12 +81,12 @@ class Order:
         self.order_id: str = kwargs.get('order_id')
         self.inout_key: str = kwargs.get('inout_key')
         self.side: str = kwargs.get('side', 'buy')
-        self.amount: float = kwargs['amount']  # 交易量，等同于volume；
         self.timestamp = int(btime.time())
         self.lock = Lock()  # 避免同时更新
         self.trades: List[dict] = []
         # 下面属性可能需要更新
         self.price: float = price  # 入场价格，市价单此项为空
+        self.amount: float = kwargs['amount']  # 交易量，等同于volume；由于手续费，交易量可能会变化
         self.status: int = kwargs.get('status', OrderStatus.Init)
         self.filled: float = kwargs.get('filled', 0)  # 已成交数量
         self.average: float = kwargs.get('average')  # 平均成交价格
@@ -134,6 +134,8 @@ class InOutOrder:
         self.symbol: str = kwargs['symbol']
         self.status: int = kwargs.get('status', InOutStatus.Init)
         self.timeframe: str = kwargs.get('timeframe')
+        # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
+        self.quote_cost: float = kwargs.get('quote_cost')
         self.enter_tag: str = kwargs.get('enter_tag')
         self.enter_at: int = kwargs.get('enter_at')
         self.exit_tag: str = kwargs.get('exit_tag')
@@ -151,6 +153,10 @@ class InOutOrder:
         self.stoploss: float = kwargs.get('stoploss')
         self.profit_rate: float = kwargs.get('profit_rate', 0.0)
         self.profit: float = kwargs.get('profit', 0.0)
+
+    @property
+    def id(self):
+        return f'{self.key}_{self.enter_at}'
 
     def can_close(self, ctx: Optional[Context] = None):
         if not ctx:
@@ -230,3 +236,10 @@ class InOutOrder:
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'
+
+
+class OrderJob:
+    def __init__(self, od_id: str, is_enter: bool):
+        self.od_id = od_id
+        self.is_enter = is_enter
+

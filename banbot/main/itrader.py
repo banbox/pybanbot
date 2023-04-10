@@ -74,11 +74,9 @@ class Trader:
             await self.order_hold.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:
             logger.debug(f'bar signals: {enter_list} {exit_list} {ext_tags}')
-            enter_ods, exit_ods = await self.order_hold.enter_exit_pair_orders(
-                pair_tf, enter_list, exit_list, ext_tags)
+            enter_ods, exit_ods = self.order_hold.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
-                post_cost = (time.monotonic() - calc_end) * 1000
-                logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)} cost: {post_cost:.1f} ms')
+                logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)}')
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')
@@ -135,7 +133,5 @@ class Trader:
                 break
             exec_cost = time.monotonic() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
-                logger.warning(f'{func_name} cost {exec_cost:.3f} > interval: {interval:.3f}')
-                interval = exec_cost * 1.5
-                wait_list[0][1] = interval
+                logger.warning(f'loop task timeout {func_name} cost {exec_cost:.3f} > {interval:.3f}')
             wait_list[0][2] += interval

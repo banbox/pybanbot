@@ -79,7 +79,7 @@ class PairDataFeeder:
         elif ohlcvs[0][0] == state.bar_row[0]:
             state.bar_row = ohlcvs[0]
         if ohlcvs[-1][0] > state.bar_row[0] or fetch_intv == state.tf_secs:
-            await self.callback(self.pair, state.timeframe, state.bar_row)
+            await self._fire_callback(state)
             state.bar_row = ohlcvs[-1]
         else:
             # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
@@ -95,8 +95,14 @@ class PairDataFeeder:
             cur_ohlcvs = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
             state.last_check = btime.time()
             if state.bar_row and cur_ohlcvs[-1][0] > state.bar_row[0]:
-                await self.callback(self.pair, state.timeframe, state.bar_row)
+                await self._fire_callback(state)
             state.bar_row = cur_ohlcvs[-1]
+
+    async def _fire_callback(self, state: PairTFCache):
+        if state.bar_row[0] + state.tf_secs * 2 < btime.time():
+            # 当蜡烛的触发时间过于滞后时，输出错误信息
+            logger.error(f'{self.pair}/{state.timeframe} bar is too late {state.bar_row[0]}')
+        self.callback(self.pair, state.timeframe, state.bar_row)
 
 
 class LocalPairDataFeeder(PairDataFeeder):
@@ -216,13 +222,14 @@ class LivePairDataFeader(PairDataFeeder):
                 del self.warm_data
                 btime.run_mode = self.back_rmode
                 btime.cur_timestamp = btime.time()
+                self.next_since = self.warm_data[-1][0] + state.tf_secs + 1
             else:
                 details = [self.warm_data[self.warm_id]]
                 self.warm_id += 1
                 return details, state.tf_secs
         if not self.is_ws:
-            limit = state.check_interval * 2
-            details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since, limit=limit)
+            # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
+            details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
             self.next_since = details[-1][0] + 1
             detail_interval = 1
         else:

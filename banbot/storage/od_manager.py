@@ -7,6 +7,7 @@ import asyncio
 
 import aiofiles as aiof
 from collections import OrderedDict
+from asyncio import Queue
 
 from banbot.storage.orders import *
 from banbot.util.common import logger, SingletonArg
@@ -46,7 +47,7 @@ class OrderManager(metaclass=SingletonArg):
         self.data_hold = data_hd
         self.prices = dict()  # 所有产品对法币的价格
         self.open_orders: Dict[str, InOutOrder] = dict()  # 尚未退出的订单
-        self.his_list: List[InOutOrder] = []  # 历史已完成或取消的订单
+        self.his_orders: OrderedDict[str, InOutOrder] = OrderedDict()  # 历史已完成或取消的订单
         self.network_cost = 0.6  # 模拟网络延迟
         self.callback = callback
         self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
@@ -80,15 +81,15 @@ class OrderManager(metaclass=SingletonArg):
         try:
             result = dict(
                 open_ods=[od.to_dict() for key, od in self.open_orders.items()],
-                his_ods=[od.to_dict() for od in self.his_list],
+                his_ods=[od.to_dict() for od in self.his_orders.values()],
             )
             async with aiof.open(self.dump_path, 'wb') as fout:
                 await fout.write(orjson.dumps(result))
         except Exception:
             logger.exception('dump his orders fatal error')
 
-    async def enter_exit_pair_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
-                                     exits: List[Tuple[str, str]], exit_keys: Dict[str, str])\
+    def process_pair_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
+                            exits: List[Tuple[str, str]], exit_keys: Dict[str, str])\
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -100,27 +101,47 @@ class OrderManager(metaclass=SingletonArg):
         '''
         ctx = get_context(pair_tf)
         pair, _, _, _ = get_cur_symbol(ctx)
-        price = self.data_hold.get_latest_ohlcv(pair)[ccol]
+        allow_enter = self.allow_pair(pair)
+        if not allow_enter and not (exits or exit_keys):
+            logger.debug(f'pair enter disable: {pair} {enters}')
+            return [], []
+        buy_price, sell_price = self._get_pair_prices(pair)
         enter_ods, exit_ods = [], []
         if enters and btime.run_mode not in NORDER_MODES:
-            for stg_name, enter_tag, cost in enters:
-                enter_ods.append(await self.enter_order(ctx, stg_name, enter_tag, cost, price))
+            if allow_enter:
+                for stg_name, enter_tag, cost in enters:
+                    enter_ods.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
+            else:
+                logger.debug(f'pair enter not allow: {enters}')
         if exits:
             for stg_name, exit_tag in exits:
-                exit_ods.extend(await self.exit_open_orders(exit_tag, price, stg_name, pair))
+                exit_ods.extend(self.exit_open_orders(exit_tag, sell_price, stg_name, pair))
         if exit_keys:
             for key, ext_tag in exit_keys.items():
                 od = self.open_orders.get(key)
                 if not od:
                     logger.warning(f'order not found to exit: {key}')
                     continue
-                exit_ods.append(await self.exit_order(ctx, od, ext_tag, price))
+                exit_ods.append(self.exit_order(ctx, od, ext_tag, sell_price))
         enter_ods = [od for od in enter_ods if od]
         exit_ods = [od for od in exit_ods if od]
         return enter_ods, exit_ods
 
-    async def enter_order(self, ctx: Context, strategy: str, tag: str, cost: float, price: Union[float, Callable]
-                          ) -> Optional[InOutOrder]:
+    def _get_pair_prices(self, pair: str) -> Tuple[Union[float, Callable], Union[float, Callable]]:
+        price = self.data_hold.get_latest_ohlcv(pair)[ccol]
+        return price, price
+
+    def enter_order(self, ctx: Context, strategy: str, tag: str, cost: float, price: Union[float, Callable]
+                    ) -> Optional[InOutOrder]:
+        '''
+        策略产生入场信号，执行入场订单。（目前仅支持做多）
+        :param ctx:
+        :param strategy:
+        :param tag:
+        :param cost: 对应的法币价值。当定价币不是USD时，会计算其对应花费数量
+        :param price:
+        :return:
+        '''
         if btime.run_mode in NORDER_MODES:
             return
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
@@ -133,25 +154,21 @@ class OrderManager(metaclass=SingletonArg):
         if not quote_cost or not self.allow_pair(pair):
             logger.debug(f'wallet empty or pair disable: {quote_cost}')
             return
-        self.open_orders[lock_key] = None
-        if callable(price):
-            price = await run_async(price)
-        amount = quote_cost / price
         od = InOutOrder(
             symbol=pair,
             timeframe=timeframe,
+            quote_cost=quote_cost,
             enter_price=price,
-            enter_amount=amount,
             enter_tag=tag,
             enter_at=ctx[bar_num],
             strategy=strategy
         )
         self.open_orders[lock_key] = od
         logger.trade_info(f'enter order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
-        await self._enter_order(od)
+        self._put_order(od, True)
         return od
 
-    async def _enter_order(self, od: InOutOrder):
+    def _put_order(self, od: InOutOrder, is_enter: bool):
         pass
 
     async def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
@@ -241,7 +258,7 @@ class OrderManager(metaclass=SingletonArg):
             result.append(od)
         return result
 
-    async def exit_open_orders(self, exit_tag: str, price: float, strategy: str = None,
+    def exit_open_orders(self, exit_tag: str, price: float, strategy: str = None,
                                pair: str = None) -> List[InOutOrder]:
         order_list = self.get_open_orders(strategy, pair)
         result = []
@@ -249,17 +266,16 @@ class OrderManager(metaclass=SingletonArg):
         for od in order_list:
             ctx = get_context(f'{od.symbol}/{od.timeframe}')
             if not od.can_close(ctx):
+                # 订单正在退出、或刚入场需等到下个bar退出
                 if not is_force:
                     continue
-                if not od.enter.filled:
-                    del self.open_orders[od.key]
-                    continue
-            if await self.exit_order(ctx, od, exit_tag, price):
+                # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
+            if self.exit_order(ctx, od, exit_tag, price):
                 result.append(od)
         return result
 
-    async def exit_order(self, ctx: Context, od: InOutOrder, exit_tag: str, price: Union[float, Callable])\
-            -> Optional[InOutOrder]:
+    def exit_order(self, ctx: Context, od: InOutOrder, exit_tag: str, price: Union[float, Callable]
+                   ) -> Optional[InOutOrder]:
         if od.exit_tag:
             return
         od.exit_tag = exit_tag
@@ -269,21 +285,11 @@ class OrderManager(metaclass=SingletonArg):
             candle = self.data_hold.get_latest_ohlcv(od.symbol)
             hprice, lprice = candle[hcol: ccol]
             price = lprice * 2 - hprice
-        elif callable(price):
-            price = await run_async(price)
         od.update_exit(price=price)
         cost = od.exit.price * od.exit.amount
         logger.trade_info(f'exit order {od.symbol} {od.exit_tag} {od.exit.price} got: {cost:.2f}')
-        await self._exit_order(od)
+        self._put_order(od, False)
         return od
-
-    async def _exit_order(self, od: InOutOrder):
-        '''
-        调用此方法前，已将exit_tag写入到订单中
-        :param od:
-        :return:
-        '''
-        pass
 
     def _finish_order(self, od: InOutOrder):
         if od.key in self.open_orders:
@@ -302,7 +308,7 @@ class OrderManager(metaclass=SingletonArg):
                 self.forbid_pairs.add(od.symbol)
                 logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
         if od.enter.filled > 0:
-            self.his_list.append(od)
+            self.his_orders[od.id] = od
 
     def update_by_bar(self, pair_arr: np.ndarray):
         if self.open_orders:
@@ -344,8 +350,9 @@ class OrderManager(metaclass=SingletonArg):
         '''
         fin_loss = 0
         min_timestamp = btime.to_utcstamp(btime.now() - btime.timedelta(minutes=back_mins))
-        for i in range(len(self.his_list) - 1, -1, -1):
-            od = self.his_list[i]
+        his_orders: List[InOutOrder] = list(self.his_orders.values())
+        for i in range(len(his_orders) - 1, -1, -1):
+            od = his_orders[i]
             if od.enter.timestamp < min_timestamp:
                 break
             fin_loss += od.profit
@@ -395,6 +402,7 @@ class LiveOrderManager(OrderManager):
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
+        self.order_q = Queue(1000)  # 最多1000个待执行订单
         # 限价单的深度对应的秒级成交量
         self.limit_vol_secs = config.get('limit_vol_secs', 10)
 
@@ -433,7 +441,7 @@ class LiveOrderManager(OrderManager):
             sell_price = low_price * 2 - high_price
         return buy_price, sell_price
 
-    def _make_async_price(self, pair: str, vol_sec=0):
+    def _get_pair_prices(self, pair: str, vol_sec=0):
         _buy_price, _sell_price = None, None
 
         async def buy_price():
@@ -448,52 +456,6 @@ class LiveOrderManager(OrderManager):
                 _buy_price, _sell_price = await self.calc_price(pair, vol_sec)
             return _sell_price
         return buy_price, sell_price
-
-    async def enter_exit_pair_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
-                                     exits: List[Tuple[str, str]], exit_keys: Dict[str, str]):
-        '''
-        批量创建指定交易对的订单
-        :param pair_tf: 交易对
-        :param enters: [(strategy, enter_tag, cost), ...]
-        :param exits: [(strategy, exit_tag), ...]
-        :param exit_keys: Dict(order_key, exit_tag)
-        :return:
-        '''
-        ctx = get_context(pair_tf)
-        pair, _, _, _ = get_cur_symbol(ctx)
-        allow_enter = self.allow_pair(pair)
-        if not allow_enter and not (exits or exit_keys):
-            logger.debug(f'pair enter disable: {pair} {enters}')
-            return
-        run_tasks = []
-        buy_price, sell_price = self._make_async_price(pair)
-        if enters and btime.run_mode not in NORDER_MODES:
-            if allow_enter:
-                for stg_name, enter_tag, cost in enters:
-                    run_tasks.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
-            else:
-                logger.debug(f'pair enter not allow: {enters}')
-        if exits:
-            for stg_name, exit_tag in exits:
-                for od in self.get_open_orders(stg_name, pair):
-                    run_tasks.append(self.exit_order(ctx, od, exit_tag, sell_price))
-        if exit_keys:
-            for key, ext_tag in exit_keys.items():
-                od = self.open_orders.get(key)
-                if not od:
-                    logger.warning(f'order not found to exit: {key}')
-                    continue
-                run_tasks.append(self.exit_order(ctx, od, ext_tag, sell_price))
-        enter_ods, exit_ods = [], []
-        for task in asyncio.as_completed(run_tasks):
-            od = await task
-            if not od:
-                continue
-            if od.enter_at == ctx[bar_num]:
-                enter_ods.append(od)
-            else:
-                exit_ods.append(od)
-        return enter_ods, exit_ods
 
     async def _consume_unmatchs(self, sub_od: Order):
         for trade in list(self.unmatch_trades.values()):
@@ -583,27 +545,10 @@ class LiveOrderManager(OrderManager):
         await self._fire(od, is_enter)
         await self.try_dump()
 
-    async def _enter_order(self, od: InOutOrder):
-        if btime.run_mode == btime.RunMode.LIVE:
-            await self._create_exg_order(od, True)
-
-    async def _exit_order(self, od: InOutOrder):
+    def _put_order(self, od: InOutOrder, is_enter: bool):
         if btime.run_mode != btime.RunMode.LIVE:
             return
-        if od.enter.filled < od.enter.amount and od.enter.status < OrderStatus.Close:
-            try:
-                res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
-                await self._update_subod_by_ccxtres(od, True, res)
-            except ccxt.OrderNotFound:
-                pass
-            if not od.enter.filled:
-                od.update_exit(price=od.enter.price)
-                self._finish_order(od)
-                # 这里未入场直接退出的，不应该fire
-                return
-            await self._fire(od, True)
-        # 检查入场订单是否已成交，如未成交则直接取消
-        await self._create_exg_order(od, False)
+        self.order_q.put_nowait(OrderJob(od.id, is_enter))
 
     async def _update_bnb_order(self, od: Order, data: dict):
         info = data['info']
@@ -677,6 +622,56 @@ class LiveOrderManager(OrderManager):
         if exp_unmatchs:
             logger.warning(f'expired unmatch orders: {exp_unmatchs}')
 
+    async def _exec_order_enter(self, od: InOutOrder):
+        if od.exit_tag:
+            # 订单已被取消，不再提交到交易所
+            return
+        if isinstance(od.enter.price, Callable):
+            od.enter.price = await od.enter.price()
+        if not od.enter.amount:
+            od.enter.amount = od.quote_cost / od.enter.price
+        await self._create_exg_order(od, True)
+
+    async def _exec_order_exit(self, od: InOutOrder):
+        if isinstance(od.exit.price, Callable):
+            od.exit.price = await od.exit.price()
+        if od.enter.filled < od.enter.amount and od.enter.status < OrderStatus.Close:
+            try:
+                res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
+                await self._update_subod_by_ccxtres(od, True, res)
+            except ccxt.OrderNotFound:
+                pass
+            if not od.enter.filled:
+                od.update_exit(price=od.enter.price)
+                self._finish_order(od)
+                # 这里未入场直接退出的，不应该fire
+                return
+            await self._fire(od, True)
+        # 检查入场订单是否已成交，如未成交则直接取消
+        await self._create_exg_order(od, False)
+
+    async def exec_order(self, job: OrderJob):
+        od = self.his_orders.get(job.od_id)
+        if not od:
+            key = '_'.join(job.od_id.split('_')[:-1])
+            od = self.open_orders.get(key)
+            if not od or od.id != job.od_id:
+                logger.warning(f'order not found, may be already canceled: {job.od_id} {job.is_enter}')
+                return
+        if job.is_enter:
+            await self._exec_order_enter(od)
+        else:
+            await self._exec_order_exit(od)
+
+    async def consume_queue(self):
+        while True:
+            job = await self.order_q.get()
+            try:
+                await self.exec_order(job)
+            except Exception:
+                logger.exception(f'consume order exception: {job}')
+            self.order_q.task_done()
+
     @loop_forever
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
@@ -699,7 +694,7 @@ class LiveOrderManager(OrderManager):
             return
         from itertools import groupby
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
-            buy_price, sell_price = self._make_async_price(pair, round(self.limit_vol_secs * 0.5))
+            buy_price, sell_price = self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))
             buy_price = await buy_price()
             sell_price = await sell_price()
             for od in od_list:
@@ -710,7 +705,7 @@ class LiveOrderManager(OrderManager):
                     logger.info(f'change price exit {od.key} price: {od.exit.price} -> {sell_price}')
                     od.exit.price = sell_price
                     if not od.exit.order_id:
-                        await self._exit_order(od)
+                        await self._exec_order_exit(od)
                     else:
                         left_amount = od.exit.amount - od.exit.filled
                         res = await self.exchange.edit_limit_order(od.exit.order_id, od.symbol, od.exit.side,
@@ -723,7 +718,7 @@ class LiveOrderManager(OrderManager):
                     logger.info(f'change price enter {od.key} price: {od.enter.price} -> {buy_price}')
                     od.enter.price = buy_price
                     if not od.enter.order_id:
-                        await self._enter_order(od)
+                        await self._exec_order_enter(od)
                     else:
                         left_amount = od.enter.amount - od.enter.filled
                         res = await self.exchange.edit_limit_order(od.enter.order_id, od.symbol, od.enter.side,
