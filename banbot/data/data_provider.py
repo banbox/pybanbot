@@ -71,16 +71,19 @@ class DataProvider:
     async def loop_main(self, warmup_num: int):
         # 先调用一次数据加载，确保预热阶段、数据加载等应用完成
         last_end = time.monotonic()
-        await self._first_call(warmup_num)
-        while BotGlobal.state == BotState.RUNNING:
-            left_sleep = self.min_interval - (time.monotonic() - last_end)
-            if left_sleep > 0:
-                await asyncio.sleep(left_sleep)
-            last_end = time.monotonic()
-            try:
-                await self.process()
-            except EOFError:
-                break
+        try:
+            await self._first_call(warmup_num)
+            while BotGlobal.state == BotState.RUNNING:
+                left_sleep = self.min_interval - (time.monotonic() - last_end)
+                if left_sleep > 0:
+                    await asyncio.sleep(left_sleep)
+                last_end = time.monotonic()
+                try:
+                    await self.process()
+                except EOFError:
+                    break
+        except Exception:
+            logger.exception('loop data main fail')
 
     async def _first_call(self, warmup_num: int):
         back_secs = self._set_warmup(warmup_num)

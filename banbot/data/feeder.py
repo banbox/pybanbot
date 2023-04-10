@@ -219,10 +219,10 @@ class LivePairDataFeader(PairDataFeeder):
             if self.warm_id >= len(self.warm_data):
                 logger.info(f'warm up complete with {self.warmup_num}')
                 self.is_warmed = True
+                self.next_since = self.warm_data[-1][0] + state.tf_secs + 1
                 del self.warm_data
                 btime.run_mode = self.back_rmode
                 btime.cur_timestamp = btime.time()
-                self.next_since = self.warm_data[-1][0] + state.tf_secs + 1
             else:
                 details = [self.warm_data[self.warm_id]]
                 self.warm_id += 1

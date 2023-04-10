@@ -116,8 +116,6 @@ class Trader:
             self._job_exp_end = next_start + interval * 2
             func_name = biz_func.__qualname__
             if wait_secs > 0:
-                if wait_secs > 30 and live_mode:
-                    logger.info(f'sleep {wait_secs} : {func_name}')
                 await asyncio.sleep(wait_secs)
             job_start = time.monotonic()
             # 执行任务
