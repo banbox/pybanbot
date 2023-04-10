@@ -8,6 +8,7 @@ from banbot.config import *
 from banbot.util.common import logger
 from banbot.util.misc import run_async
 from banbot.exchange.crypto_exchange import CryptoExchange
+from banbot.storage.common import *
 from asyncio import Lock, gather
 
 
@@ -26,7 +27,7 @@ class DataProvider:
                 return hold.states[0].bar_row
         raise ValueError(f'unknown pair to get price: {pair}')
 
-    def set_warmup(self, count: int) -> int:
+    def _set_warmup(self, count: int) -> int:
         '''
         设置数据源的预热数量，返回需要回顾的秒数。用于LIVE、DRY_RUN
         :param count:
@@ -67,8 +68,22 @@ class DataProvider:
         for hold in self.holders:
             await hold.try_update()
 
-    async def first_call(self, warmup_num: int):
-        back_secs = self.set_warmup(warmup_num)
+    async def loop_main(self, warmup_num: int):
+        # 先调用一次数据加载，确保预热阶段、数据加载等应用完成
+        last_end = time.monotonic()
+        await self._first_call(warmup_num)
+        while BotGlobal.state == BotState.RUNNING:
+            left_sleep = self.min_interval - (time.monotonic() - last_end)
+            if left_sleep > 0:
+                await asyncio.sleep(left_sleep)
+            last_end = time.monotonic()
+            try:
+                await self.process()
+            except EOFError:
+                break
+
+    async def _first_call(self, warmup_num: int):
+        back_secs = self._set_warmup(warmup_num)
         ts_inited = True
         if btime.run_mode in TRADING_MODES:
             btime.cur_timestamp = time.time() - back_secs

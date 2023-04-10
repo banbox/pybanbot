@@ -23,8 +23,8 @@ class Trader:
             logger.info(f'started bot:   >>>  {self.name}  <<<')
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
-        self.order_hold: OrderManager = None
-        self.data_hold: DataProvider = None
+        self.order_mgr: OrderManager = None
+        self.data_mgr: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
         self._warmup_num = 0
         self._job_exp_end = btime.time() + 5
@@ -47,7 +47,7 @@ class Trader:
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[symbol_tf.get()]
             pair_arr = append_new_bar(row)
-            self.order_hold.update_by_bar(pair_arr)
+            self.order_mgr.update_by_bar(pair_arr)
             start_time = time.monotonic()
             ext_tags: Dict[str, str] = dict()
             enter_list, exit_list = [], []
@@ -64,17 +64,17 @@ class Trader:
                 if not strategy.skip_exit_on_enter or not entry_tag:
                     if exit_tag:
                         exit_list.append((stg_name, exit_tag))
-                    ext_tags.update(self.order_hold.calc_custom_exits(pair_arr, strategy))
+                    ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10:
             logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
         if btime.run_mode != RunMode.LIVE:
             # 模拟模式，填充未成交订单
-            await self.order_hold.fill_pending_orders(pair, timeframe, row)
+            await self.order_mgr.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:
             logger.debug(f'bar signals: {enter_list} {exit_list} {ext_tags}')
-            enter_ods, exit_ods = self.order_hold.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
+            enter_ods, exit_ods = self.order_mgr.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
             if enter_ods or exit_ods:
                 logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)}')
 
@@ -97,20 +97,14 @@ class Trader:
 
         Thread(target=handle, daemon=True).start()
 
-    async def _loop_tasks(self, biz_list: List[List[Callable, float, float]] = None):
+    async def _loop_tasks(self, biz_list: List[List[Callable, float, float]]):
         '''
-        这里不能执行耗时的异步任务（比如watch_balance）
+        这里不能执行耗时的异步任务（比如watch_balance）最好单次执行时长不超过1s。
         :param biz_list: [(func, interval, start_delay), ...]
         :return:
         '''
-        if not biz_list:
-            biz_list = []
-        # 先调用一次数据加载，确保预热阶段、数据加载等应用完成
-        await self.data_hold.first_call(self._warmup_num)
         # 将第三个参数改为期望下次执行时间
         cur_time = btime.time()
-        data_intv = self.data_hold.min_interval
-        biz_list.append([self.data_hold.process, data_intv, data_intv])
         for job in biz_list:
             job[2] += cur_time
         # 轮询执行任务
@@ -126,11 +120,8 @@ class Trader:
                     logger.info(f'sleep {wait_secs} : {func_name}')
                 await asyncio.sleep(wait_secs)
             job_start = time.monotonic()
-            try:
-                await run_async(biz_func)
-            except EOFError:
-                # 任意一个发出EOF错误时，终止循环
-                break
+            # 执行任务
+            await run_async(biz_func)
             exec_cost = time.monotonic() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
                 logger.warning(f'loop task timeout {func_name} cost {exec_cost:.3f} > {interval:.3f}')

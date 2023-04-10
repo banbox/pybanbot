@@ -14,8 +14,8 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         self.exchange = CryptoExchange(config)
-        self.data_hold = LocalDataProvider(config, self.on_data_feed)
-        self.order_hold = OrderManager(config, self.exchange, self.wallets, self.data_hold, self.order_callback)
+        self.data_mgr = LocalDataProvider(config, self.on_data_feed)
+        self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
@@ -47,25 +47,26 @@ class BackTest(Trader):
         for pair, tf in self.pairlist:
             base_s, quote_s = pair.split('/')
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
-        self.result['start_balance'] = self.order_hold.get_legal_value()
+        self.result['start_balance'] = self.order_mgr.get_legal_value()
 
     async def run(self):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
         await self.init()
-        await self._loop_tasks()
+        # 轮训数据
+        await self.data_mgr.loop_main(self._warmup_num)
         # 关闭未完成订单
         await self.cleanup()
         self._calc_result_done()
 
-        his_orders = self.order_hold.his_orders
-        od_list = [r.to_dict() for r in his_orders]
+        his_orders = self.order_mgr.his_orders
+        od_list = [r.to_dict() for r in his_orders.values()]
         print_backtest(pd.DataFrame(od_list), self.result)
-        await BTAnalysis(his_orders, **self.result).save(self.out_dir)
+        await BTAnalysis(list(his_orders.values()), **self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
-        open_orders = self.order_hold.open_orders
+        open_orders = self.order_mgr.open_orders
         if is_enter:
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
         elif not open_orders:
@@ -79,7 +80,7 @@ class BackTest(Trader):
         self.result['date_to'] = btime.to_datestr(self.result['date_to'])
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
-        his_orders = self.order_hold.his_orders
+        his_orders: List[InOutOrder] = list(self.order_mgr.his_orders.values())
         self.result['orders_num'] = len(his_orders)
         fin_balance = self.wallets.get(quote_s)[0]
         start_balance = self.result['start_balance']
@@ -110,6 +111,6 @@ class BackTest(Trader):
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
     async def cleanup(self):
-        self.order_hold.exit_open_orders('force_exit', 0)
-        await self.order_hold.fill_pending_orders()
+        self.order_mgr.exit_open_orders('force_exit', 0)
+        await self.order_mgr.fill_pending_orders()
 
