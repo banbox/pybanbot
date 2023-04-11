@@ -176,6 +176,8 @@ class OrderManager(metaclass=SingletonArg):
 
     async def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
+        if not od.enter.amount:
+            od.enter.amount = od.quote_cost / enter_price
         quote_amount = enter_price * od.enter.amount
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
