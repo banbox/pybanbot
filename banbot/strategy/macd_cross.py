@@ -41,6 +41,9 @@ class MACDCross(BaseStrategy):
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         elp_num = bar_num.get() - od.enter_at
         max_loss, max_up, back_rate = trail_info(arr, elp_num, od.enter.price)
-        return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[1, 2, 4, 8],
-                                    loss_thres=[-0.1, 0.2, 1.5, 2., 3.6], back_rates=[0.44, 0.28, 0.13])
+        return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[4, 7, 10, 15],
+                                    loss_thres=[-0.3, -0.1, 1., 2., 3.6], back_rates=[0.44, 0.28, 0.13])
+        # 如下参数组，对高波动性市场获利更好，但震荡时亏损也略多，整体收益不如上面
+        # return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[7, 20, 40, 70],
+        #                             loss_thres=[-1.5, -1., 2., 4., 7.], back_rates=[0.44, 0.28, 0.13])
 

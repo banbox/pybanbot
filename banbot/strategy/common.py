@@ -7,7 +7,8 @@ from banbot.storage.orders import *
 
 
 def trail_info(arr: np.ndarray, elp_num: int, enter_price: float):
-    max_price = np.max(arr[-elp_num:, hcol])
+    # 全局最高价，这里测试使用收盘价计算效果更好
+    max_price = np.max(arr[-elp_num:, ccol])
     cur_close = arr[-1, ccol]
     max_loss = cur_close - max(enter_price, max_price)
     dust = min(0.00001, cur_close * 0.0001)

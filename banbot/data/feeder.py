@@ -185,7 +185,7 @@ class LocalPairDataFeeder(PairDataFeeder):
         tf_secs = timeframe_to_seconds(timeframe)
         df = self._load_sml_data()
         if self.fetch_tfsecs == tf_secs:
-            return df
+            return df.reset_index(drop=True)
         if tf_secs % self.fetch_tfsecs > 0:
             raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {self.fetch_tfsecs}')
         details = df.values.tolist()

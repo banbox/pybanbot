@@ -70,34 +70,40 @@ def _add_indicator(fig, df, inds):
             exit_id, exit_tag, exit_price = ind['exit_id'], ind['exit_tag'], np.array(ind['exit_price'])
             # 过滤在当前df范围内的信号
             in_set = set(df.index.intersection(enter_id))
-            out_set = set(df.index.intersection(exit_id))
             in_id_p = [(i, v) for i, v in enumerate(enter_id) if v in in_set]
+            in_loc, out_loc = [], []
+            if in_id_p:
+                in_loc, in_id = list(zip(*in_id_p))
+                in_tag = [enter_tag[i] for i, v in enumerate(enter_id) if v in in_set]
+                in_id = list(in_id)
+                start_x, start_y = x_labels.loc[in_id], enter_price[list(in_loc)]
+                start = go.Scatter(x=start_x, y=start_y, mode='markers+text', text=in_tag, marker=dict(color='green'))
+                fig.add_trace(start, row=1, col=1, secondary_y=True)
+
+            out_set = set(df.index.intersection(exit_id))
             out_id_p = [(i, v) for i, v in enumerate(exit_id) if v in out_set]
-            in_loc, in_id = list(zip(*in_id_p))
-            out_loc, out_id = list(zip(*out_id_p))
-            in_tag = [enter_tag[i] for i, v in enumerate(enter_id) if v in in_set]
-            out_tag = [exit_tag[i] for i, v in enumerate(exit_id) if v in out_set]
-            # 绘制入场信号和退出信号
-            in_id, out_id = list(in_id), list(out_id)
-            start_x, start_y = x_labels.loc[in_id], enter_price[list(in_loc)]
-            end_x, end_y = x_labels.loc[out_id], exit_price[list(out_loc)]
-            start = go.Scatter(x=start_x, y=start_y, mode='markers+text', text=in_tag, marker=dict(color='green'))
-            end = go.Scatter(x=end_x, y=end_y, mode='markers+text', text=out_tag, marker=dict(color='blue'))
-            fig.add_trace(start, row=1, col=1, secondary_y=True)
-            fig.add_trace(end, row=1, col=1, secondary_y=True)
+            if out_id_p:
+                out_loc, out_id = list(zip(*out_id_p))
+                out_tag = [exit_tag[i] for i, v in enumerate(exit_id) if v in out_set]
+                # 绘制入场信号和退出信号
+                out_id = list(out_id)
+                end_x, end_y = x_labels.loc[out_id], exit_price[list(out_loc)]
+                end = go.Scatter(x=end_x, y=end_y, mode='markers+text', text=out_tag, marker=dict(color='blue'))
+                fig.add_trace(end, row=1, col=1, secondary_y=True)
             # 计算可绘制的线段
             line_ids = set(in_loc).intersection(out_loc)
             lin_id_p = [(i, v) for i, v in in_id_p if i in line_ids]
             lout_id = [v for i, v in out_id_p if i in line_ids]
-            # line_loc在in_id_p和out_id_p中应该完全相同
-            line_loc, lin_id = list(zip(*lin_id_p))
-            line_loc, lin_id = list(line_loc), list(lin_id)
-            start_x, start_y = x_labels.loc[lin_id], enter_price[line_loc]
-            end_x, end_y = x_labels.loc[lout_id], exit_price[line_loc]
-            line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
-            for i in range(len(lin_id)):
-                fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y[i], end_y[i]],
-                                         **line_args), row=1, col=1, secondary_y=True)
+            if lin_id_p:
+                # line_loc在in_id_p和out_id_p中应该完全相同
+                line_loc, lin_id = list(zip(*lin_id_p))
+                line_loc, lin_id = list(line_loc), list(lin_id)
+                start_x, start_y = x_labels.loc[lin_id], enter_price[line_loc]
+                end_x, end_y = x_labels.loc[lout_id], exit_price[line_loc]
+                line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
+                for i in range(len(lin_id)):
+                    fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y[i], end_y[i]],
+                                             **line_args), row=1, col=1, secondary_y=True)
             continue
         elif dtype == 'bar':
             trace_func = go.Bar

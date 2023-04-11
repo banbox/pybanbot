@@ -17,7 +17,7 @@
     ["BTC/TUSD", "1m"]
   ],
   "run_policy": [
-    {"name": "HorzBreak"}
+    {"name": "MACDCross"}
   ],
   "strategy_paths": [
     "banbot.strategy.macd_cross",

@@ -167,7 +167,8 @@ class OrderManager(metaclass=SingletonArg):
             strategy=strategy
         )
         self.open_orders[lock_key] = od
-        logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
+        if btime.run_mode in TRADING_MODES:
+            logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
         self._put_order(od, True)
         return od
 
@@ -297,7 +298,8 @@ class OrderManager(metaclass=SingletonArg):
             exit_amount = ava_amt
         od.update_exit(price=price, amount=exit_amount)
         cost = cprice * exit_amount
-        logger.info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
+        if btime.run_mode in TRADING_MODES:
+            logger.info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
         self._put_order(od, False)
         return od
 
