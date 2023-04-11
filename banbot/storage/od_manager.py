@@ -148,7 +148,10 @@ class OrderManager(metaclass=SingletonArg):
         lock_key = f'{pair}_{tag}_{strategy}'
         if lock_key in self.open_orders:
             # 同一交易对，同一策略，同一信号，只允许一个订单
-            logger.debug('order lock, enter forbid: %s', lock_key)
+            lock_od = self.open_orders[lock_key]
+            logger.debug('order lock, enter forbid: %s', lock_od)
+            if lock_od.exit_tag and random.random() < 0.2 and ctx[bar_num] - lock_od.exit_at > 5:
+                logger.error('lock order exit timeout: %s', lock_od)
             return
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost)
         if not quote_cost or not self.allow_pair(pair):
@@ -164,7 +167,7 @@ class OrderManager(metaclass=SingletonArg):
             strategy=strategy
         )
         self.open_orders[lock_key] = od
-        logger.trade_info('enter order {0} {1} {2} cost: {3:.2f}', od.symbol, od.enter_tag, od.enter.price, cost)
+        logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
         self._put_order(od, True)
         return od
 
@@ -292,7 +295,7 @@ class OrderManager(metaclass=SingletonArg):
             exit_amount = ava_amt
         od.update_exit(price=price, amount=exit_amount)
         cost = cprice * exit_amount
-        logger.trade_info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
+        logger.info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
         self._put_order(od, False)
         return od
 
@@ -638,20 +641,22 @@ class LiveOrderManager(OrderManager):
         await self._create_exg_order(od, True)
 
     async def _exec_order_exit(self, od: InOutOrder):
-        if isinstance(od.exit.price, Callable):
-            od.exit.price = await od.exit.price()
-        if od.enter.filled < od.enter.amount and od.enter.status < OrderStatus.Close:
-            try:
-                res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
-                await self._update_subod_by_ccxtres(od, True, res)
-            except ccxt.OrderNotFound:
-                pass
+        if (not od.enter.amount or od.enter.filled < od.enter.amount) and od.enter.status < OrderStatus.Close:
+            # 可能也尚未入场。或者尚未完全入场
+            if od.enter.order_id:
+                try:
+                    res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
+                    await self._update_subod_by_ccxtres(od, True, res)
+                except ccxt.OrderNotFound:
+                    pass
             if not od.enter.filled:
                 od.update_exit(price=od.enter.price)
                 self._finish_order(od)
                 # 这里未入场直接退出的，不应该fire
                 return
             await self._fire(od, True)
+        if isinstance(od.exit.price, Callable):
+            od.exit.price = await od.exit.price()
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 

@@ -45,7 +45,7 @@ class Trader:
         pair_tf = f'{pair}/{timeframe}'
         async with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
-            strategy_list = self.symbol_stgs[symbol_tf.get()]
+            strategy_list = self.symbol_stgs[pair_tf]
             pair_arr = append_new_bar(row)
             self.order_mgr.update_by_bar(pair_arr)
             start_time = time.monotonic()
@@ -68,7 +68,7 @@ class Trader:
             calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10:
-            logger.trade_info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
+            logger.info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
         if btime.run_mode != RunMode.LIVE:
             # 模拟模式，填充未成交订单
             await self.order_mgr.fill_pending_orders(pair, timeframe, row)

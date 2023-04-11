@@ -70,16 +70,6 @@ class MeasureTime:
             print(f'{item[0]:<{max_name_len}}{item[1]:.5f}')
 
 
-class TradeLogger(logging.Logger):
-    def trade_info(self, msg, *args, **kwargs):
-        from banbot.util import btime
-        if btime.run_mode not in btime.TRADING_MODES:
-            return
-        from banbot.bar_driven.tainds import symbol_tf
-        prefix = symbol_tf.get() + ' '
-        self.info(prefix + msg, *args, **kwargs)
-
-
 class StrFormatLogRecord(logging.LogRecord):
     def getMessage(self) -> str:
         msg = str(self.msg)
@@ -132,4 +122,4 @@ def get_logger(level=logging.INFO) -> TradeLogger:
 
 logging.setLoggerClass(TradeLogger)
 logging.setLogRecordFactory(StrFormatLogRecord)
-logger = get_logger(logging.DEBUG)
+logger = get_logger()
