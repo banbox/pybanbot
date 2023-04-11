@@ -97,8 +97,8 @@ class StrFormatLogRecord(logging.LogRecord):
         return msg
 
 
-def get_logger(level=logging.INFO) -> TradeLogger:
-    log: TradeLogger = logging.getLogger('banbot')
+def get_logger(level=logging.INFO):
+    log = logging.getLogger('banbot')
     log.setLevel(level)
     log.propagate = False
     if log.hasHandlers():
@@ -120,6 +120,5 @@ def get_logger(level=logging.INFO) -> TradeLogger:
     return log
 
 
-logging.setLoggerClass(TradeLogger)
 logging.setLogRecordFactory(StrFormatLogRecord)
 logger = get_logger()
