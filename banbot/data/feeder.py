@@ -101,7 +101,7 @@ class PairDataFeeder:
     async def _fire_callback(self, state: PairTFCache):
         if state.bar_row[0] + state.tf_secs * 2 < btime.time():
             # 当蜡烛的触发时间过于滞后时，输出错误信息
-            logger.error(f'{self.pair}/{state.timeframe} bar is too late {state.bar_row[0]}')
+            logger.error('{0}/{1} bar is too late {2}', self.pair, state.timeframe, state.bar_row[0])
         await self.callback(self.pair, state.timeframe, state.bar_row)
 
 
@@ -142,7 +142,7 @@ class LocalPairDataFeeder(PairDataFeeder):
 
     def _load_sml_data(self):
         import pandas as pd
-        logger.info(f'loading data from {self.data_path}')
+        logger.info('loading data from %s', self.data_path)
         df = pd.read_feather(self.data_path)
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
         if self.timerange:
@@ -152,10 +152,10 @@ class LocalPairDataFeeder(PairDataFeeder):
                 df = df[df['date'] <= self.timerange.stopts * 1000]
             if len(df):
                 tfrom, tto = btime.to_datestr(df.iloc[0]["date"]), btime.to_datestr(df.iloc[-1]["date"])
-                logger.info(f'truncate data from {tfrom} to {tto}')
+                logger.info('truncate data from %s to %s', tfrom, tto)
             else:
                 tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
-                raise ValueError(f'no data found after truncate from {tfrom} to {tto}')
+                raise ValueError('no data found after truncate from %s to %s', tfrom, tto)
         self.dataframe = df
         return df
 
@@ -217,7 +217,7 @@ class LivePairDataFeader(PairDataFeeder):
                 with btime.TempRunMode(RunMode.DRY_RUN):
                     self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
             if self.warm_id >= len(self.warm_data):
-                logger.info(f'warm up complete with {self.warmup_num}')
+                logger.info('warm up complete with %d', self.warmup_num)
                 self.is_warmed = True
                 self.next_since = self.warm_data[-1][0] + state.tf_secs + 1
                 del self.warm_data

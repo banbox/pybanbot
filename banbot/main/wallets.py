@@ -112,10 +112,10 @@ class CryptoWallet(WalletsLocal):
 
     async def init(self):
         balances = await self.exchange.fetch_balance()
-        logger.info(f'load balances: {self._update_local(balances)}')
+        logger.info('load balances: %s', self._update_local(balances))
 
     @loop_forever
     async def update_forever(self):
         balances = await self.exchange.watch_balance()
-        logger.info(f'update balances: {self._update_local(balances)}')
+        logger.info('update balances: %s', self._update_local(balances))
 

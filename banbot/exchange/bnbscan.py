@@ -41,7 +41,7 @@ class BnbScan:
         self.rest_api = RestApi(**auth_args, **rest_args)
         self.wsstream = WsStream(**stream_args)
         # # 【握手失败，暂不使用】替代rest-api的websocket调用方式，延迟更低
-        # logger.info(f'init wsapi: {auth_args} {stream_args}')
+        # logger.info('init wsapi: %s %s', auth_args, stream_args)
         # self.wsapi = WsApi(**auth_args, **stream_args)
         self.odbook_u = -1 if full_odbook else 0  # -1 尚未初始化，0正在初始化
         # 订单簿
@@ -101,7 +101,7 @@ class BnbScan:
                 elif evt == 'outboundAccountPosition':
                     self.update_wallets(msg['B'])
                 elif evt == 'balanceUpdate':
-                    logger.error(f'     [balanceUpdate] {msg}')
+                    logger.error('     [balanceUpdate] %s', msg)
                     self.wallets[msg['a']] = (float(msg['d']), 0)
                 elif evt == 'executionReport':
                     self.on_order_update(msg)
@@ -111,7 +111,7 @@ class BnbScan:
                 else:
                     print(f'recv stm:  {msg}')
             except Exception:
-                logger.exception(f'on_wsstream_msg fail, msg: {msg_text}')
+                logger.exception('on_wsstream_msg fail, msg: %s', msg_text)
 
         def on_wsapi_msg(_, msg: dict):
             print(f'recv api: {type(msg)} {msg}')
@@ -132,10 +132,10 @@ class BnbScan:
             server_time = self.rest_api.time()['data']['serverTime']
             self.req_cost = round((utime() - start_time) / 2)
             time_diff = start_time + self.req_cost - server_time
-            logger.warning(f'server time diff {time_diff} ms, cost: {self.req_cost}')
+            logger.warning('server time diff {0:.3f} ms, cost: {1:.3f}', time_diff, self.req_cost)
             # 查询交易规范
             pair_info = self.rest_api.exchange_info(self.pair)['data']['symbols'][0]
-            # logger.info(f'pair info: {pair_info}')
+            # logger.info('pair info: %s', pair_info)
             self.base_prec = pair_info['baseAssetPrecision']
             self.quote_prec = pair_info['quoteAssetPrecision']
             pair_filters = pair_info['filters']
@@ -166,10 +166,10 @@ class BnbScan:
             # orders = self.rest_api.get_open_orders(self.pair)['data']
             # buy_num = len([o for o in orders if o['side'] == 'BUY'])
             # sell_num = len(orders) - buy_num
-            logger.info(f'[account]  {self.quote_key}: {self.quote_v}  {self.base_key}: {base_qt}, '
-                        f'pos: {self.position:.3f}')
+            logger.info('[account]  {0}: {1}  {2}: {3}, pos: {4:.3f}',
+                        self.quote_key, self.quote_v, self.base_key, base_qt, self.position)
         except Exception as e:
-            logger.exception(f'update user data fail: {e}')
+            logger.exception('update user data fail: %s', e)
 
     @property
     def quote_v(self) -> Tuple[float, float]:
@@ -215,7 +215,7 @@ class BnbScan:
         try:
             self.rest_api.new_order(self.pair, side, 'LIMIT', **od_argd)
         except binance.error.ClientError as e:
-            logger.error(f'submit order fail: [{sell_wall_vol}] {side} {od_argd}  {e}')
+            logger.error('submit order fail: [%f] %s', sell_wall_vol, [side, od_argd, e])
             return 0
         equal_money = quantity * price
         self.orders[order_id] = dict(
@@ -244,7 +244,6 @@ class BnbScan:
                 del self.orders[client_id]
         elif state == 'PARTIALLY_FILLED':
             pass
-            # logger.info(f'part filled order: {msg}')
         else:
             logger.error(f'unknown order status: {state}, {msg}')
 
@@ -267,7 +266,8 @@ class BnbScan:
         base_val = quote[1] + base_qt[0]
         self.position = base_val / (quote_val + base_val)
         if update_log:
-            logger.info(f'wallet: {"    ".join(update_log)}    total: {total_asset:.2f},  pos: {self.position:.3f}')
+            logger.info('wallet: {0}    total: {1:.2f},  pos: {2:.3f}',
+                        "    ".join(update_log), total_asset, self.position)
 
     def init_orderbook(self):
         if self.odbook_u == 0 or not self._is_full_od:

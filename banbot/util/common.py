@@ -6,6 +6,7 @@
 import time
 import sys
 import logging
+import collections.abc
 
 
 def bell():
@@ -79,6 +80,33 @@ class TradeLogger(logging.Logger):
         self.info(prefix + msg, *args, **kwargs)
 
 
+class StrFormatLogRecord(logging.LogRecord):
+    def getMessage(self) -> str:
+        msg = str(self.msg)
+        if self.args:
+            try:
+                msg %= ()
+            except TypeError:
+                # Either or the two is expected indicating there's
+                # a placeholder to interpolate:
+                #
+                # - not all arguments converted during string formatting
+                # - format requires a mapping" expected
+                #
+                # If would've been easier if Python printf-style behaved
+                # consistently for "'' % (1,)" and "'' % {'foo': 1}". But
+                # it raises TypeError only for the former case.
+                msg %= self.args
+            else:
+                # There's special case of first mapping argument. See
+                # duner init of logging.LogRecord.
+                if isinstance(self.args, collections.abc.Mapping):
+                    msg = msg.format(**self.args)
+                else:
+                    msg = msg.format(*self.args)
+        return msg
+
+
 def get_logger(level=logging.INFO) -> TradeLogger:
     log: TradeLogger = logging.getLogger('banbot')
     log.setLevel(level)
@@ -103,4 +131,5 @@ def get_logger(level=logging.INFO) -> TradeLogger:
 
 
 logging.setLoggerClass(TradeLogger)
+logging.setLogRecordFactory(StrFormatLogRecord)
 logger = get_logger(logging.DEBUG)

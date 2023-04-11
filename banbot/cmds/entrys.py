@@ -43,7 +43,7 @@ def start_trading(args: Dict[str, Any]) -> int:
     # Create and run worker
     config = _get_config(args)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
-    logger.warning(f"Run Mode: {btime.run_mode.value}")
+    logger.warning("Run Mode: %s", btime.run_mode.value)
     trader = LiveTrader(config)
     try:
         asyncio.run(trader.run())

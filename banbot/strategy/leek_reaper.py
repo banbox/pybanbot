@@ -68,9 +68,6 @@ class LeekReaper(BnbScan):
             (self.bid_arr[1][0] + self.ask_arr[1][0]) / 2 * 0.2 +
             (self.bid_arr[2][0] + self.ask_arr[2][0]) / 2 * 0.1
         )
-        # logger.info(f'on data feed: {self.his_prices[:2]} b:{self.bid_price} a:{self.ask_price} {self.smo_vol}')
-        # logger.info(f'ask prices: {self.ask_arr}')
-        # logger.info(f'bid prices: {self.bid_arr}')
         self.find_entrys()
 
     def sm_just_to_half(self):
@@ -162,4 +159,4 @@ class LeekReaper(BnbScan):
             return
         price = self.bid_price if mtype > 0 else self.ask_price
         cost_money = self.submit_order(mtype, price, fin_amount)
-        logger.warning(f'new order, cost: {cost_money:.2f}  {amount_fac} {down_tags}')
+        logger.warning('new order, cost: {0:.2f}  {1} {2}', cost_money, amount_fac, down_tags)

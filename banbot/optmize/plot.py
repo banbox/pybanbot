@@ -221,7 +221,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
         nonlocal x_labels, df, figure, x_indexs, rg_start, rg_end
         rg_start, rg_end = start, end
         df = org_df[start: end]
-        # logger.warning(f'set org range: {xmin}  {xmax}')
+        # logger.warning('set org range: %s  %s', xmin, xmax)
         x_labels = df['date']
         x_indexs = [date_to_stamp(v) for v in x_labels.tolist()]
         if xmax is None:
@@ -253,7 +253,7 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
             xmin, xmax = rel_out["xaxis.range[0]"], rel_out["xaxis.range[1]"]
             xmin = date_to_stamp(xmin[:xmin.find('.')])
             xmax = date_to_stamp(xmax[:xmax.find('.')])
-            # logger.warning(f'xaxis:  {xmin}  {xmax}')
+            # logger.warning('xaxis:  %s  %s', xmin, xmax)
             if xmin < x_indexs[0] - item_delta:
                 xminid, xmaxid = 0, min(len(x_indexs) - 1, view_width)
                 if rg_start >= half_rend_width:

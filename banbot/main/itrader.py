@@ -20,7 +20,7 @@ class Trader:
         self.config = config
         self.name = config.get('name', 'noname')
         if btime.run_mode in TRADING_MODES:
-            logger.info(f'started bot:   >>>  {self.name}  <<<')
+            logger.info('started bot:   >>>  %s  <<<', self.name)
         self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
         self.wallets: WalletsLocal = None
         self.order_mgr: OrderManager = None
@@ -40,7 +40,7 @@ class Trader:
                 self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
 
     async def on_data_feed(self, pair, timeframe, row: list):
-        logger.debug(f'data_feed {pair} {timeframe} {row}')
+        logger.debug('data_feed %s %s %s', pair, timeframe, row)
         row = np.array(row)
         pair_tf = f'{pair}/{timeframe}'
         async with TempContext(pair_tf):
@@ -68,15 +68,13 @@ class Trader:
             calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10:
-            logger.trade_info(f'calc with {len(strategy_list)} strategies, cost: {calc_cost:.1f} ms')
+            logger.trade_info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
         if btime.run_mode != RunMode.LIVE:
             # 模拟模式，填充未成交订单
             await self.order_mgr.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:
-            logger.debug(f'bar signals: {enter_list} {exit_list} {ext_tags}')
-            enter_ods, exit_ods = self.order_mgr.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
-            if enter_ods or exit_ods:
-                logger.trade_info(f'enter: {len(enter_ods)} exit: {len(exit_ods)}')
+            logger.debug('bar signals: %s %s %s', enter_list, exit_list, ext_tags)
+            self.order_mgr.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')
@@ -122,5 +120,5 @@ class Trader:
             await run_async(biz_func)
             exec_cost = time.monotonic() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
-                logger.warning(f'loop task timeout {func_name} cost {exec_cost:.3f} > {interval:.3f}')
+                logger.warning('loop task timeout {0} cost {1:.3f} > {2:.3f}', func_name, exec_cost, interval)
             wait_list[0][2] += interval

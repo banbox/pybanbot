@@ -45,7 +45,7 @@ class RPCManager:
             try:
                 await mod.send_msg(msg)
             except NotImplementedError:
-                logger.error(f"Message type '{msg['type']}' not implemented by handler {mod.name}.")
+                logger.error("Message type '%s' not implemented by handler %s.", msg['type'], mod.name)
             except Exception:
                 logger.exception('Exception occurred within RPC module %s', mod.name)
 

@@ -33,7 +33,7 @@ class OrderBook():
             if vol_sum >= depth:
                 break
         if vol_sum < depth:
-            logger.warning(f'depth not enough, require: {depth:.5f} cur: {vol_sum:.5f}, len: {len(data_arr)}')
+            logger.warning('depth not enough, require: {0:.5f} cur: {1:.5f}, len: {2}', depth, vol_sum, len(data_arr))
         return last_price
 
 
@@ -71,7 +71,7 @@ class OrderManager(metaclass=SingletonArg):
     def allow_pair(self, pair: str) -> bool:
         if self.disabled:
             # 触发系统交易熔断时，禁止入场，允许出场
-            logger.warning(f'order enter forbid, fatal stop, {pair}')
+            logger.warning('order enter forbid, fatal stop, %s', pair)
             return False
         return pair not in self.forbid_pairs
 
@@ -103,7 +103,7 @@ class OrderManager(metaclass=SingletonArg):
         pair, _, _, _ = get_cur_symbol(ctx)
         allow_enter = self.allow_pair(pair)
         if not allow_enter and not (exits or exit_keys):
-            logger.debug(f'pair enter disable: {pair} {enters}')
+            logger.debug('pair enter disable: %s', [pair, enters])
             return [], []
         buy_price, sell_price = self._get_pair_prices(pair)
         enter_ods, exit_ods = [], []
@@ -112,7 +112,7 @@ class OrderManager(metaclass=SingletonArg):
                 for stg_name, enter_tag, cost in enters:
                     enter_ods.append(self.enter_order(ctx, stg_name, enter_tag, cost, buy_price))
             else:
-                logger.debug(f'pair enter not allow: {enters}')
+                logger.debug('pair enter not allow: %s', enters)
         if exits:
             for stg_name, exit_tag in exits:
                 exit_ods.extend(self.exit_open_orders(exit_tag, sell_price, stg_name, pair))
@@ -120,7 +120,7 @@ class OrderManager(metaclass=SingletonArg):
             for key, ext_tag in exit_keys.items():
                 od = self.open_orders.get(key)
                 if not od:
-                    logger.warning(f'order not found to exit: {key}')
+                    logger.warning('order not found to exit: %s', key)
                     continue
                 exit_ods.append(self.exit_order(ctx, od, ext_tag, sell_price))
         enter_ods = [od for od in enter_ods if od]
@@ -148,11 +148,11 @@ class OrderManager(metaclass=SingletonArg):
         lock_key = f'{pair}_{tag}_{strategy}'
         if lock_key in self.open_orders:
             # 同一交易对，同一策略，同一信号，只允许一个订单
-            logger.debug(f'order lock, enter forbid: {lock_key}')
+            logger.debug('order lock, enter forbid: %s', lock_key)
             return
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost)
         if not quote_cost or not self.allow_pair(pair):
-            logger.debug(f'wallet empty or pair disable: {quote_cost}')
+            logger.debug('wallet empty or pair disable: %f', quote_cost)
             return
         od = InOutOrder(
             symbol=pair,
@@ -164,7 +164,7 @@ class OrderManager(metaclass=SingletonArg):
             strategy=strategy
         )
         self.open_orders[lock_key] = od
-        logger.trade_info(f'enter order {od.symbol} {od.enter_tag} {od.enter.price} cost: {cost:.2f}')
+        logger.trade_info('enter order {0} {1} {2} cost: {3:.2f}', od.symbol, od.enter_tag, od.enter.price, cost)
         self._put_order(od, True)
         return od
 
@@ -292,7 +292,7 @@ class OrderManager(metaclass=SingletonArg):
             exit_amount = ava_amt
         od.update_exit(price=price, amount=exit_amount)
         cost = cprice * exit_amount
-        logger.trade_info(f'exit order {od.symbol} {od.exit_tag} got ~: {cost:.2f}')
+        logger.trade_info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
         self._put_order(od, False)
         return od
 
@@ -311,7 +311,7 @@ class OrderManager(metaclass=SingletonArg):
             limit_fee = self.pair_fee_limits.get(od.symbol)
             if limit_fee is not None and fee_rate > limit_fee * 2:
                 self.forbid_pairs.add(od.symbol)
-                logger.error(f'{od.symbol} fee Over limit: {self.pair_fee_limits.get(od.symbol, 0)}')
+                logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
         if od.enter.filled > 0:
             self.his_orders[od.id] = od
 
@@ -343,7 +343,7 @@ class OrderManager(metaclass=SingletonArg):
         for check_mins, bad_ratio in self.fatal_stop.items():
             fatal_loss = self.calc_fatal_loss(check_mins)
             if fatal_loss >= bad_ratio:
-                logger.error(f'fatal loss {fatal_loss * 100:.2f}% in {check_mins} mins, Disable!')
+                logger.error('fatal loss {0:.2f}% in {1} mins, Disable!', fatal_loss * 100, check_mins)
                 self.disabled = True
                 break
 
@@ -470,7 +470,7 @@ class LiveOrderManager(OrderManager):
             del self.unmatch_trades[trade_key]
             if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
-            logger.info(f'exec unmatch trade: {trade}')
+            logger.info('exec unmatch trade: %s', trade)
             await self._update_order(sub_od, trade)
 
     def _check_new_trades(self, sub_od: Order, trades: List[dict]):
@@ -510,7 +510,7 @@ class LiveOrderManager(OrderManager):
                 else:
                     # 出场订单，0成交，被关闭，整体状态为：已入场
                     od.status = InOutStatus.FullEnter
-                logger.warning(f'{od} is {order_status} by {self.name}, no filled')
+                logger.warning('%s is %s by %s, no filled', od, order_status, self.name)
             else:
                 od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
         if od.status == InOutStatus.FullExit:
@@ -525,7 +525,7 @@ class LiveOrderManager(OrderManager):
             sub_od.order_id = order["id"]
             exg_key = f'{od.symbol}_{sub_od.order_id}'
             self.exg_orders[exg_key] = sub_od
-            logger.info(f'create order: {od.symbol} {sub_od.order_id} {order}')
+            logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
             new_num, old_num = self._check_new_trades(sub_od, order['trades'])
             if new_num:
                 self._update_order_res(od, is_enter, order)
@@ -583,7 +583,7 @@ class LiveOrderManager(OrderManager):
                 else:
                     inout_od.status = InOutStatus.FullExit
         else:
-            logger.error(f'unknown bnb order status: {state}, {data}')
+            logger.error('unknown bnb order status: %s, %s', state, data)
             return
         if inout_od.status == InOutStatus.FullExit:
             self._finish_order(inout_od)
@@ -601,7 +601,7 @@ class LiveOrderManager(OrderManager):
     @loop_forever
     async def listen_orders_forever(self):
         trades = await self.exchange.watch_my_trades()
-        logger.info(f'get my trades: {trades}')
+        logger.debug('get my trades: %s', trades)
         related_ods = set()
         for data in trades:
             trade_key = f"{data['symbol']}_{data['id']}"
@@ -625,7 +625,7 @@ class LiveOrderManager(OrderManager):
                 exp_unmatchs.append(trade)
                 del self.unmatch_trades[trade_key]
         if exp_unmatchs:
-            logger.warning(f'expired unmatch orders: {exp_unmatchs}')
+            logger.warning('expired unmatch orders: %s', exp_unmatchs)
 
     async def _exec_order_enter(self, od: InOutOrder):
         if od.exit_tag:
@@ -661,7 +661,7 @@ class LiveOrderManager(OrderManager):
             key = '_'.join(job.od_id.split('_')[:-1])
             od = self.open_orders.get(key)
             if not od or od.id != job.od_id:
-                logger.warning(f'order not found, may be already canceled: {job.od_id} {job.is_enter}')
+                logger.warning('order not found, may be already canceled: %s %s', job.od_id, job.is_enter)
                 return
         if job.is_enter:
             await self._exec_order_enter(od)
@@ -674,7 +674,7 @@ class LiveOrderManager(OrderManager):
             try:
                 await self.exec_order(job)
             except Exception:
-                logger.exception(f'consume order exception: {job}')
+                logger.exception('consume order exception: %s', job)
             self.order_q.task_done()
 
     @loop_forever
@@ -693,7 +693,7 @@ class LiveOrderManager(OrderManager):
             return
         if btime.now().minute % 30 == 0:
             od_dump = [od.to_dict() for od in list(self.open_orders.values())]
-            logger.warning(f'open orders: {od_dump}')
+            logger.warning('open orders: %s', od_dump)
         exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:
             return
@@ -707,7 +707,7 @@ class LiveOrderManager(OrderManager):
                     if sell_price >= od.exit.price:
                         continue
                     od.exit.timestamp = btime.time()
-                    logger.info(f'change price exit {od.key} price: {od.exit.price} -> {sell_price}')
+                    logger.info('change price exit %s price: %f -> %f', od.key, od.exit.price, sell_price)
                     od.exit.price = sell_price
                     if not od.exit.order_id:
                         await self._exec_order_exit(od)
@@ -720,7 +720,7 @@ class LiveOrderManager(OrderManager):
                     if buy_price <= od.enter.price:
                         continue
                     od.enter.timestamp = btime.time()
-                    logger.info(f'change price enter {od.key} price: {od.enter.price} -> {buy_price}')
+                    logger.info('change price enter %s price: %f -> %f', od.key, od.enter.price, buy_price)
                     od.enter.price = buy_price
                     if not od.enter.order_id:
                         await self._exec_order_enter(od)

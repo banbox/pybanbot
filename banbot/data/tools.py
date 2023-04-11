@@ -32,7 +32,7 @@ def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):
         start_text, end_text = start_date.strftime("%Y-%m-%d"), date_val.strftime("%Y-%m-%d")
         out_name = f'{pair}{fea_tf}{start_text}-{end_text}.feather'
         merge_df.to_feather(os.path.join(data_dir, out_name), compression='lz4')
-        logger.info(f'saved: {out_name}')
+        logger.info('saved: %s', out_name)
         data_list = []
         start_date = None
     for i, name in enumerate(csv_names):
@@ -40,7 +40,7 @@ def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):
         cdata_val = datetime.datetime.strptime(cdate, '%Y-%m-%d').date()
         if date_val and ((cdata_val - date_val).days != 1 or pair != cpair):
             # 和上一个时间不连续
-            logger.warning(f'{cpair} date not continus : {date_val} -- {cdata_val}')
+            logger.warning('{0} date not continus : {1} -- {2}', cpair, date_val, cdata_val)
             merge_and_save()
         elif len(data_list) >= group_num:
             merge_and_save()

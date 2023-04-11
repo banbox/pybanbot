@@ -86,7 +86,7 @@ def _load_train_df(timeframe: str, pos_thres: int = 35, neg_thres: int = -30, pr
 
 def load_data(as_dataset=True, timeframe: str = '5m', pos_thres: int = 40, neg_thres: int = -30, pred_off: int = 1):
     train_df, test_df = _load_train_df(timeframe, pos_thres, neg_thres, pred_off=pred_off)
-    logger.warning(f'load lightGbm data, train: {len(train_df)}, test: {len(test_df)}')
+    logger.warning('load lightGbm data, train: %d, test: %d', len(train_df), len(test_df))
     test_x, test_y, col_names = process_df(test_df, pos_thres, neg_thres)
     train_x, train_y, col_names = process_df(train_df, pos_thres, neg_thres)
     if as_dataset:

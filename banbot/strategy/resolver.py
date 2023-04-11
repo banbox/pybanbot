@@ -58,7 +58,7 @@ def _load_file_strategies(path: str):
         except (AttributeError, ModuleNotFoundError, SyntaxError,
                 ImportError, NameError) as err:
             # Catch errors in case a specific module is not installed
-            logger.warning(f"Could not import {module_path} due to '{err}'")
+            logger.warning("Could not import %s due to '%s'", module_path, err)
             return []
 
         return _load_module_strategies(module)
@@ -78,7 +78,7 @@ def load_strategy_list(config: dict) -> List[Type[BaseStrategy]]:
 def load_run_jobs(config: dict) -> List[Tuple[str, str, List[Type[BaseStrategy]]]]:
     strategy_list = load_strategy_list(config)
     strategy_map = {item.__name__: item for item in strategy_list}
-    logger.info(f'found strategy: {list(strategy_map.keys())}')
+    logger.info('found strategy: %s', list(strategy_map.keys()))
     result = dict()
     pairlist = config['pairlist']
     for policy in config['run_policy']:

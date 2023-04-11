@@ -28,7 +28,7 @@ def loop_forever(func):
                 await run_async(func, *args, **kwargs)
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
-                    logger.warning(f'[{args}] watch balance get 1006, retry...')
+                    logger.warning('[%s] watch balance get 1006, retry...', args)
                     continue
                 raise e
     return wrap
@@ -62,7 +62,7 @@ def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.
         os.environ['HTTPS_PROXY'] = exg_cfg['proxies']['https']
         os.environ['WS_PROXY'] = exg_cfg['proxies']['http']
         os.environ['WSS_PROXY'] = exg_cfg['proxies']['http']
-        logger.warning(f"[PROXY] {exg_cfg['proxies']}")
+        logger.warning("[PROXY] %s", exg_cfg['proxies'])
     exchange = _create_exchange(ccxt, cfg)
     exchange_async = _create_exchange(ccxt_async, cfg)
     if not with_ws:
@@ -122,7 +122,7 @@ class CryptoExchange:
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)
         _copy_markets(self.api_async, self.api)
-        logger.info(f'{len(markets)} markets loaded for {self.api.name}')
+        logger.info('%d markets loaded for %s', len(markets), self.api.name)
 
     def calc_funding_fee(self, od: Order):
         '''
@@ -260,13 +260,13 @@ class CryptoExchange:
                 try:
                     res = await self.api_async.cancel_order(od['id'], symbol)
                     if res['status'] != 'canceled':
-                        logger.error(f'cancel order fail: {res}')
+                        logger.error('cancel order fail: %s', res)
                         continue
                     success_cnt += 1
                 except ccxt.OrderNotFound:
                     continue
         if success_cnt:
-            logger.warning(f'canceled {success_cnt} unfill orders')
+            logger.warning('canceled %d unfill orders', success_cnt)
 
     async def close(self):
         await self.api_async.close()

@@ -88,7 +88,7 @@ class LiveTrader(Trader):
     async def cleanup(self):
         exit_ods = self.order_mgr.exit_open_orders('force_exit', 0)
         if exit_ods:
-            logger.info(f'exit {len(exit_ods)} open trades')
+            logger.info('exit %d open trades', len(exit_ods))
         await self.order_mgr.order_q.join()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,

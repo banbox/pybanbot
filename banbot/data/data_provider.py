@@ -46,7 +46,7 @@ class DataProvider:
                 try:
                     await run_async(callback, *args, **kwargs)
                 except Exception:
-                    logger.exception(f'LiveData Callback Exception {args} {kwargs}')
+                    logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         return handler
 
     def _set_callback(self, callback: Callable):
