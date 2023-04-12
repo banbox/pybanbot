@@ -9,6 +9,7 @@ from banbot.bar_driven.addons import *
 
 class MACDCross(BaseStrategy):
     '''
+    注意：这是高频策略，由于滑点和延迟问题，实际收益可能只有回测的一半。
     基于MACD+MA5策略。
     当MA5处于上升通道，当前bar阳线，且MACD也上升时，入场。
     使用跟踪止损出场

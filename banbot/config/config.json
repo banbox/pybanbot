@@ -4,7 +4,7 @@
   "run_mode": "live",
   "prefire": true,
   "quote_base": "USDT",
-  "stake_amount": 30,
+  "stake_amount": 1000,
   "max_market_rate": 0.0001,
   "odbook_ttl": 1000,
   "limit_vol_secs": 5,
