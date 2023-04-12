@@ -36,16 +36,17 @@ from banbot.util import btime
 
 class BanTimerHandle(TimerHandle):
     def __init__(self, when, callback, args, loop, context=None):
-        self.sval = when
-        self.start = btime.cur_timestamp
+        self.sval = when  # 用于排序的值
+        # self.start = btime.cur_timestamp  # 记录调度时间
         if btime.run_mode not in btime.TRADING_MODES:
             when = time.monotonic()
         super(BanTimerHandle, self).__init__(when, callback, args, loop, context)
 
-    def _run(self) -> None:
-        if self.sval > self._when:
-            btime.cur_timestamp = self.start + self.sval - self._when
-        super(BanTimerHandle, self)._run()
+    # 模拟时钟不在这里修改，这里修改会出现并发读写错乱，交由外部手动修改
+    # def _run(self) -> None:
+    #     if self.sval > self._when:
+    #         btime.cur_timestamp = self.start + self.sval - self._when
+    #     super(BanTimerHandle, self)._run()
 
     def _repr_info(self):
         info = super()._repr_info()

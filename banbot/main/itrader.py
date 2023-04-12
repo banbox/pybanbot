@@ -67,7 +67,7 @@ class Trader:
                     ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_end = time.monotonic()
         calc_cost = (calc_end - start_time) * 1000
-        if calc_cost >= 10:
+        if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
             logger.info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
         if btime.run_mode != RunMode.LIVE:
             # 模拟模式，填充未成交订单

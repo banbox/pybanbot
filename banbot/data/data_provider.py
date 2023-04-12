@@ -74,16 +74,28 @@ class DataProvider:
         try:
             await self._first_call(warmup_num)
             while BotGlobal.state == BotState.RUNNING:
-                left_sleep = self.min_interval - (time.monotonic() - last_end)
+                left_sleep = self.min_interval
+                is_realtime = btime.run_mode in TRADING_MODES
+                if is_realtime:
+                    left_sleep -= time.monotonic() - last_end
                 if left_sleep > 0:
                     await asyncio.sleep(left_sleep)
+                    if not is_realtime:
+                        btime.cur_timestamp += left_sleep
                 last_end = time.monotonic()
                 try:
                     await self.process()
                 except EOFError:
+                    logger.warning("data loop complete")
+                    BotGlobal.state = BotState.STOPPED
                     break
         except Exception:
             logger.exception('loop data main fail')
+
+    def _reset_state_times(self):
+        for hold in self.holders:
+            for state in hold.states:
+                state.last_check = None
 
     async def _first_call(self, warmup_num: int):
         back_secs = self._set_warmup(warmup_num)
@@ -104,8 +116,9 @@ class DataProvider:
             ts_val = 0
             for hold in self.holders:
                 state = hold.states[0]
-                ts_val = max(ts_val, state.bar_row[0] + state.tf_secs - hold.prefire_secs)
+                ts_val = max(ts_val, state.bar_row[0] / 1000 + state.tf_secs - hold.prefire_secs)
             btime.cur_timestamp = ts_val
+            self._reset_state_times()
 
 
 class LocalDataProvider(DataProvider):

@@ -99,9 +99,14 @@ class PairDataFeeder:
             state.bar_row = cur_ohlcvs[-1]
 
     async def _fire_callback(self, state: PairTFCache):
-        if state.bar_row[0] + state.tf_secs * 2 < btime.time():
-            # 当蜡烛的触发时间过于滞后时，输出错误信息
-            logger.error('{0}/{1} bar is too late {2}', self.pair, state.timeframe, state.bar_row[0])
+        bar_end_secs = state.bar_row[0] / 1000 + state.tf_secs
+        if btime.run_mode in TRADING_MODES:
+            if bar_end_secs + state.tf_secs < btime.time():
+                # 当蜡烛的触发时间过于滞后时，输出错误信息
+                delay = btime.time() - bar_end_secs
+                logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, state.timeframe, delay)
+        else:
+            btime.cur_timestamp = bar_end_secs
         await self.callback(self.pair, state.timeframe, state.bar_row)
 
 
