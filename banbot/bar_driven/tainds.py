@@ -18,6 +18,7 @@ from contextvars import Context, ContextVar, copy_context
 from asyncio import Lock
 from typing import *
 
+import numpy as np
 import pandas as pd
 
 from banbot.util.num_utils import *
@@ -214,6 +215,12 @@ class BaseInd(metaclass=CachedInd):
         self.cache_key = cache_key
         self.calc_bar = 0
         self.arr: List[float] = []
+
+    def __getitem__(self, index):
+        return self.arr[index]
+
+    def __len__(self):
+        return len(self.arr)
 
 
 class BaseSimpleInd(BaseInd):
@@ -482,6 +489,70 @@ def MACD(arr: np.ndarray, fast_period: int = 12, slow_period: int = 26, smooth_p
     macd = ema_fast - ema_slow
     signal = EMA(macd, smooth_period)
     return macd, signal
+
+
+class StaRSI(BaseInd):
+    def __init__(self, period: int, cache_key: str = ''):
+        super(StaRSI, self).__init__(cache_key)
+        self.period = period
+        self.gain_avg = 0
+        self.loss_avg = 0
+        self.last_input = np.nan
+
+    def __call__(self, *args, **kwargs):
+        input_val = args[0]
+        assert hasattr(input_val, '__sub__')
+        if self.calc_bar >= bar_num.get():
+            return self.arr[-1]
+        if np.isnan(self.last_input):
+            self.last_input = input_val
+            self.arr.append(np.nan)
+            return self.arr[-1]
+        val_delta = input_val - self.last_input
+        self.last_input = input_val
+        if len(self.arr) > self.period:
+            if val_delta >= 0:
+                gain_delta, loss_delta = val_delta, 0
+            else:
+                gain_delta, loss_delta = 0, val_delta
+            self.gain_avg = (self.gain_avg * (self.period - 1) + gain_delta) / self.period
+            self.loss_avg = (self.loss_avg * (self.period - 1) + loss_delta) / self.period
+            self.arr.append(self.gain_avg * 100 / (self.gain_avg - self.loss_avg))
+        else:
+            if val_delta >= 0:
+                self.gain_avg += val_delta / self.period
+            else:
+                self.loss_avg += val_delta / self.period
+            if len(self.arr) == self.period:
+                self.arr.append(self.gain_avg * 100 / (self.gain_avg - self.loss_avg))
+            else:
+                self.arr.append(np.nan)
+        self.arr = self.arr[-600:]
+        return self.arr[-1]
+
+
+def RSI(arr: np.ndarray, period: int):
+    '''
+    相对强度指数。0-100之间。
+    价格变化有的使用变化率，大部分使用变化值。这里使用变化值：price_chg
+    :param arr:
+    :param period:
+    :return:
+    '''
+    if len(arr) <= period:
+        return np.array([np.nan] * len(arr))
+    price_chg = np.diff(arr)
+    gain_arr = np.maximum(price_chg, 0)
+    loss_arr = np.abs(np.minimum(price_chg, 0))
+    gain_avg = np.average(gain_arr[:period])
+    loss_avg = np.average(loss_arr[:period])
+    result = [np.nan] * period
+    result.append(gain_avg * 100 / (gain_avg + loss_avg))
+    for i in range(period, len(price_chg)):
+        gain_avg = (gain_avg * (period - 1) + gain_arr[i]) / period
+        loss_avg = (loss_avg * (period - 1) + loss_arr[i]) / period
+        result.append(gain_avg * 100 / (gain_avg + loss_avg))
+    return np.array(result)
 
 
 def _make_sub_malong():

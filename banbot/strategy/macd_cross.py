@@ -20,11 +20,13 @@ class MACDCross(BaseStrategy):
         super(MACDCross, self).__init__(config)
         self.macd = StaMACD(11, 38, 14)
         self.ma5 = StaSMA(5)
+        self.atr = StaATR()
 
     def on_bar(self, arr: np.ndarray):
         ccolse = arr[-1, ccol]
         self.ma5(ccolse)
         self.macd(ccolse)
+        self.atr(arr)
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         long_bar_len = LongVar.get(LongVar.bar_len).val
@@ -41,9 +43,10 @@ class MACDCross(BaseStrategy):
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         elp_num = bar_num.get() - od.enter_at
-        max_loss, max_up, back_rate = trail_info(arr, elp_num, od.enter.price)
-        return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[4, 7, 10, 15],
-                                    loss_thres=[-0.3, -0.1, 1., 2., 3.6], back_rates=[0.44, 0.28, 0.13])
+        atr_val = self.atr[- elp_num - 1]
+        loss_thres = [-1.2 * atr_val, -0.85 * atr_val, atr_val, 2.7 * atr_val, 4 * atr_val]
+        return trail_stop_loss(arr, od.enter.price, elp_num, loss_thres, odlens=[10, 10, 16, 25],
+                               back_rates=[0.44, 0.28, 0.13])
         # 如下参数组，对高波动性市场获利更好，但震荡时亏损也略多，整体收益不如上面
         # return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[7, 20, 40, 70],
         #                             loss_thres=[-1.5, -1., 2., 4., 7.], back_rates=[0.44, 0.28, 0.13])

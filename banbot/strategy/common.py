@@ -10,40 +10,38 @@ def trail_info(arr: np.ndarray, elp_num: int, enter_price: float):
     # 全局最高价，这里测试使用收盘价计算效果更好
     max_price = np.max(arr[-elp_num:, ccol])
     cur_close = arr[-1, ccol]
-    max_loss = cur_close - max(enter_price, max_price)
+    # loss_val = cur_close - max(enter_price, max_price)
+    # 这里应该用相对入场价的损失，刚入场波动较大，否则很容易被中途甩出
+    loss_val = cur_close - enter_price
     dust = min(0.00001, cur_close * 0.0001)
     max_updiff = max(dust, max_price - enter_price)
     back_rate = (max_price - cur_close) / max_updiff
-    return max_loss, max_updiff, back_rate
+    return loss_val, max_updiff, back_rate
 
 
-def trail_stop_loss_core(elp_num: int, max_up: float, max_loss: float, back_rate: float,
-                         odlens: List[int] = None, loss_thres: List[float] = None, back_rates: List[float] = None):
-    bar_len = to_pytypes(LongVar.get(LongVar.bar_len).val)
+def trail_stop_loss_core(elp_num: int, max_up: float, loss_val: float, back_rate: float,
+                         loss_thres: List[float], odlens: List[int] = None, back_rates: List[float] = None):
     if odlens:
         flen, slen, mlen, llen = odlens
     else:
         flen, slen, mlen, llen = 3, 5, 10, 15
-    if loss_thres:
-        pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres
-    else:
-        pf_n2, pf_n1, pf_1, pf_2, pf_3 = -1., -0., 1.5, 2., 3.6
-    if elp_num <= flen and max_loss < bar_len * pf_n2:
-        return 'sm_ls'
-    if flen < elp_num <= slen and max_loss < bar_len * pf_n1:
-        return 'loss6'
+    pf_n2, pf_n1, pf_1, pf_2, pf_3 = loss_thres
+    if elp_num <= flen and loss_val < pf_n2:
+        return 'ls_b'
+    if flen < elp_num <= slen and loss_val < pf_n1:
+        return 'ls_s'
     if not back_rates:
         back_rates = 0.47, 0.28, 0.18
-    if back_rate >= back_rates[0] and (slen < elp_num <= mlen or max_up > bar_len * pf_1):
+    if back_rate >= back_rates[0] and (slen < elp_num <= mlen or max_up > pf_1):
         return 'back.5'
-    elif back_rate >= back_rates[1] and (mlen < elp_num <= llen or max_up > bar_len * pf_2):
+    elif back_rate >= back_rates[1] and (mlen < elp_num <= llen or max_up > pf_2):
         return 'back.3'
-    elif back_rate >= back_rates[2] and (llen < elp_num or max_up > bar_len * pf_3):
+    elif back_rate >= back_rates[2] and (llen < elp_num or max_up > pf_3):
         return 'back.2'
 
 
-def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, odlens: List[int] = None,
-                    loss_thres: List[float] = None, back_rates: List[float] = None) -> Optional[str]:
+def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, loss_thres: List[float],
+                    odlens: List[int] = None, back_rates: List[float] = None) -> Optional[str]:
     '''
     跟踪止损。
     3周期内，价格跌破bar_len出场
@@ -59,5 +57,5 @@ def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, odlens: L
     :param back_rates: 回撤比率。默认：0.47, 0.28, 0.18
     :return:
     '''
-    max_loss, max_up, back_rate = trail_info(arr, elp_num, enter_price)
-    return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens, loss_thres, back_rates)
+    loss_val, max_up, back_rate = trail_info(arr, elp_num, enter_price)
+    return trail_stop_loss_core(elp_num, max_up, loss_val, back_rate, loss_thres, odlens, back_rates)

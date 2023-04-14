@@ -147,17 +147,19 @@ class LocalPairDataFeeder(PairDataFeeder):
 
     def _load_sml_data(self):
         import pandas as pd
-        logger.info('loading data from %s', self.data_path)
         df = pd.read_feather(self.data_path)
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
+        start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
+        logger.info('loading data %s, range: %d-%d', os.path.basename(self.data_path), start_ts, end_ts)
         if self.timerange:
             if self.timerange.startts:
                 df = df[df['date'] >= self.timerange.startts * 1000]
             if self.timerange.stopts:
                 df = df[df['date'] <= self.timerange.stopts * 1000]
             if len(df):
-                tfrom, tto = btime.to_datestr(df.iloc[0]["date"]), btime.to_datestr(df.iloc[-1]["date"])
-                logger.info('truncate data from %s to %s', tfrom, tto)
+                start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
+                tfrom, tto = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
+                logger.info('truncate data from %s(%d) to %s(%d)', tfrom, start_ts, tto, end_ts)
             else:
                 tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
                 raise ValueError('no data found after truncate from %s to %s', tfrom, tto)

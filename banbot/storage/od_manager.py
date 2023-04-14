@@ -48,7 +48,7 @@ class OrderManager(metaclass=SingletonArg):
         self.prices = dict()  # 所有产品对法币的价格
         self.open_orders: Dict[str, InOutOrder] = dict()  # 尚未退出的订单
         self.his_orders: OrderedDict[str, InOutOrder] = OrderedDict()  # 历史已完成或取消的订单
-        self.network_cost = 0.6  # 模拟网络延迟
+        self.network_cost = 3.  # 模拟网络延迟
         self.callback = callback
         self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
         self.fatal_stop = dict()
@@ -224,14 +224,38 @@ class OrderManager(metaclass=SingletonArg):
     def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
         '''
         计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
+        阳线和阴线对应不同的模拟方法。
+        阳线一般是先略微下调，再上冲到最高点，最后略微回调出现上影线。
+        阴线一般是先略微上调，再下跌到最低点，最后略微回调出现下影线。
         :return:
         '''
         rate = min(1., self.network_cost / timeframe_to_seconds(timeframe))
-        if candle is not None:
-            return candle[ocol] * (1 - rate) + candle[ccol] * rate
-        else:
+        if candle is None:
             candle = self.data_hold.get_latest_ohlcv(pair)
-            return candle[ocol]
+        open_p, high_p, low_p, close_p = candle[ocol: vcol]
+        if open_p <= close_p:
+            # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
+            a, b, c = open_p - low_p, high_p - low_p, high_p - close_p
+            total_len = a + b + c
+            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
+            if rate <= a_end_rate:
+                start, end, pos_rate = open_p, low_p, rate / a_end_rate
+            elif rate <= b_end_rate:
+                start, end, pos_rate = low_p, high_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
+            else:
+                start, end, pos_rate = high_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
+        else:
+            # 阴线，一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
+            a, b, c = high_p - open_p, high_p - low_p, close_p - low_p
+            total_len = a + b + c
+            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
+            if rate <= a_end_rate:
+                start, end, pos_rate = open_p, high_p, rate / a_end_rate
+            elif rate <= b_end_rate:
+                start, end, pos_rate = high_p, low_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
+            else:
+                start, end, pos_rate = low_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
+        return start * (1 - pos_rate) + end * pos_rate
 
     async def fill_pending_orders(self, symbol: str = None, timeframe: str = None, candle: Optional[np.ndarray] = None):
         '''
