@@ -43,6 +43,13 @@ class Trader:
         logger.debug('data_feed %s %s %s', pair, timeframe, row)
         row = np.array(row)
         pair_tf = f'{pair}/{timeframe}'
+        tf_secs = timeframe_to_seconds(timeframe)
+        # 超过1分钟或周期的一半，认为bar延迟，不可下单
+        delay = btime.time() - (row[0] // 1000 + tf_secs)
+        bar_expired = delay >= max(60., tf_secs * 0.5)
+        is_live_mode = btime.run_mode == RunMode.LIVE
+        if bar_expired and is_live_mode:
+            logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         async with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
@@ -58,7 +65,7 @@ class Trader:
                 # 调用策略生成入场和出场信号
                 entry_tag = strategy.on_entry(pair_arr)
                 exit_tag = strategy.on_exit(pair_arr)
-                if entry_tag and (not strategy.skip_enter_on_exit or not exit_tag):
+                if entry_tag and not bar_expired and (not strategy.skip_enter_on_exit or not exit_tag):
                     cost = strategy.custom_cost(entry_tag)
                     enter_list.append((stg_name, entry_tag, cost))
                 if not strategy.skip_exit_on_enter or not entry_tag:
@@ -69,7 +76,7 @@ class Trader:
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
             logger.info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
-        if btime.run_mode != RunMode.LIVE:
+        if not is_live_mode:
             # 模拟模式，填充未成交订单
             await self.order_mgr.fill_pending_orders(pair, timeframe, row)
         if enter_list or exit_list or ext_tags:

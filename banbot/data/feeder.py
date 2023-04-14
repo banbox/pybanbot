@@ -234,13 +234,17 @@ class LivePairDataFeader(PairDataFeeder):
                 details = [self.warm_data[self.warm_id]]
                 self.warm_id += 1
                 return details, state.tf_secs
-        if not self.is_ws:
-            # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
-            details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
-            self.next_since = details[-1][0] + 1
-            detail_interval = 1
-        else:
-            details = await self.exchange.watch_trades(self.pair)
-            detail_interval = 0.1
-        return details, detail_interval
+        try:
+            if not self.is_ws:
+                # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
+                details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
+                self.next_since = details[-1][0] + 1
+                detail_interval = 1
+            else:
+                details = await self.exchange.watch_trades(self.pair)
+                detail_interval = 0.1
+            return details, detail_interval
+        except ccxt.NetworkError:
+            logger.exception(f'get live data exception: {self.pair}')
+            return None, None
 
