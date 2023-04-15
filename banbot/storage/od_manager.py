@@ -200,7 +200,7 @@ class OrderManager(metaclass=SingletonArg):
 
     async def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        quote_amount = exit_price * od.enter.amount
+        quote_amount = exit_price * od.exit.amount
         fees = self.exchange.calc_funding_fee(od.exit)
         if fees['rate']:
             od.exit.fee = fees['rate']
@@ -208,13 +208,13 @@ class OrderManager(metaclass=SingletonArg):
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
         quote_amt = quote_amount * (1 - od.exit.fee)
-        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.enter.amount})
+        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
         od.status = InOutStatus.FullExit
         od.exit_at = ctx[bar_num]
         od.update_exit(
             status=OrderStatus.Close,
             price=exit_price,
-            filled=od.enter.amount,
+            filled=od.exit.amount,
             average=exit_price,
         )
         self._finish_order(od)

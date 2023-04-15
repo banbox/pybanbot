@@ -52,7 +52,7 @@ class WalletsLocal:
         if len(items) == 2:
             # 同时更新2个钱包时，必须是一增一减
             (keya, vala), (keyb, valb) = items
-            assert vala * valb < 0, 'two amount should different signs'
+            assert vala * valb < 0, f'two amount should different signs {vala} - {valb}'
             self._update_wallet(keya, vala, False)
             self._update_wallet(keyb, valb, False)
         else:
