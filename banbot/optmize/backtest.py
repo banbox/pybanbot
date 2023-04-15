@@ -27,6 +27,7 @@ class BackTest(Trader):
         self.bar_count = 0
         self.open_price = 0
         self.close_price = 0
+        self.enter_list = []
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
@@ -37,7 +38,12 @@ class BackTest(Trader):
         else:
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
-        await super(BackTest, self).on_data_feed(pair, timeframe, row)
+        enter_list, exit_list, ext_tags = await super(BackTest, self).on_data_feed(pair, timeframe, row)
+        if enter_list:
+            ctx = get_context(f'{pair}/{timeframe}')
+            price = to_pytypes(ctx[bar_arr][-1, ccol])
+            enter_text = ','.join([v[1] for v in enter_list])
+            self.enter_list.append((ctx[bar_num], enter_text, price))
 
     async def init(self):
         with btime.TempRunMode(RunMode.DRY_RUN):
@@ -76,6 +82,9 @@ class BackTest(Trader):
             self.max_balance = min(self.max_balance, balance)
 
     def _calc_result_done(self):
+        # 输出入场信号
+        enter_ids, enter_tags, enter_prices = list(zip(*self.enter_list))
+        self.result['enters'] = dict(ids=enter_ids, tags=enter_tags, valy=enter_prices)
         quote_s = 'TUSD'
         self.result['date_to'] = btime.to_datestr(self.result['date_to'])
         self.result['max_open_orders'] = self.max_open_orders

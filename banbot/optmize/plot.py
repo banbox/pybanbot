@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/2/21
 import numpy as np
+import pandas as pd
 import six
 from datetime import datetime
 
@@ -20,15 +21,60 @@ def _make_yrange(col):
     return get_xrange
 
 
+def _add_mark(fig, df: pd.DataFrame, mids, mtags, y_vals, marker=None, row=1):
+    x_labels = df['date']
+    # mids是来自bar_num，基于1开始的索引
+    mids = (np.array(mids) - 1).tolist()
+    m_set = set(df.index.intersection(mids))
+    m_id_p = [(i, v) for i, v in enumerate(mids) if v in m_set]
+    if m_id_p:
+        m_loc, m_id = list(zip(*m_id_p))
+        m_tag = [mtags[i] for i, v in enumerate(mids) if v in m_set]
+        mark_x, mark_y = x_labels.loc[list(m_id)], np.array(y_vals)[list(m_loc)]
+        ind = go.Scatter(x=mark_x, y=mark_y, mode='markers+text', text=m_tag, marker=marker)
+        trade_args = dict()
+        if row == 1:
+            trade_args = dict(secondary_y=True)
+        fig.add_trace(ind, row=row, col=1, **trade_args)
+        return m_loc, m_id_p
+    return [], m_id_p
+
+
+def _add_order_ind(fig, df: pd.DataFrame, ind: dict):
+    x_labels = df['date']
+    # 显示订单入场和退出；当前列是入场信号列，
+    enter_id, enter_tag, enter_price = ind['enter_id'], ind['enter_tag'], ind['enter_price']
+    exit_id, exit_tag, exit_price = ind['exit_id'], ind['exit_tag'], ind['exit_price']
+    enter_price = np.array(enter_price)
+    exit_price = np.array(exit_price)
+
+    in_loc, in_id_p = _add_mark(fig, df, enter_id, enter_tag, enter_price, dict(color='green'))
+    out_loc, out_id_p = _add_mark(fig, df, exit_id, exit_tag, exit_price, dict(color='blue'))
+
+    # 计算可绘制的线段
+    line_ids = set(in_loc).intersection(out_loc)
+    lin_id_p = [(i, v) for i, v in in_id_p if i in line_ids]
+    lout_id = [v for i, v in out_id_p if i in line_ids]
+    if lin_id_p:
+        # line_loc在in_id_p和out_id_p中应该完全相同
+        line_loc, lin_id = list(zip(*lin_id_p))
+        line_loc, lin_id = list(line_loc), list(lin_id)
+        start_x, start_y = x_labels.loc[lin_id], enter_price[line_loc]
+        end_x, end_y = x_labels.loc[lout_id], exit_price[line_loc]
+        line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
+        for i in range(len(lin_id)):
+            fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y[i], end_y[i]],
+                                     **line_args), row=1, col=1, secondary_y=True)
+
+
 def _add_indicator(fig, df, inds):
-    import pandas as pd
     x_labels = df['date']
     sub_yrange_calcs = []
     for ind in inds:
-        name = ind['col']
+        name = ind.get('col')
         row_num = ind.get('row', 1)
         dtype = ind.get('type', 'scatter')
-        func_args = dict(x=x_labels, y=df[name], name=name)
+        func_args = dict(x=x_labels, name=name)
         if row_num == 1:
             func_args['hoverinfo'] = 'skip'
         if ind.get('color'):
@@ -38,72 +84,16 @@ def _add_indicator(fig, df, inds):
         if dtype == 'scatter':
             trace_func = go.Scatter
         elif dtype == 'mark':
-            trace_func = go.Scatter
-            col_type = df[name].dtype
-            is_str_col = pd.api.types.is_string_dtype(col_type)
-            if not is_str_col and str(col_type).find('int') < 0:
-                raise ValueError('`mark` type ind must be type: str/int')
-            if is_str_col:
-                singels = df[df[name].notnull() & (df[name] != '')]
-                func_args['mode'] = 'markers+text'
-                func_args['text'] = singels[name]
-                func_args['hoverinfo'] = 'text'
-            else:
-                singels = df[df[name] == 1]
-                func_args['mode'] = 'markers'
-            if not len(singels):
-                continue
-            func_args['x'] = singels.date
-            coly = ind.get('coly')
-            if not coly:
-                coly = 'close' if row_num == 1 else name
-            func_args['y'] = singels[coly]
-            func_args['marker'] = dict(
+            marker = dict(
                 symbol=ind['symbol'],
                 size=9,
                 line=dict(width=1),
                 color=ind.get('color'),
             )
+            _add_mark(fig, df, ind['ids'], ind['tags'], ind['valy'], marker, row=row_num)
+            continue
         elif dtype == 'order':
-            # 显示订单入场和退出；当前列是入场信号列，
-            enter_id, enter_tag, enter_price = ind['enter_id'], ind['enter_tag'], np.array(ind['enter_price'])
-            exit_id, exit_tag, exit_price = ind['exit_id'], ind['exit_tag'], np.array(ind['exit_price'])
-            # 过滤在当前df范围内的信号
-            in_set = set(df.index.intersection(enter_id))
-            in_id_p = [(i, v) for i, v in enumerate(enter_id) if v in in_set]
-            in_loc, out_loc = [], []
-            if in_id_p:
-                in_loc, in_id = list(zip(*in_id_p))
-                in_tag = [enter_tag[i] for i, v in enumerate(enter_id) if v in in_set]
-                in_id = list(in_id)
-                start_x, start_y = x_labels.loc[in_id], enter_price[list(in_loc)]
-                start = go.Scatter(x=start_x, y=start_y, mode='markers+text', text=in_tag, marker=dict(color='green'))
-                fig.add_trace(start, row=1, col=1, secondary_y=True)
-
-            out_set = set(df.index.intersection(exit_id))
-            out_id_p = [(i, v) for i, v in enumerate(exit_id) if v in out_set]
-            if out_id_p:
-                out_loc, out_id = list(zip(*out_id_p))
-                out_tag = [exit_tag[i] for i, v in enumerate(exit_id) if v in out_set]
-                # 绘制入场信号和退出信号
-                out_id = list(out_id)
-                end_x, end_y = x_labels.loc[out_id], exit_price[list(out_loc)]
-                end = go.Scatter(x=end_x, y=end_y, mode='markers+text', text=out_tag, marker=dict(color='blue'))
-                fig.add_trace(end, row=1, col=1, secondary_y=True)
-            # 计算可绘制的线段
-            line_ids = set(in_loc).intersection(out_loc)
-            lin_id_p = [(i, v) for i, v in in_id_p if i in line_ids]
-            lout_id = [v for i, v in out_id_p if i in line_ids]
-            if lin_id_p:
-                # line_loc在in_id_p和out_id_p中应该完全相同
-                line_loc, lin_id = list(zip(*lin_id_p))
-                line_loc, lin_id = list(line_loc), list(lin_id)
-                start_x, start_y = x_labels.loc[lin_id], enter_price[line_loc]
-                end_x, end_y = x_labels.loc[lout_id], exit_price[line_loc]
-                line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
-                for i in range(len(lin_id)):
-                    fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y[i], end_y[i]],
-                                             **line_args), row=1, col=1, secondary_y=True)
+            _add_order_ind(fig, df, ind)
             continue
         elif dtype == 'bar':
             trace_func = go.Bar
@@ -114,6 +104,8 @@ def _add_indicator(fig, df, inds):
             trace_args['secondary_y'] = True
         else:
             sub_yrange_calcs.append((row_num, _make_yrange(df[name])))
+        if not func_args.get('y'):
+            func_args['y'] = df[name]
         fig.add_trace(trace_func(**func_args), **trace_args)
     return sorted(sub_yrange_calcs, key=lambda x: x[0])
 

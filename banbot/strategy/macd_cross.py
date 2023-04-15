@@ -20,7 +20,7 @@ class MACDCross(BaseStrategy):
         super(MACDCross, self).__init__(config)
         self.macd = StaMACD(11, 38, 14)
         self.ma5 = StaSMA(5)
-        self.atr = StaATR()
+        self.atr = StaATR(5)
 
     def on_bar(self, arr: np.ndarray):
         ccolse = arr[-1, ccol]

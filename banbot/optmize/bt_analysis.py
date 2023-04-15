@@ -33,7 +33,7 @@ class BTAnalysis:
             return BTAnalysis(**data)
 
     def to_plot(self) -> List[dict]:
-        return [dict(
+        result = [dict(
             col='open',
             type='order',
             enter_id=[od.enter_at - 1 for od in self.orders],
@@ -43,3 +43,8 @@ class BTAnalysis:
             enter_price=[od.enter.price for od in self.orders],
             exit_price=[(od.exit.price if od.exit else od.enter.price) for od in self.orders],
         )]
+        if self.result.get('enters'):
+            enter_ind = self.result['enters']
+            enter_ind.update(type='mark', symbol='triangle-up-dot')
+            result.append(enter_ind)
+        return result

@@ -90,11 +90,10 @@ def _group_durations(durations: List[int], cls_num: int) -> str:
         row_ids = [i for i, v in enumerate(row_gps) if v == gid]
         if result.tell():
             result.write('  ')
-        result.write(str(round(center_val, 1)))
+        result.write(str(round(center_val)))
         result.write('/')
-        rate = round(len(row_ids) * 100 / len(durations))
+        rate = round(len(row_ids) * 20 / len(durations))
         result.write(str(rate))
-        result.write('%')
     return result.getvalue()
 
 

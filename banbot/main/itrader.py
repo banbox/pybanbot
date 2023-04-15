@@ -82,6 +82,7 @@ class Trader:
         if enter_list or exit_list or ext_tags:
             logger.debug('bar signals: %s %s %s', enter_list, exit_list, ext_tags)
             self.order_mgr.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
+        return enter_list, exit_list, ext_tags
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')
