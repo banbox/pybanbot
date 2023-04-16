@@ -53,6 +53,13 @@ AVAILABLE_CLI_OPTIONS = {
         '--timerange',
         help='Specify what timerange of data to use.',
     ),
+    "timeframes": Arg(
+        '-t', '--timeframes',
+        help='Specify which tickers to download. Space-separated list. '
+        'Default: `1m`.',
+        default=['1m'],
+        nargs='+',
+    ),
     "max_open_trades": Arg(
         '--max-open-trades',
         help='Override the value of the `max_open_trades` configuration setting.',

@@ -237,6 +237,8 @@ class OrderManager(metaclass=SingletonArg):
             # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
             a, b, c = open_p - low_p, high_p - low_p, high_p - close_p
             total_len = a + b + c
+            if not total_len:
+                return close_p
             a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
             if rate <= a_end_rate:
                 start, end, pos_rate = open_p, low_p, rate / a_end_rate
@@ -248,6 +250,8 @@ class OrderManager(metaclass=SingletonArg):
             # 阴线，一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
             a, b, c = high_p - open_p, high_p - low_p, close_p - low_p
             total_len = a + b + c
+            if not total_len:
+                return close_p
             a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
             if rate <= a_end_rate:
                 start, end, pos_rate = open_p, high_p, rate / a_end_rate

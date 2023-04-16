@@ -148,7 +148,8 @@ class LocalPairDataFeeder(PairDataFeeder):
     def _load_sml_data(self):
         import pandas as pd
         df = pd.read_feather(self.data_path)
-        df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
+        if df.date.dtype != 'int64':
+            df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
         start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
         logger.info('loading data %s, range: %d-%d', os.path.basename(self.data_path), start_ts, end_ts)
         if self.timerange:

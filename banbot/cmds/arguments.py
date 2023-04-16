@@ -16,6 +16,8 @@ ARGS_WEBSERVER: List[str] = []
 
 ARGS_BACKTEST = ["config", "timerange", "max_open_trades", "stake_amount", "fee", "pairs"]
 
+ARGS_DOWNDATA = ["config", "timerange", "pairs", "timeframes"]
+
 
 class Arguments:
 
@@ -54,13 +56,9 @@ class Arguments:
         self.parser = argparse.ArgumentParser(description='Free, open source crypto trading bot')
         self._build_args(optionlist=[], parser=self.parser)
 
-        from banbot.cmds.entrys import start_trading, start_backtesting
+        from banbot.cmds.entrys import start_trading, start_backtesting, start_downdata
 
-        subparsers = self.parser.add_subparsers(dest='command',
-                                                # Use custom message when no subhandler is added
-                                                # shown from `main.py`
-                                                # required=True
-                                                )
+        subparsers = self.parser.add_subparsers(dest='command')
 
         # Add trade subcommand
         trade_cmd = subparsers.add_parser('trade', help='Trade module.', parents=[_common_parser])
@@ -68,10 +66,14 @@ class Arguments:
         self._build_args(optionlist=ARGS_TRADE, parser=trade_cmd)
 
         # Add backtesting subcommand
-        backtesting_cmd = subparsers.add_parser('backtest', help='Backtesting module.',
-                                                parents=[_common_parser])
+        backtesting_cmd = subparsers.add_parser('backtest', help='Backtesting module.', parents=[_common_parser])
         backtesting_cmd.set_defaults(func=start_backtesting)
         self._build_args(optionlist=ARGS_BACKTEST, parser=backtesting_cmd)
+
+        # Add backtesting subcommand
+        downdata_cmd = subparsers.add_parser('down_data', help='download data.', parents=[_common_parser])
+        downdata_cmd.set_defaults(func=start_downdata)
+        self._build_args(optionlist=ARGS_DOWNDATA, parser=downdata_cmd)
 
         # # Add webserver subcommand
         # webserver_cmd = subparsers.add_parser('webserver', help='Webserver module.',

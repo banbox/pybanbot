@@ -84,3 +84,11 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     finally:
         logger.info("worker found ... calling exit")
 
+
+def start_downdata(args: Dict[str, Any]):
+    from banbot.data.downloader import Downloader
+
+    config = _get_config(args)
+    main = Downloader(config)
+    asyncio.run(main.run())
+

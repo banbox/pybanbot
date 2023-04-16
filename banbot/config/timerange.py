@@ -75,6 +75,9 @@ class TimeRange:
             val = stopdt.strftime(DATETIME_PRINT_FORMAT)
         return val
 
+    def __str__(self):
+        return f'{self.startts}-{self.stopts}'
+
     def __eq__(self, other):
         """Override the default Equals behavior"""
         return (self.starttype == other.starttype and self.stoptype == other.stoptype
