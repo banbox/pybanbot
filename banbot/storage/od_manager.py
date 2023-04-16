@@ -523,6 +523,10 @@ class LiveOrderManager(OrderManager):
 
     def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
         sub_od = od.enter if is_enter else od.exit
+        cur_ts = data['timestamp']
+        if cur_ts < sub_od.last_ts:
+            return
+        sub_od.last_ts = cur_ts
         order_status, fee, filled = data.get('status'), data.get('fee'), float(data.get('filled', 0))
         if filled > 0:
             filled_price = safe_value_fallback(data, 'average', 'price', sub_od.price)
@@ -595,6 +599,10 @@ class LiveOrderManager(OrderManager):
         state = info['X']
         if state == 'NEW':
             return
+        cur_ts = info['E']
+        if cur_ts < od.last_ts:
+            return
+        od.last_ts = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
         if state in {'CANCELED', 'REJECTED', 'EXPIRED', 'EXPIRED_IN_MATCH'}:
             od.update(status=OrderStatus.Close)
         inout_od = self.open_orders[od.inout_key]
@@ -734,6 +742,7 @@ class LiveOrderManager(OrderManager):
         exp_orders = [od for od in list(self.open_orders.values()) if od.pending_type(timeouts)]
         if not exp_orders:
             return
+        logger.info(f'pending open orders: {exp_orders}')
         from itertools import groupby
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
             buy_price, sell_price = self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))

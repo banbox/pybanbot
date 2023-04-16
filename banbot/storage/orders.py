@@ -92,6 +92,7 @@ class Order:
         self.average: float = kwargs.get('average')  # 平均成交价格
         self.fee: float = kwargs.get('fee', 0)
         self.fee_type: str = kwargs.get('fee_type')
+        self.last_ts: float = 0  # 上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新
 
     def update(self, **kwargs):
         self.status: int = kwargs.get('status', self.status)
