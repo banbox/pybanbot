@@ -60,9 +60,9 @@ class PairDataFeeder:
             return
         self._per_details, self._fetch_intv = await self._get_feeds()
 
-    async def try_update(self):
+    async def try_update(self) -> bool:
         if self._per_details is None:
-            return
+            return False
         details, fetch_intv = self._per_details, self._fetch_intv
         state = self.states[0]
         prefire = 0.1 if self.auto_prefire else 0
@@ -83,7 +83,7 @@ class PairDataFeeder:
             state.bar_row = ohlcvs[-1]
         else:
             # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
-            return
+            return False
         # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
         if fetch_intv < state.tf_secs:
             ohlcvs = build_ohlcvc(details, state.tf_secs, prefire)
@@ -97,6 +97,7 @@ class PairDataFeeder:
             if state.bar_row and cur_ohlcvs[-1][0] > state.bar_row[0]:
                 await self._fire_callback(state)
             state.bar_row = cur_ohlcvs[-1]
+        return True
 
     async def _fire_callback(self, state: PairTFCache):
         bar_end_secs = state.bar_row[0] / 1000 + state.tf_secs
@@ -124,6 +125,7 @@ class LocalPairDataFeeder(PairDataFeeder):
         self.timerange = timerange
         self._check_data()
         self.min_interval = max(self.min_interval, self.fetch_tfsecs)
+        self.total_len = 0
 
     def _check_data(self):
         req_tfsecs = self.states[0].tf_secs
@@ -165,6 +167,7 @@ class LocalPairDataFeeder(PairDataFeeder):
                 tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
                 raise ValueError('no data found after truncate from %s to %s', tfrom, tto)
         self.dataframe = df
+        self.total_len = len(df)
         return df
 
     async def _get_feeds(self):

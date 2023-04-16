@@ -3,6 +3,8 @@
 # File  : live_provider.py
 # Author: anyongjin
 # Date  : 2023/3/28
+import time
+
 from banbot.data.feeder import *
 from banbot.config import *
 from banbot.util.common import logger
@@ -10,6 +12,7 @@ from banbot.util.misc import run_async
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.storage.common import *
 from asyncio import Lock, gather
+from tqdm import tqdm
 
 
 class DataProvider:
@@ -65,8 +68,11 @@ class DataProvider:
 
     async def process(self):
         await gather(*[hold.try_fetch() for hold in self.holders])
+        update_num = 0
         for hold in self.holders:
-            await hold.try_update()
+            if await hold.try_update():
+                update_num += 1
+        return update_num
 
     async def loop_main(self, warmup_num: int):
         # 先调用一次数据加载，确保预热阶段、数据加载等应用完成
@@ -84,13 +90,17 @@ class DataProvider:
                         btime.cur_timestamp += left_sleep
                 last_end = time.monotonic()
                 try:
-                    await self.process()
+                    if await self.process():
+                        self._loop_update()
                 except EOFError:
                     logger.warning("data loop complete")
                     BotGlobal.state = BotState.STOPPED
                     break
         except Exception:
             logger.exception('loop data main fail')
+
+    def _loop_update(self):
+        pass
 
     def _reset_state_times(self):
         for hold in self.holders:
@@ -134,6 +144,20 @@ class LocalDataProvider(DataProvider):
         self.holders = DataProvider.create_holders(LocalPairDataFeeder, self.pairlist, **kwargs)
         self._set_callback(callback)
         self.min_interval = min(hold.min_interval for hold in self.holders)
+        self.pbar = None
+        self.ptime = 0
+        self.plast = 0
+
+    def _loop_update(self):
+        if self.pbar is None:
+            total_p = sum(h.total_len for h in self.holders) / 100
+            self.pbar = tqdm(total=round(total_p))
+            self.ptime = time.monotonic()
+        elif time.monotonic() - self.ptime > 0.3:
+            pg_num = round(sum(h.row_id for h in self.holders) / 100)
+            self.pbar.update(pg_num - self.plast)
+            self.ptime = time.monotonic()
+            self.plast = pg_num
 
 
 class LiveDataProvider(DataProvider):
