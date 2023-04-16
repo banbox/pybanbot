@@ -17,7 +17,7 @@ class BackTest(Trader):
         self.data_mgr = LocalDataProvider(config, self.on_data_feed)
         self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
-        self.result = dict()
+        self.result = dict(data_dir=self.data_mgr.data_dir)
         self.stake_amount: float = config.get('stake_amount', 1000)
         self._bar_listeners: List[Tuple[int, Callable]] = []
         self.max_open_orders = 1
@@ -33,11 +33,15 @@ class BackTest(Trader):
         self.bar_count += 1
         if self.first_data:
             self.open_price = row[ocol]
+            self.result['pair'] = pair
+            self.result['timeframe'] = timeframe
             self.result['date_from'] = btime.to_datestr(row[0])
+            self.result['ts_from'] = row[0]
             self.first_data = False
         else:
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
+            self.result['ts_to'] = row[0]
         enter_list, exit_list, ext_tags = await super(BackTest, self).on_data_feed(pair, timeframe, row)
         if enter_list:
             ctx = get_context(f'{pair}/{timeframe}')

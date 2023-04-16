@@ -84,19 +84,20 @@ class PairDataFeeder:
         else:
             # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
             return False
-        # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
-        if fetch_intv < state.tf_secs:
-            ohlcvs = build_ohlcvc(details, state.tf_secs, prefire)
-        else:
-            ohlcvs = details
-        for state in self.states[1:]:
-            cur_ohlcvs = [state.bar_row] if state.bar_row else []
-            prefire = 0.05 if self.auto_prefire else 0
-            cur_ohlcvs = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
-            state.last_check = btime.time()
-            if state.bar_row and cur_ohlcvs[-1][0] > state.bar_row[0]:
-                await self._fire_callback(state)
-            state.bar_row = cur_ohlcvs[-1]
+        if len(self.states) > 1:
+            # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
+            if fetch_intv < state.tf_secs:
+                ohlcvs = build_ohlcvc(details, state.tf_secs, prefire)
+            else:
+                ohlcvs = details
+            for state in self.states[1:]:
+                cur_ohlcvs = [state.bar_row] if state.bar_row else []
+                prefire = 0.05 if self.auto_prefire else 0
+                cur_ohlcvs = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
+                state.last_check = btime.time()
+                if state.bar_row and cur_ohlcvs[-1][0] > state.bar_row[0]:
+                    await self._fire_callback(state)
+                state.bar_row = cur_ohlcvs[-1]
         return True
 
     async def _fire_callback(self, state: PairTFCache):
@@ -185,20 +186,23 @@ class LocalPairDataFeeder(PairDataFeeder):
             self.row_id += back_len
         return ret_arr, self.fetch_tfsecs
 
-    def load_data(self, timeframe: Optional[str] = None):
+    @staticmethod
+    def load_data(btres: dict):
         '''
         加载指定timeframe的数据，返回DataFrame。仅用于jupyter-lab中测试。
-        :param timeframe:
+        :param btres: 回测的结果
         :return:
         '''
-        if not timeframe:
-            timeframe = self.states[0].timeframe
+        pair, timeframe = btres['pair'], btres['timeframe']
         tf_secs = timeframe_to_seconds(timeframe)
-        df = self._load_sml_data()
-        if self.fetch_tfsecs == tf_secs:
+        ts_from, ts_to = btres['ts_from'], btres['ts_to']
+        trange = TimeRange.parse_timerange(f'{ts_from}-{ts_to}')
+        loader = LocalPairDataFeeder(pair, [timeframe], btres['data_dir'], timerange=trange)
+        df = loader._load_sml_data()
+        if loader.fetch_tfsecs == tf_secs:
             return df.reset_index(drop=True)
-        if tf_secs % self.fetch_tfsecs > 0:
-            raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {self.fetch_tfsecs}')
+        if tf_secs % loader.fetch_tfsecs > 0:
+            raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {loader.fetch_tfsecs}')
         details = df.values.tolist()
         rows = build_ohlcvc(details, tf_secs)
         return pd.DataFrame(rows[:-1], columns=df.columns.tolist())

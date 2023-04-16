@@ -136,9 +136,10 @@ class LocalDataProvider(DataProvider):
     def __init__(self, config: Config, callback: Callable):
         super(LocalDataProvider, self).__init__(config)
         exg_name = config['exchange']['name']
+        self.data_dir = os.path.join(config['data_dir'], exg_name)
         kwargs = dict(
             auto_prefire=config.get('prefire'),
-            data_dir=os.path.join(config['data_dir'], exg_name),
+            data_dir=self.data_dir,
             timerange=config.get('timerange')
         )
         self.holders = DataProvider.create_holders(LocalPairDataFeeder, self.pairlist, **kwargs)
