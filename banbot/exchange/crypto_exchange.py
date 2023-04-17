@@ -46,12 +46,14 @@ def _create_exchange(module, cfg: dict):
     run_env = cfg["env"]
     credit = exg_cfg[f'credit_{run_env}']
     has_proxy = bool(exg_cfg.get('proxies'))
-    exchange = exg_class(dict(
+    exg_args = dict(
         apiKey=credit['api_key'],
         secret=credit['api_secret'],
         trust_env=has_proxy,
-        options=exg_cfg.get('options')
-    ))
+    )
+    if exg_cfg.get('options'):
+        exg_args['options'] = exg_cfg.get('options')
+    exchange = exg_class(exg_args)
     if run_env == 'test':
         exchange.set_sandbox_mode(True)
         logger.warning('running in TEST mode!!!')
