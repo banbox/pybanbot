@@ -50,8 +50,7 @@ class BackTest(Trader):
             self.enter_list.append((ctx[bar_num], enter_text, price))
 
     async def init(self):
-        with btime.TempRunMode(RunMode.DRY_RUN):
-            await self.exchange.load_markets()
+        await self.exchange.load_markets()
         self.min_balance = self.stake_amount
         self.max_balance = self.stake_amount
         for pair, tf in self.pairlist:

@@ -11,6 +11,9 @@ import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import os
 import time
+
+import orjson
+
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
 from banbot.config.consts import *
@@ -18,6 +21,10 @@ from banbot.util import btime
 from banbot.util.misc import *
 from banbot.storage.orders import Order
 from typing import *
+
+
+_market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
+                'quoteCurrencies', 'currencies_by_id', 'codes']
 
 
 def loop_forever(func):
@@ -109,6 +116,35 @@ def _copy_markets(exg_src, exg_dst):
     exg_dst.reloading_markets = False
 
 
+def _restore_markets(exg, cache_dir: str) -> float:
+    cache_path = os.path.join(cache_dir, f'{exg.name.lower()}.json')
+    if not os.path.isfile(cache_path):
+        return 0
+    with open(cache_path, 'rb') as fdata:
+        cache = orjson.loads(fdata.read())
+    exg.reloading_markets = True
+    for key in _market_keys:
+        cache_val = cache.get(key)
+        if cache_val is None:
+            continue
+        setattr(exg, key, cache_val)
+    exg.reloading_markets = False
+    return cache.get('timestamp', 0)
+
+
+def _save_markets(exg, cache_dir: str):
+    cache_path = os.path.join(cache_dir, f'{exg.name.lower()}.json')
+    result = dict()
+    for key in _market_keys:
+        item_val = getattr(exg, key, None)
+        if item_val is None:
+            continue
+        result[key] = item_val
+    result['timestamp'] = time.time()
+    with open(cache_path, 'wb') as fout:
+        fout.write(orjson.dumps(result, option=orjson.OPT_INDENT_2))
+
+
 class CryptoExchange:
     def __init__(self, config: dict):
         self.config = config
@@ -121,13 +157,26 @@ class CryptoExchange:
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.monotonic() - 7200
+        self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
         self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
+        if not os.path.isdir(self.market_dir):
+            os.mkdir(self.market_dir)
 
     async def load_markets(self):
         if time.monotonic() - self.markets_at < 1800:
             return
         self.markets_at = time.monotonic()
-        markets = await self.api_async.load_markets(True)
+        restore_ts, markets = 0, []
+        if btime.run_mode not in TRADING_MODES:
+            restore_ts = _restore_markets(self.api_async, self.market_dir)
+            markets = self.api_async.markets or []
+        if time.time() - restore_ts > 604800:
+            # 非实时模式，缓存的交易对7天有效
+            if restore_ts:
+                logger.warning('exchange markets expired, renew...')
+            with btime.TempRunMode(RunMode.DRY_RUN):
+                markets = await self.api_async.load_markets(True)
+                _save_markets(self.api_async, self.market_dir)
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)
         _copy_markets(self.api_async, self.api)
