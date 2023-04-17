@@ -3,6 +3,7 @@
 # File  : utils.py
 # Author: anyongjin
 # Date  : 2023/2/11
+import asyncio
 import time
 import sys
 import logging
@@ -97,6 +98,33 @@ class StrFormatLogRecord(logging.LogRecord):
         return msg
 
 
+class NotifyHandler(logging.Handler):
+    def __init__(self, level=logging.NOTSET):
+        super(NotifyHandler, self).__init__(level)
+        self.loop = None
+
+    def emit(self, record: logging.LogRecord) -> None:
+        from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
+        from banbot.util import btime
+        try:
+            if not RPCManager.instance or btime.run_mode not in btime.TRADING_MODES:
+                return
+            try:
+                if self.loop is None:
+                    self.loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return
+            msg = self.format(record)
+            self.loop.create_task(RPCManager.instance.send_msg(dict(
+                type=RPCMessageType.EXCEPTION,
+                status=msg,
+            )))
+        except RecursionError:  # See issue 36272
+            raise
+        except Exception:
+            self.handleError(record)
+
+
 def get_logger(level=logging.INFO):
     log = logging.getLogger('banbot')
     log.setLevel(level)
@@ -117,6 +145,10 @@ def get_logger(level=logging.INFO):
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
     log.addHandler(error_handler)
+
+    notify_handler = NotifyHandler(logging.ERROR)
+    notify_handler.setFormatter(logging.Formatter(fmt='%(message)s'))
+    log.addHandler(notify_handler)
     return log
 
 

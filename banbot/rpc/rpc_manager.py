@@ -6,10 +6,14 @@
 from banbot.rpc.rpc import *
 from collections import deque
 from banbot.util import btime
+from banbot.util.common import Singleton
 
 
-class RPCManager:
+class RPCManager(metaclass=Singleton):
+    instance: 'RPCManager' = None
+
     def __init__(self, bot):
+        RPCManager.instance = self
         self.config = bot.config
         self._rpc = RPC(bot)
         self.channels: List[RPCHandler] = []

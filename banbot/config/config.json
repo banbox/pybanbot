@@ -47,6 +47,9 @@
       "base_url": "https://testnet.binance.vision",
       "stream_url": "wss://testnet.binance.vision",
       "timeout": 3
+    },
+    "options": {
+      "adjustForTimeDifference": true
     }
   },
   "wework": {

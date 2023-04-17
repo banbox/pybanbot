@@ -27,13 +27,16 @@ def loop_forever(func):
         while True:
             try:
                 await run_async(func, *args, **kwargs)
+                continue
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
                     logger.warning('[%s] watch balance get 1006, retry...', fname)
                     continue
                 logger.exception(f'{fname} network error')
+                await asyncio.sleep(3)
             except Exception:
                 logger.exception(f'{fname} loop exception')
+                await asyncio.sleep(1)
     return wrap
 
 
@@ -46,7 +49,8 @@ def _create_exchange(module, cfg: dict):
     exchange = exg_class(dict(
         apiKey=credit['api_key'],
         secret=credit['api_secret'],
-        trust_env=has_proxy
+        trust_env=has_proxy,
+        options=exg_cfg.get('options')
     ))
     if run_env == 'test':
         exchange.set_sandbox_mode(True)
