@@ -19,12 +19,6 @@
   "run_policy": [
     {"name": "MACDCross"}
   ],
-  "strategy_paths": [
-    "banbot.strategy.macd_cross",
-    "banbot.strategy.mean_rev",
-    "banbot.strategy.horz_break",
-    "banbot.strategy.oversold_up"
-  ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",
   "exchange": {

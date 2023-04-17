@@ -5,13 +5,10 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
-import time
-
-from banbot.storage.common import *
 from banbot.strategy.base import *
 from banbot.storage.od_manager import *
 from banbot.data.data_provider import *
-from banbot.strategy.resolver import load_run_jobs
+from banbot.strategy.resolver import StrategyResolver
 
 
 class Trader:
@@ -32,7 +29,7 @@ class Trader:
         self._load_strategies()
 
     def _load_strategies(self):
-        run_jobs = load_run_jobs(self.config)
+        run_jobs = StrategyResolver.load_run_jobs(self.config)
         for pair, timeframe, cls_list in run_jobs:
             symbol = f'{pair}/{timeframe}'
             with TempContext(symbol):
