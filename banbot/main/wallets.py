@@ -6,6 +6,7 @@
 
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
 from banbot.util.common import logger
+from banbot.util import btime
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from numbers import Number
 
@@ -13,6 +14,7 @@ from numbers import Number
 class WalletsLocal:
     def __init__(self):
         self.data = dict()
+        self.update_at = btime.time()
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
@@ -57,8 +59,10 @@ class WalletsLocal:
             self._update_wallet(keyb, valb, False)
         else:
             self._update_wallet(*items[0])
+        self.update_at = btime.time()
 
-    def get(self, symbol: str):
+    def get(self, symbol: str, after_ts: int = 0):
+        assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'
         if symbol not in self.data:
             return 0, 0
         return self.data[symbol]
@@ -66,13 +70,15 @@ class WalletsLocal:
     def _get_symbol_price(self, symbol: str):
         raise ValueError(f'unsupport quote symbol: {symbol}')
 
-    def get_avaiable_by_cost(self, symbol: str, cost: float):
+    def get_avaiable_by_cost(self, symbol: str, cost: float, after_ts: int = 0):
         '''
         根据花费的USDT计算需要的数量，并返回可用数量
         :param symbol:
         :param cost:
+        :param after_ts:
         :return:
         '''
+        assert self.update_at - after_ts >= -1, f'wallet ava ts expired: {self.update_at} > {after_ts}'
         if symbol.find('USD') >= 0:
             price = 1
         else:
@@ -112,10 +118,12 @@ class CryptoWallet(WalletsLocal):
 
     async def init(self):
         balances = await self.exchange.fetch_balance()
+        self.update_at = btime.time()
         logger.info('load balances: %s', self._update_local(balances))
 
     @loop_forever
     async def update_forever(self):
         balances = await self.exchange.watch_balance()
+        self.update_at = btime.time()
         logger.info('update balances: %s', self._update_local(balances))
 

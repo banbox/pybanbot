@@ -52,6 +52,7 @@ class OrderManager(metaclass=SingletonArg):
         self.callback = callback
         self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
         self.fatal_stop = dict()
+        self.last_ts = btime.time()  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
         self._load_fatal_stop()
         self.disabled = False
         self.forbid_pairs = set()
@@ -153,7 +154,7 @@ class OrderManager(metaclass=SingletonArg):
             if lock_od.exit_tag and random.random() < 0.2 and ctx[bar_num] - lock_od.exit_at > 5:
                 logger.error('lock order exit timeout: %s', lock_od)
             return
-        quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost)
+        quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost, self.last_ts)
         if not quote_cost or not self.allow_pair(pair):
             logger.debug('wallet empty or pair disable: %f', quote_cost)
             return
@@ -188,6 +189,7 @@ class OrderManager(metaclass=SingletonArg):
             od.enter.fee_type = fees['currency']
         base_amt = od.enter.amount * (1 - od.enter.fee)
         self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
+        self.last_ts = btime.time()
         od.status = InOutStatus.FullEnter
         od.enter_at = ctx[bar_num]
         od.enter.filled = od.enter.amount
@@ -209,6 +211,7 @@ class OrderManager(metaclass=SingletonArg):
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
         quote_amt = quote_amount * (1 - od.exit.fee)
         self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
+        self.last_ts = btime.time()
         od.status = InOutStatus.FullExit
         od.exit_at = ctx[bar_num]
         od.update_exit(
@@ -320,13 +323,13 @@ class OrderManager(metaclass=SingletonArg):
         if not price:
             # 为提供价格时，以最低价卖出（即吃单方）
             price = lprice * 2 - hprice
-        ava_amt, lock_amt = self.wallets.get(base_s)
-        exit_amount = od.enter.amount
+        ava_amt, lock_amt = self.wallets.get(base_s, od.enter.timestamp)
+        exit_amount = od.enter.filled
         if 0 < ava_amt < exit_amount or abs(ava_amt - exit_amount) / exit_amount <= 0.03:
             exit_amount = ava_amt
         od.update_exit(price=price, amount=exit_amount)
-        cost = cprice * exit_amount
         if btime.run_mode in TRADING_MODES:
+            cost = cprice * exit_amount
             logger.info('exit order {0} {1} got ~: {2:.2f}', od.symbol, od.exit_tag, cost)
         self._put_order(od, False)
         return od
@@ -584,6 +587,7 @@ class LiveOrderManager(OrderManager):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         order = await self.exchange.create_limit_order(od.symbol, side, amount, price)
+        self.last_ts = btime.time()
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         await self._update_subod_by_ccxtres(od, is_enter, order)
         await self._fire(od, is_enter)

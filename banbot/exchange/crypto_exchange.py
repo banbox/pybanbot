@@ -23,14 +23,17 @@ from typing import *
 def loop_forever(func):
 
     async def wrap(*args, **kwargs):
+        fname = func.__qualname__
         while True:
             try:
                 await run_async(func, *args, **kwargs)
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
-                    logger.warning('[%s] watch balance get 1006, retry...', args)
+                    logger.warning('[%s] watch balance get 1006, retry...', fname)
                     continue
-                raise e
+                logger.exception(f'{fname} network error')
+            except Exception:
+                logger.exception(f'{fname} loop exception')
     return wrap
 
 
