@@ -7,6 +7,7 @@ import os.path
 
 from banbot.main.itrader import *
 from banbot.data.data_provider import *
+from banbot.plugins.pair_manager import PairManager
 
 
 class BackTest(Trader):
@@ -14,7 +15,8 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         self.exchange = CryptoExchange(config)
-        self.data_mgr = LocalDataProvider(config, self.on_data_feed)
+        self.data_mgr = LocalDataProvider(config, self.exchange, self.on_data_feed)
+        self.pair_mgr = PairManager(config, self.exchange, self.data_mgr)
         self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict(data_dir=self.data_mgr.data_dir)
@@ -29,7 +31,7 @@ class BackTest(Trader):
         self.close_price = 0
         self.enter_list = []
 
-    async def on_data_feed(self, pair, timeframe, row):
+    def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
         if self.first_data:
             self.open_price = row[ocol]
@@ -42,7 +44,7 @@ class BackTest(Trader):
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
             self.result['ts_to'] = row[0]
-        enter_list, exit_list, ext_tags = await super(BackTest, self).on_data_feed(pair, timeframe, row)
+        enter_list, exit_list, ext_tags = super(BackTest, self).on_data_feed(pair, timeframe, row)
         if enter_list:
             ctx = get_context(f'{pair}/{timeframe}')
             price = to_pytypes(ctx[bar_arr][-1, ccol])
@@ -53,7 +55,9 @@ class BackTest(Trader):
         await self.exchange.load_markets()
         self.min_balance = self.stake_amount
         self.max_balance = self.stake_amount
-        for pair, tf in self.pairlist:
+        await self.pair_mgr.refresh_pairlist()
+        self._load_strategies(self.pair_mgr.symbols)
+        for pair in self.pair_mgr.symbols:
             base_s, quote_s = pair.split('/')
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
         self.result['start_balance'] = self.order_mgr.get_legal_value()
@@ -124,5 +128,5 @@ class BackTest(Trader):
 
     async def cleanup(self):
         self.order_mgr.exit_open_orders('force_exit', 0)
-        await self.order_mgr.fill_pending_orders()
+        self.order_mgr.fill_pending_orders()
 

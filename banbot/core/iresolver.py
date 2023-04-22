@@ -113,5 +113,5 @@ class IResolver:
             if os.path.exists(path):
                 result.extend(cls._search_objects(path))
             else:
-                logger.warning(f'path not exist to load objects: {path}')
+                logger.warning(f'path not exist to load objects: {path.absolute()}')
         return result

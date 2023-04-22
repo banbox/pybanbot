@@ -7,6 +7,7 @@ import asyncio
 import random
 
 import ccxt
+from ccxt import TICK_SIZE
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import os
@@ -146,14 +147,44 @@ def _save_markets(exg, cache_dir: str):
 
 
 class CryptoExchange:
+
+    _ft_has: Dict = {
+        "stoploss_on_exchange": False,
+        "order_time_in_force": ["GTC"],
+        "time_in_force_parameter": "timeInForce",
+        "ohlcv_params": {},
+        "ohlcv_candle_limit": 500,
+        "ohlcv_has_history": True,  # Some exchanges (Kraken) don't provide history via ohlcv
+        "ohlcv_partial_candle": True,
+        "ohlcv_require_since": False,
+        # Check https://github.com/ccxt/ccxt/issues/10767 for removal of ohlcv_volume_currency
+        "ohlcv_volume_currency": "base",  # "base" or "quote"
+        "tickers_have_quoteVolume": True,
+        "tickers_have_bid_ask": True,  # bid / ask empty for fetch_tickers
+        "tickers_have_price": True,
+        "trades_pagination": "time",  # Possible are "time" or "id"
+        "trades_pagination_arg": "since",
+        "l2_limit_range": None,
+        "l2_limit_range_required": True,  # Allow Empty L2 limit (kucoin)
+        "mark_ohlcv_price": "mark",
+        "mark_ohlcv_timeframe": "8h",
+        "ccxt_futures_name": "swap",
+        "fee_cost_in_contracts": False,  # Fee cost needs contract conversion
+        "needs_trading_fees": False,  # use fetch_trading_fees to cache fees
+        "order_props_in_contracts": ['amount', 'cost', 'filled', 'remaining'],
+    }
+    _ft_has_futures: Dict = {}
+
     def __init__(self, config: dict):
         self.config = config
         self.api, self.api_async, self.api_ws = _init_exchange(config, True)
         self.name = self.api.name.lower()
         self.bot_name = config.get('name', 'noname')
+        self.trade_mode = config.get('trade_mode')
         self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
-        self.quote_symbols = {p.split('/')[1] for p, _ in config.get('pairlist')}
+        self.quote_symbols: Set[str] = set()
+        self.markets: Dict = {}
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.monotonic() - 7200
@@ -161,6 +192,11 @@ class CryptoExchange:
         self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
+
+    async def init(self, pairs: List[str]):
+        self.quote_symbols = {p.split('/')[1] for p in pairs}
+        await self.update_quote_price()
+        await self.cancel_open_orders(pairs)
 
     async def load_markets(self):
         if time.monotonic() - self.markets_at < 1800:
@@ -181,6 +217,11 @@ class CryptoExchange:
         _copy_markets(self.api_async, self.api_ws)
         _copy_markets(self.api_async, self.api)
         logger.info('%d markets loaded for %s', len(markets), self.api.name)
+        if not self.markets:
+            # 首次加载，输出统计的交易对信息
+            from banbot.optmize.reports import text_markets
+            print(text_markets(self.api_async.markets))
+        self.markets = self.api_async.markets
 
     def calc_funding_fee(self, od: Order):
         '''
@@ -197,6 +238,95 @@ class CryptoExchange:
             if fee_rate is not None:
                 return dict(rate=fee_rate, currency=od.symbol.split('/')[0])
         return self.api_async.calculate_fee(od.symbol, od.order_type, od.side, od.amount, od.price, taker_maker)
+
+    def price_to_precision(self, symbol: str, price: float):
+        return self.api_async.price_to_precision(symbol, price)
+
+    def market_tradable(self, market: Dict[str, Any]) -> bool:
+        return (
+            market.get('quote') is not None
+            and market.get('base') is not None
+            and (self.precisionMode != TICK_SIZE or market.get('precision', {}).get('price', 0) > 1e-11)
+            and bool(market.get(self.trade_mode))
+        )
+
+    def market_is_future(self, market: Dict[str, Any]) -> bool:
+        return (
+            market.get(self._ft_has["ccxt_futures_name"], False) is True and
+            market.get('linear', False) is True
+        )
+
+    def get_markets(self, base_currencies: List[str] = [], quote_currencies: List[str] = [],
+                    spot_only: bool = False, margin_only: bool = False, futures_only: bool = False,
+                    tradable_only: bool = True,
+                    active_only: bool = False) -> Dict[str, Any]:
+        """
+        Return exchange ccxt markets, filtered out by base currency and quote currency
+        if this was requested in parameters.
+        """
+        markets = self.markets
+        if not markets:
+            raise RuntimeError("Markets were not loaded.")
+
+        if base_currencies:
+            markets = {k: v for k, v in markets.items() if v['base'] in base_currencies}
+        if quote_currencies:
+            markets = {k: v for k, v in markets.items() if v['quote'] in quote_currencies}
+        if tradable_only:
+            markets = {k: v for k, v in markets.items() if self.market_tradable(v)}
+        if spot_only:
+            markets = {k: v for k, v in markets.items() if v.get('spot')}
+        if margin_only:
+            markets = {k: v for k, v in markets.items() if v.get('margin')}
+        if futures_only:
+            markets = {k: v for k, v in markets.items() if self.market_is_future(v)}
+        if active_only:
+            markets = {k: v for k, v in markets.items() if v.get('active', True)}
+        return markets
+
+    @property
+    def precisionMode(self) -> int:
+        """exchange ccxt precisionMode"""
+        return self.api_async.precisionMode
+
+    def price_get_one_pip(self, pair: str) -> float:
+        """
+        Get's the "1 pip" value for this pair.
+        Used in PriceFilter to calculate the 1pip movements.
+        """
+        precision = self.markets[pair]['precision']['price']
+        if self.precisionMode == TICK_SIZE:
+            return precision
+        else:
+            return 1 / pow(10, precision)
+
+    def get_pair_quote_currency(self, pair: str) -> str:
+        """ Return a pair's quote currency (base/quote:settlement) """
+        return self.markets.get(pair, {}).get('quote', '')
+
+    def ohlcv_candle_limit(self, timeframe: str):
+        return int(self._ft_has.get('ohlcv_candle_limit_per_timeframe', {})
+                   .get(timeframe, self._ft_has.get('ohlcv_candle_limit')))
+
+    def get_option(self, param: str, default: Optional[Any] = None) -> Any:
+        """
+        Get parameter value from _ft_has
+        """
+        return self._ft_has.get(param, default)
+
+    def has_api(self, endpoint: str) -> bool:
+        '''
+        检查交易所是否支持指定的api
+        :param endpoint:
+        :return:
+        '''
+        return endpoint in self.api_async.has and self.api_async.has[endpoint]
+
+    async def fetch_ticker(self, symbol, params={}):
+        return await self.api_async.fetch_ticker(symbol, params)
+
+    async def fetch_tickers(self, symbols=None, params={}):
+        return await self.api_async.fetch_tickers(symbols, params)
 
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:
@@ -245,7 +375,7 @@ class CryptoExchange:
         return await self.api_ws.watch_my_trades(symbol, since, limit, params)
 
     async def fetch_ohlcv_plus(self, pair: str, timeframe: str, since=None, limit=None,
-                               force_sub=False, min_last_ratio=0.799):
+                               force_sub=False):
         '''
         某些时间维度不能直接从交易所得到，需要从更细粒度计算。如3s的要从1s计算。2m的要从1m的计算
         :param pair:
@@ -253,7 +383,6 @@ class CryptoExchange:
         :param since:
         :param limit:
         :param force_sub: 是否强制使用更细粒度的时间帧，即使当前时间帧支持
-        :param min_last_ratio: 最后一个蜡烛的最低完成度
         :return:
         '''
         if (not force_sub or timeframe == '1s') and timeframe in self.api.timeframes:
@@ -262,8 +391,8 @@ class CryptoExchange:
         cur_tf_secs = timeframe_to_seconds(timeframe)
         if not limit:
             sub_arr = await self.api_async.fetch_ohlcv(pair, sub_tf, since=since)
-            ohlc_arr = build_ohlcvc(sub_arr, cur_tf_secs)
-            if sub_arr[-1][0] / 1000 / cur_tf_secs % 1 < min_last_ratio:
+            ohlc_arr, last_finish = build_ohlcvc(sub_arr, cur_tf_secs)
+            if not last_finish:
                 ohlc_arr = ohlc_arr[:-1]
             return ohlc_arr
         fetch_num = limit * round(cur_tf_secs / sub_tf_secs)
@@ -279,8 +408,8 @@ class CryptoExchange:
             result.extend(sub_arr)
             count += len(sub_arr)
             since = sub_arr[-1][0] + 1
-        ohlc_arr = build_ohlcvc(result[-fetch_num:], cur_tf_secs)
-        if result[-1][0] / 1000 / cur_tf_secs % 1 < min_last_ratio:
+        ohlc_arr, last_finish = build_ohlcvc(result[-fetch_num:], cur_tf_secs)
+        if not last_finish:
             ohlc_arr = ohlc_arr[:-1]
         return ohlc_arr
 
@@ -307,8 +436,7 @@ class CryptoExchange:
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
 
-    async def cancel_open_orders(self):
-        symbols = [pair for pair, timeframe in self.config.get('pairlist')]
+    async def cancel_open_orders(self, symbols: List[str]):
         symbols, success_cnt = set(symbols), 0
         for symbol in symbols:
             orders = await self.api_async.fetch_open_orders(symbol)

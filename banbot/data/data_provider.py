@@ -3,6 +3,7 @@
 # File  : live_provider.py
 # Author: anyongjin
 # Date  : 2023/3/28
+import six
 import time
 
 from banbot.data.feeder import *
@@ -11,18 +12,35 @@ from banbot.util.common import logger
 from banbot.util.misc import run_async
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.storage.common import *
-from asyncio import Lock, gather
+from asyncio import gather
 from tqdm import tqdm
 
 
 class DataProvider:
-    _cb_lock = Lock()
+    feed_cls = PairDataFeeder
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, exchange: CryptoExchange):
         self.config = config
-        self.pairlist: List[Tuple[str, str]] = config.get('pairlist')
+        self.exchange = exchange
+        self._init_args = dict()
         self.holders: List[PairDataFeeder] = []
         self.min_interval = 1
+        self.producer_pairs: Dict[str, List[str]] = {}
+
+    def sub_pairs(self, pairs: Dict[str, Union[str, Iterable[str]]]):
+        old_map = {h.pair: h for h in self.holders}
+        new_pairs = []
+        for p, tf in pairs.items():
+            tf_list = [tf] if isinstance(tf, six.string_types) else tf
+            hold = old_map.get(p)
+            if not hold:
+                new_pairs.append((p, tf_list))
+                continue
+            hold.sub_tflist(*tf_list)
+        for p, tf_list in new_pairs:
+            self.holders.append(self.feed_cls(p, tf_list, **self._init_args))
+        if self.holders:
+            self.min_interval = min(hold.min_interval for hold in self.holders)
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
@@ -44,12 +62,11 @@ class DataProvider:
 
     @classmethod
     def _wrap_callback(cls, callback: Callable):
-        async def handler(*args, **kwargs):
-            async with cls._cb_lock:
-                try:
-                    await run_async(callback, *args, **kwargs)
-                except Exception:
-                    logger.exception('LiveData Callback Exception %s %s', args, kwargs)
+        def handler(*args, **kwargs):
+            try:
+                run_async(callback, *args, **kwargs)
+            except Exception:
+                logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         return handler
 
     def _set_callback(self, callback: Callable):
@@ -57,20 +74,20 @@ class DataProvider:
         for hold in self.holders:
             hold.callback = wrap_callback
 
-    @staticmethod
-    def create_holders(feed_cls, pairlist: List[Tuple[str, str]], **kwargs) -> List[PairDataFeeder]:
+    @classmethod
+    def create_holders(cls, pairlist: List[Tuple[str, str]], **kwargs) -> List[PairDataFeeder]:
         pair_groups: Dict[str, Set[str]] = dict()
         for pair, timeframe in pairlist:
             if pair not in pair_groups:
                 pair_groups[pair] = set()
             pair_groups[pair].add(timeframe)
-        return [feed_cls(pair, list(tf_set), **kwargs) for pair, tf_set in pair_groups.items()]
+        return [cls.feed_cls(pair, list(tf_set), **kwargs) for pair, tf_set in pair_groups.items()]
 
     async def process(self):
         await gather(*[hold.try_fetch() for hold in self.holders])
         update_num = 0
         for hold in self.holders:
-            if await hold.try_update():
+            if hold.try_update():
                 update_num += 1
         return update_num
 
@@ -130,21 +147,65 @@ class DataProvider:
             btime.cur_timestamp = ts_val
             self._reset_state_times()
 
+    async def fetch_ohlcv(self, pair: str, timeframe: str, ts_from: float, ts_to: Optional[float] = None):
+        '''
+        获取给定交易对，给定时间维度，给定范围的K线数据。
+        此接口不做缓存，如需缓存调用方自行处理。
+        实时模式从交易所获取。
+        非实时模式先尝试从本地读取，不存在时从交易所获取。
+        :param pair:
+        :param timeframe:
+        :param ts_from:
+        :param ts_to:
+        :return:
+        '''
+        tf_secs = timeframe_to_seconds(timeframe)
+        if not ts_to:
+            ts_to = btime.time()
+        ohlcv, tranges = [], [(round(ts_from * 1000), round(ts_to * 1000))]
+        if btime.run_mode not in TRADING_MODES:
+            exg_name = self.config['exchange']['name']
+            data_dir = os.path.join(self.config['data_dir'], exg_name)
+            ohlcv = LocalPairDataFeeder.load_data(data_dir, pair, timeframe, ts_from, ts_to).tolist()
+            if ohlcv:
+                old_rg = tranges[0]
+                tranges = []
+                if ohlcv[0][0] - tf_secs > old_rg[0]:
+                    tranges.append((old_rg[0], ohlcv[0][0]))
+                if ohlcv[-1][0] + tf_secs < old_rg[-1]:
+                    tranges.append((ohlcv[-1][0] + 1, old_rg[-1]))
+        for rg in tranges:
+            limit = round((rg[1] - rg[0]) // 1000 / tf_secs)
+            ohlc_arr = await self.exchange.fetch_ohlcv_plus(pair, timeframe, rg[0], limit)
+            if not len(ohlc_arr):
+                continue
+            if not ohlcv:
+                ohlcv = ohlc_arr
+            elif ohlc_arr[0][0] < ohlcv[0][0]:
+                assert ohlc_arr[-1][0] < ohlcv[0][0]
+                ohlcv[:0] = ohlc_arr
+            else:
+                assert ohlc_arr[0][0] > ohlcv[-1][0]
+                ohlcv.extend(ohlc_arr)
+        return ohlcv
+
+    def get_producer_pairs(self, producer_name: str = 'default') -> List[str]:
+        return self.producer_pairs.get(producer_name, []).copy()
+
 
 class LocalDataProvider(DataProvider):
+    feed_cls = LocalPairDataFeeder
 
-    def __init__(self, config: Config, callback: Callable):
-        super(LocalDataProvider, self).__init__(config)
+    def __init__(self, config: Config, exchange: CryptoExchange, callback: Callable):
+        super(LocalDataProvider, self).__init__(config, exchange)
         exg_name = config['exchange']['name']
         self.data_dir = os.path.join(config['data_dir'], exg_name)
-        kwargs = dict(
+        self._init_args = dict(
             auto_prefire=config.get('prefire'),
             data_dir=self.data_dir,
             timerange=config.get('timerange')
         )
-        self.holders = DataProvider.create_holders(LocalPairDataFeeder, self.pairlist, **kwargs)
         self._set_callback(callback)
-        self.min_interval = min(hold.min_interval for hold in self.holders)
         self.pbar = None
         self.ptime = 0
         self.plast = 0
@@ -162,15 +223,13 @@ class LocalDataProvider(DataProvider):
 
 
 class LiveDataProvider(DataProvider):
+    feed_cls = LivePairDataFeader
 
     def __init__(self, config: Config, exchange: CryptoExchange, callback: Callable):
-        super(LiveDataProvider, self).__init__(config)
-        self.exchange = exchange
-        kwargs = dict(
+        super(LiveDataProvider, self).__init__(config, exchange)
+        self._init_args = dict(
             auto_prefire=config.get('prefire'),
             exchange=exchange
         )
-        self.holders = DataProvider.create_holders(LivePairDataFeader, self.pairlist, **kwargs)
         self._set_callback(callback)
-        self.min_interval = min(hold.min_interval for hold in self.holders)
 

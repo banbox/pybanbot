@@ -10,6 +10,7 @@ from banbot.util.misc import *
 from banbot.config import *
 from banbot.util import btime
 from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
+from banbot.plugins.pair_manager import PairManager
 
 
 class LiveTrader(Trader):
@@ -21,6 +22,7 @@ class LiveTrader(Trader):
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
         self.data_mgr = LiveDataProvider(config, self.exchange, self.on_data_feed)
+        self.pair_mgr = PairManager(config, self.exchange, self.data_mgr)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.rpc = RPCManager(self)
@@ -47,9 +49,11 @@ class LiveTrader(Trader):
 
     async def init(self):
         await self.exchange.load_markets()
-        await self.exchange.cancel_open_orders()
-        await self.exchange.update_quote_price()
-        await self.wallets.init()
+        await self.pair_mgr.refresh_pairlist()
+        await self.wallets.init(self.pair_mgr.symbols)
+        await self.exchange.init(self.pair_mgr.symbols)
+        pair_tfs = self._load_strategies(self.pair_mgr.symbols)
+        self.data_mgr.sub_pairs(pair_tfs)
         await self.rpc.startup_messages()
 
     async def run(self):

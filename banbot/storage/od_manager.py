@@ -176,7 +176,7 @@ class OrderManager(metaclass=SingletonArg):
     def _put_order(self, od: InOutOrder, is_enter: bool):
         pass
 
-    async def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
+    def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
         if not od.enter.amount:
             od.enter.amount = od.quote_cost / enter_price
@@ -197,10 +197,11 @@ class OrderManager(metaclass=SingletonArg):
         od.enter.status = OrderStatus.Close
         if not od.enter.price:
             od.enter.price = enter_price
-        await self._fire(od, True)
-        await self.try_dump()
+        loop = asyncio.get_running_loop()
+        loop.run_until_complete(self._fire(od, True))
+        loop.run_until_complete(self.try_dump())
 
-    async def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
+    def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
         quote_amount = exit_price * od.exit.amount
         fees = self.exchange.calc_funding_fee(od.exit)
@@ -221,8 +222,9 @@ class OrderManager(metaclass=SingletonArg):
             average=exit_price,
         )
         self._finish_order(od)
-        await self._fire(od, False)
-        await self.try_dump()
+        loop = asyncio.get_running_loop()
+        loop.run_until_complete(self._fire(od, False))
+        loop.run_until_complete(self.try_dump())
 
     def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
         '''
@@ -264,7 +266,7 @@ class OrderManager(metaclass=SingletonArg):
                 start, end, pos_rate = low_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
         return start * (1 - pos_rate) + end * pos_rate
 
-    async def fill_pending_orders(self, symbol: str = None, timeframe: str = None, candle: Optional[np.ndarray] = None):
+    def fill_pending_orders(self, symbol: str = None, timeframe: str = None, candle: Optional[np.ndarray] = None):
         '''
         填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
         此方法内部会访问锁：ctx_lock，请勿在TempContext中调用此方法
@@ -279,9 +281,9 @@ class OrderManager(metaclass=SingletonArg):
             if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
                 continue
             if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
-                await self._fill_pending_exit(candle, od)
+                self._fill_pending_exit(candle, od)
             elif od.enter.status != OrderStatus.Close:
-                await self._fill_pending_enter(candle, od)
+                self._fill_pending_enter(candle, od)
 
     def get_open_orders(self, strategy: str = None, pair: str = None):
         if not self.open_orders:
@@ -605,6 +607,7 @@ class LiveOrderManager(OrderManager):
             return
         cur_ts = info['E']
         if cur_ts < od.last_ts:
+            # 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
             return
         od.last_ts = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
         if state in {'CANCELED', 'REJECTED', 'EXPIRED', 'EXPIRED_IN_MATCH'}:

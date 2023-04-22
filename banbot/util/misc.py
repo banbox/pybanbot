@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import time
-import logging
+from typing import List, Tuple
 import sys
 
 
@@ -23,6 +23,28 @@ async def run_async(func, *args, **kwargs):
     if asyncio.iscoroutinefunction(func):
         return await func(*args, **kwargs)
     return func(*args, **kwargs)
+
+
+async def parallel_jobs(func, args_list: List[tuple]):
+    '''
+    并行执行异步任务。用于对一个函数调用多次，且顺序不重要的情况。
+    :param func:
+    :param args_list: 每一项是调用的参数。一个列表表示args参数，列表中有两项，且第一个是列表第二个字典，则分别作为args和kwargs
+    :return: [dict(data=return, args=args, kwargs=kwargs), ...]
+    '''
+    async def wrap_func(*args, **kwargs):
+        res = await func(*args, **kwargs)
+        return dict(data=res, args=args, kwargs=kwargs)
+
+    jobs = []
+    for job in args_list:
+        if len(job) == 2 and isinstance(job[0], (tuple, list)) and isinstance(job[1], dict):
+            args, kwargs = job
+        else:
+            args, kwargs = job, {}
+        jobs.append(wrap_func(*args, **kwargs))
+    results = await asyncio.gather(*jobs)
+    return list(results)
 
 
 def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):

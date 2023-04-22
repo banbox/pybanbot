@@ -9,6 +9,7 @@ from banbot.util.common import logger
 from banbot.util import btime
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from numbers import Number
+from typing import List
 
 
 class WalletsLocal:
@@ -96,12 +97,7 @@ class CryptoWallet(WalletsLocal):
         super(CryptoWallet, self).__init__()
         self.exchange = exchange
         self.config = config
-        pairlist = config.get('pairlist')
         self._symbols = set()
-        for pair, _ in pairlist:
-            a, b = pair.split('/')
-            self._symbols.add(a)
-            self._symbols.add(b)
 
     def _get_symbol_price(self, symbol: str):
         if symbol not in self.exchange.quote_symbols:
@@ -116,7 +112,9 @@ class CryptoWallet(WalletsLocal):
             message.append(f'{symbol}: {self.data[symbol][0]}/{self.data[symbol][1]}')
         return '  '.join(message)
 
-    async def init(self):
+    async def init(self, pairs: List[str]):
+        for p in pairs:
+            self._symbols.update(p.split('/'))
         balances = await self.exchange.fetch_balance()
         self.update_at = btime.time()
         logger.info('load balances: %s', self._update_local(balances))

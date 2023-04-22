@@ -6,6 +6,7 @@
 import math
 import ccxt
 from typing import *
+from banbot.util import btime
 
 
 def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> Tuple[str, int]:
@@ -75,9 +76,11 @@ def build_ohlcvc(details, tf_secs: int, prefire: float = 0., since=None, ohlcvs=
     off_ms = round(ms * prefire)
     ohlcvs = ohlcvs or []
     (timestamp, copen, high, low, close, volume, count) = (0, 1, 2, 3, 4, 5, 6)
+    raw_ts = []
     for detail in details:
         row = list(trade2ohlc(detail)) if isinstance(detail, dict) else list(detail)
         # 按给定粒度重新格式化时间戳
+        raw_ts.append(row[timestamp])
         row[timestamp] = int(math.floor((row[timestamp] + off_ms) / ms) * ms)
         if since and row[timestamp] < since:
             continue
@@ -93,4 +96,20 @@ def build_ohlcvc(details, tf_secs: int, prefire: float = 0., since=None, ohlcvs=
             prow[volume] += row[volume]
             if len(row) > count:
                 prow[count] += row[count]
-    return ohlcvs
+    last_finish = False
+    if len(raw_ts) >= 2 and not isinstance(details[0], dict):
+        # 至少有2个，且不是交易列表，判断最后一个bar是否结束
+        ts_interval = raw_ts[-1] - raw_ts[-2]
+        finish_ts = int(math.floor((raw_ts[-1] + ts_interval + off_ms) / ms) * ms)
+        last_finish = finish_ts > ohlcvs[-1][0]
+    return ohlcvs, last_finish
+
+
+def get_back_ts(tf_secs: int, back_period: int, in_ms: bool = True) -> Tuple[int, int]:
+    cur_time_int = int(btime.time())
+    to_ms = (cur_time_int - cur_time_int % tf_secs)
+    since_ms = to_ms - back_period * tf_secs
+    if in_ms:
+        since_ms *= 1000
+        to_ms *= 1000
+    return since_ms, to_ms
