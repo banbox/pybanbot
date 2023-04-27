@@ -33,6 +33,10 @@ class PairManager:
         return self._whitelist
 
     async def refresh_pairlist(self):
+        if self.config.get('pairs'):
+            # 回测模式传入pairs
+            self._whitelist = self.config['pairs']
+            return
         tickers = self.ticker_cache.get('tickers')
         if not tickers and self.need_tickers:
             tickers = await self.exchange.fetch_tickers()

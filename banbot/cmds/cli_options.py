@@ -60,12 +60,6 @@ AVAILABLE_CLI_OPTIONS = {
         default=['1m'],
         nargs='+',
     ),
-    "max_open_trades": Arg(
-        '--max-open-trades',
-        help='Override the value of the `max_open_trades` configuration setting.',
-        type=int,
-        metavar='INT',
-    ),
     "stake_amount": Arg(
         '--stake-amount',
         help='Override the value of the `stake_amount` configuration setting.',

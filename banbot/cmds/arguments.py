@@ -14,11 +14,11 @@ ARGS_TRADE = ["dry_run", "dry_run_wallet", "fee"]
 
 ARGS_WEBSERVER: List[str] = []
 
-ARGS_BACKTEST = ["timerange", "max_open_trades", "stake_amount", "fee", "pairs"]
+ARGS_BACKTEST = ["timerange", "stake_amount", "fee", "pairs"]
 
 ARGS_DOWNDATA = ["timerange", "pairs", "timeframes", "medium"]
 
-ARGS_DB = ["action", "tables", "force"]
+ARGS_DBCMD = ["action", "tables", "force"]
 
 
 class Arguments:
@@ -82,7 +82,7 @@ class Arguments:
         db_cmd = subparsers.add_parser('dbcmd', help='database cmd.', parents=[_common_parser])
         from banbot.data.models.scripts import exec_dbcmd
         db_cmd.set_defaults(func=exec_dbcmd)
-        self._build_args(optionlist=ARGS_DB, parser=db_cmd)
+        self._build_args(optionlist=ARGS_DBCMD, parser=db_cmd)
 
         # # Add webserver subcommand
         # webserver_cmd = subparsers.add_parser('webserver', help='Webserver module.',

@@ -26,6 +26,7 @@ class DataProvider:
         self.holders: List[PairDataFeeder] = []
         self.min_interval = 1
         self.producer_pairs: Dict[str, List[str]] = {}
+        self._callback = None
 
     def sub_pairs(self, pairs: Dict[str, Union[str, Iterable[str]]]):
         old_map = {h.pair: h for h in self.holders}
@@ -38,7 +39,9 @@ class DataProvider:
                 continue
             hold.sub_tflist(*tf_list)
         for p, tf_list in new_pairs:
-            self.holders.append(self.feed_cls(p, tf_list, **self._init_args))
+            feeder = self.feed_cls(p, tf_list, **self._init_args)
+            feeder.callback = self._callback
+            self.holders.append(feeder)
         if self.holders:
             self.min_interval = min(hold.min_interval for hold in self.holders)
 
@@ -60,28 +63,15 @@ class DataProvider:
             back_secs = max(back_secs, hold.states[-1].tf_secs * count)
         return back_secs
 
-    @classmethod
-    def _wrap_callback(cls, callback: Callable):
+    def _set_callback(self, callback: Callable):
         def handler(*args, **kwargs):
             try:
-                run_async(callback, *args, **kwargs)
+                callback(*args, **kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
-        return handler
-
-    def _set_callback(self, callback: Callable):
-        wrap_callback = self._wrap_callback(callback)
+        self._callback = handler
         for hold in self.holders:
-            hold.callback = wrap_callback
-
-    @classmethod
-    def create_holders(cls, pairlist: List[Tuple[str, str]], **kwargs) -> List[PairDataFeeder]:
-        pair_groups: Dict[str, Set[str]] = dict()
-        for pair, timeframe in pairlist:
-            if pair not in pair_groups:
-                pair_groups[pair] = set()
-            pair_groups[pair].add(timeframe)
-        return [cls.feed_cls(pair, list(tf_set), **kwargs) for pair, tf_set in pair_groups.items()]
+            hold.callback = self._callback
 
     async def process(self):
         await gather(*[hold.try_fetch() for hold in self.holders])
@@ -203,6 +193,32 @@ class LocalDataProvider(DataProvider):
         self._init_args = dict(
             auto_prefire=config.get('prefire'),
             data_dir=self.data_dir,
+            timerange=config.get('timerange')
+        )
+        self._set_callback(callback)
+        self.pbar = None
+        self.ptime = 0
+        self.plast = 0
+
+    def _loop_update(self):
+        if self.pbar is None:
+            total_p = sum(h.total_len for h in self.holders) / 100
+            self.pbar = tqdm(total=round(total_p))
+            self.ptime = time.monotonic()
+        elif time.monotonic() - self.ptime > 0.3:
+            pg_num = round(sum(h.row_id for h in self.holders) / 100)
+            self.pbar.update(pg_num - self.plast)
+            self.ptime = time.monotonic()
+            self.plast = pg_num
+
+
+class DBDataProvider(DataProvider):
+    feed_cls = DBPairDataFeeder
+
+    def __init__(self, config: Config, exchange: CryptoExchange, callback: Callable):
+        super(DBDataProvider, self).__init__(config, exchange)
+        self._init_args = dict(
+            auto_prefire=config.get('prefire'),
             timerange=config.get('timerange')
         )
         self._set_callback(callback)

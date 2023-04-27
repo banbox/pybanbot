@@ -65,9 +65,9 @@ class OrderManager(metaclass=SingletonArg):
         for k, v in fatal_cfg.items():
             self.fatal_stop[int(k)] = v
 
-    async def _fire(self, od: InOutOrder, enter: bool):
-        async with TempContext(f'{od.symbol}/{od.timeframe}'):
-            await run_async(self.callback, od, enter)
+    def _fire(self, od: InOutOrder, enter: bool):
+        with TempContext(f'{od.symbol}/{od.timeframe}'):
+            self.callback(od, enter)
 
     def allow_pair(self, pair: str) -> bool:
         if self.disabled:
@@ -197,9 +197,8 @@ class OrderManager(metaclass=SingletonArg):
         od.enter.status = OrderStatus.Close
         if not od.enter.price:
             od.enter.price = enter_price
-        loop = asyncio.get_running_loop()
-        loop.run_until_complete(self._fire(od, True))
-        loop.run_until_complete(self.try_dump())
+        self._fire(od, True)
+        asyncio.create_task(self.try_dump())
 
     def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
@@ -222,9 +221,8 @@ class OrderManager(metaclass=SingletonArg):
             average=exit_price,
         )
         self._finish_order(od)
-        loop = asyncio.get_running_loop()
-        loop.run_until_complete(self._fire(od, False))
-        loop.run_until_complete(self.try_dump())
+        self._fire(od, False)
+        asyncio.create_task(self.try_dump())
 
     def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
         '''
@@ -592,7 +590,7 @@ class LiveOrderManager(OrderManager):
         self.last_ts = btime.time()
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         await self._update_subod_by_ccxtres(od, is_enter, order)
-        await self._fire(od, is_enter)
+        self._fire(od, is_enter)
         await self.try_dump()
 
     def _put_order(self, od: InOutOrder, is_enter: bool):
@@ -637,7 +635,7 @@ class LiveOrderManager(OrderManager):
             return
         if inout_od.status == InOutStatus.FullExit:
             self._finish_order(inout_od)
-        await self._fire(inout_od, od.enter)
+        self._fire(inout_od, od.enter)
         await self.try_dump()
 
     async def _update_order(self, od: Order, data: dict):
@@ -701,7 +699,7 @@ class LiveOrderManager(OrderManager):
                 self._finish_order(od)
                 # 这里未入场直接退出的，不应该fire
                 return
-            await self._fire(od, True)
+            self._fire(od, True)
         if isinstance(od.exit.price, Callable):
             od.exit.price = await od.exit.price()
         # 检查入场订单是否已成交，如未成交则直接取消

@@ -27,7 +27,7 @@ class LiveTrader(Trader):
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.rpc = RPCManager(self)
 
-    async def order_callback(self, od: InOutOrder, is_enter: bool):
+    def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
         sub_od = od.enter if is_enter else od.exit
         if sub_od.status != OrderStatus.Close:

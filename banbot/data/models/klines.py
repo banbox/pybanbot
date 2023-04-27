@@ -14,7 +14,7 @@ from banbot.util import btime
 class KLine(BaseDbModel):
     __tablename__ = 'kline'
     _sid_range_map: ClassVar[Dict[int, Tuple[int, int]]] = dict()
-    _interval: ClassVar[int] = 60000  # 每行是1m维度
+    interval: ClassVar[int] = 60000  # 每行是1m维度
 
     sid = Column(sa.Integer, primary_key=True)
     time = Column(sa.DateTime, primary_key=True)
@@ -128,15 +128,19 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
             return conn.execute(sa.text(stmt))
 
     @classmethod
-    def query(cls, pair: str, timeframe: str, start_ms: int, end_ms: int):
+    def query(cls, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None, limit: int = 3000):
+        tf_secs = timeframe_to_seconds(timeframe)
+        limit_end_ms = start_ms + tf_secs * limit * 1000
+        end_ms = min(limit_end_ms, end_ms) if end_ms else limit_end_ms
+
+        start_ts, end_ts = start_ms / 1000, end_ms / 1000
+
         dct_sql = f'''
 select time,open,high,low,close,volume from {{tbl}}
-where sid={{sid}} and time >= {start_ms} and time < {end_ms}
+where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
 order by time'''
 
         def gen_gp_sql():
-            tf_secs = timeframe_to_seconds(timeframe)
-            big_start_ms = int(start_ms // tf_secs * tf_secs)
             return f'''
                 select time_bucket('{timeframe}', time) AS time,
                   first(open, time) AS open,  
@@ -145,11 +149,11 @@ order by time'''
                   last(close, time) AS close,
                   sum(volume) AS volume
                   from {{tbl}}
-                where sid={{sid}} and time >= {big_start_ms} and time < {end_ms}
+                where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
                 group by time
                 order by time'''
         rows = cls._query_hyper(pair, timeframe, dct_sql, gen_gp_sql).fetchall()
-        return [r for r in rows]
+        return [(btime.to_utcstamp(r[0], True, True), *r[1:]) for r in rows]
 
     @classmethod
     def query_range(cls, symbol: Union[str, int]) -> Tuple[Optional[int], Optional[int]]:
@@ -173,8 +177,8 @@ order by time'''
         else:
             old_start, old_stop = cls._sid_range_map[sid]
             if old_start and old_stop:
-                old_start -= cls._interval
-                old_stop += cls._interval
+                old_start -= cls.interval
+                old_stop += cls.interval
                 if old_stop < start_ms or end_ms < old_start:
                     raise ValueError(f'incontinus range, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                      f'new: [{start_ms}, {end_ms}]')
@@ -190,15 +194,15 @@ order by time'''
         if len(rows) > 1:
             # 检查是否是1分钟间隔
             row_interval = rows[1][0] - rows[0][0]
-            if row_interval != cls._interval:
+            if row_interval != cls.interval:
                 raise ValueError(f'insert kline must be 1m interval, current: {row_interval/1000:.1f}s')
         sid = cls._get_sid(pair)
         start_ms, end_ms = rows[0][0], rows[-1][0]
         old_start, old_stop = cls.query_range(sid)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
-            old_start -= cls._interval
-            old_stop += cls._interval
+            old_start -= cls.interval
+            old_stop += cls.interval
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')

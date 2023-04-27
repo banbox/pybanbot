@@ -124,6 +124,9 @@ class AppConfig(metaclass=Singleton):
             from banbot.config.timerange import TimeRange
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
         if not args.get('no_db'):
-            from banbot.data.models.base import init_db_session
-            init_db_session()
+            # 测试数据库连接
+            from banbot.data.models.base import db_conn, sa
+            with db_conn() as conn:
+                conn.execute(sa.text('select 1'))
+                logger.info('Connect DataBase Success')
         return config

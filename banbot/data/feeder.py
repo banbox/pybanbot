@@ -144,7 +144,6 @@ class LocalPairDataFeeder(PairDataFeeder):
 
     def __init__(self, pair: str, timeframes: List[str], data_dir: str, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        import pandas as pd
         super(LocalPairDataFeeder, self).__init__(pair, timeframes, auto_prefire)
         self.data_dir = data_dir
         self.fetch_tfsecs = 0
@@ -177,7 +176,6 @@ class LocalPairDataFeeder(PairDataFeeder):
             raise FileNotFoundError(f'no data found, try: {try_list} in {self.data_dir}')
 
     def _load_sml_data(self):
-        import pandas as pd
         df = pd.read_feather(self.data_path)
         if df.date.dtype != 'int64':
             df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
@@ -247,6 +245,49 @@ class LocalPairDataFeeder(PairDataFeeder):
             btres['ts_from'],
             btres['ts_to'],
         )
+
+
+class DBPairDataFeeder(PairDataFeeder):
+
+    def __init__(self, pair: str, timeframes: List[str], auto_prefire=False,
+                 timerange: Optional[TimeRange] = None):
+        super(DBPairDataFeeder, self).__init__(pair, timeframes, auto_prefire)
+        self.timerange = timerange
+        self.offset_ts = self.timerange.startts * 1000
+        self.batch_size = 300
+        self._row_id = 0
+        self._cache_arr = []
+        self.total_len = -1
+        self.row_id = 0
+
+    def _calc_total(self):
+        self.total_len = 0
+        from banbot.data.models import KLine
+        start_ts, stop_ts = KLine.query_range(self.pair)
+        if start_ts and stop_ts:
+            vstart = max(start_ts, self.timerange.startts * 1000)
+            vend = min(stop_ts, self.timerange.stopts * 1000)
+            if vstart < vend:
+                div_m = self.states[0].tf_secs * 1000
+                self.total_len = (vend - vstart) // div_m + 1
+
+    async def _get_feeds(self):
+        state = self.states[0]
+        if self._row_id >= len(self._cache_arr):
+            # 缓存结束，重新读取数据库
+            if self.total_len < 0:
+                self._calc_total()
+            from banbot.data.models import KLine
+            end = self.timerange.stopts * 1000
+            self._cache_arr = KLine.query(self.pair, state.timeframe, self.offset_ts, end, self.batch_size)
+            self._row_id = 0
+            if not self._cache_arr:
+                raise EOFError('no more data')
+            self.offset_ts = self._cache_arr[-1][0] + 1
+        row = self._cache_arr[self._row_id]
+        self._row_id += 1
+        self.row_id += 1
+        return [row], state.tf_secs
 
 
 class LivePairDataFeader(PairDataFeeder):

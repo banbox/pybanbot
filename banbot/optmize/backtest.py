@@ -15,11 +15,11 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         self.exchange = CryptoExchange(config)
-        self.data_mgr = LocalDataProvider(config, self.exchange, self.on_data_feed)
+        self.data_mgr = DBDataProvider(config, self.exchange, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange, self.data_mgr)
         self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
-        self.result = dict(data_dir=self.data_mgr.data_dir)
+        self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
         self._bar_listeners: List[Tuple[int, Callable]] = []
         self.max_open_orders = 1
@@ -56,7 +56,8 @@ class BackTest(Trader):
         self.min_balance = self.stake_amount
         self.max_balance = self.stake_amount
         await self.pair_mgr.refresh_pairlist()
-        self._load_strategies(self.pair_mgr.symbols)
+        pair_tfs = self._load_strategies(self.pair_mgr.symbols)
+        self.data_mgr.sub_pairs(pair_tfs)
         for pair in self.pair_mgr.symbols:
             base_s, quote_s = pair.split('/')
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
