@@ -10,17 +10,7 @@ from typing import *
 from banbot.util.common import logger
 from banbot.storage.common import *
 from banbot.core.async_events import *
-
-
-def _get_config(args: dict) -> dict:
-    from banbot.config import Configuration
-    from banbot.util.misc import deep_merge_dicts
-    config = Configuration(args, None).get_config()
-    deep_merge_dicts(args, config, False)
-    if 'timerange' in config:
-        from banbot.config.timerange import TimeRange
-        config['timerange'] = TimeRange.parse_timerange(config['timerange'])
-    return config
+from banbot.config import AppConfig
 
 
 def term_handler(signum, frame):
@@ -41,7 +31,7 @@ def start_trading(args: Dict[str, Any]) -> int:
 
 
     # Create and run worker
-    config = _get_config(args)
+    config = AppConfig.init_by_args(args)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
     logger.warning("Run Mode: %s", btime.run_mode.value)
     trader = LiveTrader(config)
@@ -69,7 +59,7 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     from banbot.optmize.backtest import BackTest
     from banbot.util import btime
 
-    config = _get_config(args)
+    config = AppConfig.init_by_args(args)
     btime.run_mode = btime.RunMode.BACKTEST
     backtesting = BackTest(config)
     try:
@@ -83,12 +73,4 @@ def start_backtesting(args: Dict[str, Any]) -> None:
         asyncio.run(backtesting.cleanup())
     finally:
         logger.info("worker found ... calling exit")
-
-
-def start_downdata(args: Dict[str, Any]):
-    from banbot.data.downloader import Downloader
-
-    config = _get_config(args)
-    main = Downloader(config)
-    asyncio.run(main.run())
 

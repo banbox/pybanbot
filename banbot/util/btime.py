@@ -9,7 +9,6 @@
 请避免直接调用datatime和time类库
 '''
 import datetime
-import calendar
 from datetime import timedelta
 from banbot.config.consts import *
 
@@ -36,14 +35,13 @@ def to_datetime(timestamp: int = None):
     if not timestamp:
         timestamp = time()
     else:
-        timestamp = int(timestamp)
         if timestamp >= 1000000000000:
-            timestamp = int(timestamp / 1000)
+            timestamp /= 1000
     return datetime.datetime.utcfromtimestamp(timestamp)
 
 
 def to_utcstamp(dt):
-    return calendar.timegm(dt.timetuple())
+    return dt.replace(tzinfo=datetime.timezone.utc).timestamp()
 
 
 def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):

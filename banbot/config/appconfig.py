@@ -3,16 +3,12 @@
 # File  : configuration.py
 # Author: anyongjin
 # Date  : 2023/4/1
-import logging
-import re
 import sys
-from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 from typing import *
 from banbot.config.consts import *
 import orjson
-from banbot.util.common import logger
+from banbot.util.common import logger, Singleton
 from banbot.util.misc import deep_merge_dicts
 
 
@@ -80,12 +76,19 @@ def load_from_files(
     return config
 
 
-class Configuration:
+class AppConfig(metaclass=Singleton):
+    '''
+    应用最终的启动配置。单例类。
+    在应用启动时即初始化完成。
+    后续可通过`AppConfig.get()`获取使用
+    '''
+    _instance: Optional['AppConfig'] = None
 
     def __init__(self, args: Dict[str, Any], runmode: Optional[RunMode] = None):
         self.args = args
         self.config: Optional[Config] = None
         self.runmode = runmode
+        AppConfig._instance = self
 
     def get_config(self) -> Config:
         """
@@ -105,4 +108,22 @@ class Configuration:
         # Load all configs
         config: Config = load_from_files(self.args.get("config", []))
 
+        return config
+
+    @classmethod
+    def get(cls) -> Config:
+        assert cls._instance, '`AppConfig` is not initialized yet!'
+        return cls._instance.get_config()
+
+    @classmethod
+    def init_by_args(cls, args: dict) -> Config:
+        from banbot.util.misc import deep_merge_dicts
+        config = AppConfig(args, None).get_config()
+        deep_merge_dicts(args, config, False)
+        if 'timerange' in config:
+            from banbot.config.timerange import TimeRange
+            config['timerange'] = TimeRange.parse_timerange(config['timerange'])
+        if not args.get('no_db'):
+            from banbot.data.models.base import init_db_session
+            init_db_session()
         return config

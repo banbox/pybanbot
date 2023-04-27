@@ -68,8 +68,9 @@ class VolumePairList(PairList):
             since_ts, to_ts = get_back_ts(tf_secs, self.backperiod, in_ms=False)
 
             arg_list = [(p, self.backtf, since_ts) for p in pairlist]
-            res_list = await parallel_jobs(self.data_mgr.fetch_ohlcv, arg_list)
-            for item in res_list:
+            res_list = parallel_jobs(self.data_mgr.fetch_ohlcv, arg_list)
+            for job in res_list:
+                item = await job
                 data, args, kwargs = item['data'], item['args'], item['kwargs']
                 symbol = args[0]
                 item['symbol'] = symbol

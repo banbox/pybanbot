@@ -7,6 +7,7 @@ import asyncio
 import time
 import sys
 import logging
+import threading
 import collections.abc
 
 
@@ -41,6 +42,60 @@ class SingletonArg(type):
         if cls_key not in cls._instances:
             cls._instances[cls_key] = super(SingletonArg, cls).__call__(*args, **kwargs)
         return cls._instances[cls_key]
+
+
+class Instance(object):
+    '''
+    Singleton helper class
+    '''
+    new_lock = threading.Lock()
+    lock_dict = {}
+    obj_dict = {}
+
+    @staticmethod
+    def get(cls, *args, **kwargs):
+        cls_name = str(cls)
+        return Instance.getobj(cls_name, cls, *args, **kwargs)
+
+    @staticmethod
+    def get_lock(key):
+        if key not in Instance.lock_dict:
+            with Instance.new_lock:
+                if key not in Instance.lock_dict:
+                    Instance.lock_dict[key] = threading.Lock()
+        return Instance.lock_dict[key]
+
+    @staticmethod
+    def getobj(key, create_func, *args, **kwargs):
+        '''
+        get a singleton object by key
+        :param key:
+        :param create_func: 创建函数或值
+        :param args:
+        :param kwargs:
+        :return:
+        '''
+        if key not in Instance.obj_dict:
+            with Instance.get_lock(key):
+                if key not in Instance.obj_dict:
+                    if callable(create_func):
+                        Instance.obj_dict[key] = create_func(*args, **kwargs)
+                    else:
+                        Instance.obj_dict[key] = create_func
+        return Instance.obj_dict[key]
+
+    @staticmethod
+    def setobj(key, obj):
+        with Instance.get_lock(key):
+            Instance.obj_dict[key] = obj
+
+    @staticmethod
+    def remove(obj):
+        cls_name = str(obj) if not isinstance(obj, str) else obj
+        if cls_name in Instance.obj_dict:
+            with Instance.lock_dict[cls_name]:
+                if cls_name in Instance.obj_dict:
+                    del Instance.obj_dict[cls_name]
 
 
 class MeasureTime:

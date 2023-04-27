@@ -35,9 +35,10 @@ class VolatilityFilter(PairList):
         new_pairs = [p for p in pairlist if p not in self.pair_cache]
         since = int(btime.time() - self.backdays * 86_400)
         args_list = [(p, '1d', since) for p in new_pairs]
-        pair_res = await parallel_jobs(self.data_mgr.fetch_ohlcv, args_list)
+        pair_res = parallel_jobs(self.data_mgr.fetch_ohlcv, args_list)
         for job in pair_res:
-            candles, p = job['data'], job['args'][0]
+            job_res = await job
+            candles, p = job_res['data'], job_res['args'][0]
             if not self._validate_pair_loc(p, candles):
                 pairlist.remove(p)
         return pairlist

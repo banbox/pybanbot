@@ -6,7 +6,7 @@
 import os
 import orjson
 from typing import Tuple
-from banbot.config.configuration import Configuration, Config
+from banbot.config.appconfig import AppConfig, Config
 
 
 def get_bnb_client_args() -> Tuple[dict, dict, dict]:

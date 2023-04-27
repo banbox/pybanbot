@@ -25,7 +25,7 @@ async def run_async(func, *args, **kwargs):
     return func(*args, **kwargs)
 
 
-async def parallel_jobs(func, args_list: List[tuple]):
+def parallel_jobs(func, args_list: List[tuple]):
     '''
     并行执行异步任务。用于对一个函数调用多次，且顺序不重要的情况。
     :param func:
@@ -42,9 +42,8 @@ async def parallel_jobs(func, args_list: List[tuple]):
             args, kwargs = job
         else:
             args, kwargs = job, {}
-        jobs.append(wrap_func(*args, **kwargs))
-    results = await asyncio.gather(*jobs)
-    return list(results)
+        jobs.append(asyncio.create_task(wrap_func(*args, **kwargs)))
+    return asyncio.as_completed(jobs)
 
 
 def safe_value_fallback(obj: dict, key1: str, key2: str, default_value=None):
@@ -139,3 +138,35 @@ def nearly_group(data, max_pct=0.1, do_sort=True):
             group_idxs[it[0]] = key
     groups = list(sorted(groups, key=lambda x: x[1], reverse=True))
     return [[gp[0], gp[1] / len(data)] for gp in groups], group_idxs
+
+
+def build_fallback_serial(raise_error=True):
+    import datetime
+    import decimal
+
+    def json_serial(obj):
+        import enum
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        elif isinstance(obj, decimal.Decimal):
+            return str(obj)
+        elif isinstance(obj, set):
+            return list(obj)
+        elif isinstance(obj, enum.Enum):
+            return obj.value
+        if raise_error:
+            raise TypeError("Type %s not serializable" % type(obj))
+        return str(obj)
+    return json_serial
+
+
+def json_dumps(val, **kwargs):
+    import orjson
+    json_serial = build_fallback_serial()
+    return orjson.dumps(val, default=json_serial, **kwargs)
+
+
+def safe_json_dumps(val, **kwargs):
+    import orjson
+    json_serial = build_fallback_serial(False)
+    return orjson.dumps(val, default=json_serial, **kwargs)

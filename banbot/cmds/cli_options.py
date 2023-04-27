@@ -75,4 +75,9 @@ AVAILABLE_CLI_OPTIONS = {
         help='Limit command to these pairs. Pairs are space-separated.',
         nargs='+',
     ),
+    "action": Arg('--action', help='action name'),
+    "tables": Arg('--tables', help='db tables, comma-separated.', nargs='+'),
+    "force": Arg('--force', help='force action', action='store_true', default=False),
+    "medium": Arg('--medium', help='data medium:db,file', default='db'),
+    "no_db": Arg('--no_db', help='not auto load db', action='store_true', default=False),
 }

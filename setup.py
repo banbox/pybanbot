@@ -27,6 +27,9 @@ setup(
         'orjson',
         'aiodns',
         'aiofiles',
-        'arrow'
+        'arrow',
+        'sqlalchemy',
+        'psycopg2',
+        'redis'
     ]
 )

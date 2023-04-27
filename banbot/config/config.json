@@ -30,6 +30,11 @@
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",
+  "database": {
+    "url": "postgresql://postgres:Uf6CVdsZ3Dc@[59.110.21.162]:5432/bantd",
+    "retention": "all"
+  },
+  "redis_url": "redis://:Fwe9G32gvV@zhizi-pub.redis.rds.aliyuncs.com:6379/2",
   "exchange": {
     "name": "binance",
     "proxies": {

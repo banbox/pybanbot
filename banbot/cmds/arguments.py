@@ -8,15 +8,17 @@ from typing import Any, Dict, List, Optional
 from banbot.cmds.cli_options import *
 
 
-ARGS_COMMON = ["logfile", "data_dir"]
+ARGS_COMMON = ["config", "logfile", "data_dir", "no_db"]
 
-ARGS_TRADE = ["config", "dry_run", "dry_run_wallet", "fee"]
+ARGS_TRADE = ["dry_run", "dry_run_wallet", "fee"]
 
 ARGS_WEBSERVER: List[str] = []
 
-ARGS_BACKTEST = ["config", "timerange", "max_open_trades", "stake_amount", "fee", "pairs"]
+ARGS_BACKTEST = ["timerange", "max_open_trades", "stake_amount", "fee", "pairs"]
 
-ARGS_DOWNDATA = ["config", "timerange", "pairs", "timeframes"]
+ARGS_DOWNDATA = ["timerange", "pairs", "timeframes", "medium"]
+
+ARGS_DB = ["action", "tables", "force"]
 
 
 class Arguments:
@@ -56,24 +58,31 @@ class Arguments:
         self.parser = argparse.ArgumentParser(description='Free, open source crypto trading bot')
         self._build_args(optionlist=[], parser=self.parser)
 
-        from banbot.cmds.entrys import start_trading, start_backtesting, start_downdata
+        from banbot.cmds.entrys import start_trading, start_backtesting
 
         subparsers = self.parser.add_subparsers(dest='command')
 
-        # Add trade subcommand
+        # LiveTrade
         trade_cmd = subparsers.add_parser('trade', help='Trade module.', parents=[_common_parser])
         trade_cmd.set_defaults(func=start_trading)
         self._build_args(optionlist=ARGS_TRADE, parser=trade_cmd)
 
-        # Add backtesting subcommand
+        # Backtest
         backtesting_cmd = subparsers.add_parser('backtest', help='Backtesting module.', parents=[_common_parser])
         backtesting_cmd.set_defaults(func=start_backtesting)
         self._build_args(optionlist=ARGS_BACKTEST, parser=backtesting_cmd)
 
-        # Add backtesting subcommand
+        # Download Data
         downdata_cmd = subparsers.add_parser('down_data', help='download data.', parents=[_common_parser])
-        downdata_cmd.set_defaults(func=start_downdata)
+        from banbot.data.spider import run_down_pairs
+        downdata_cmd.set_defaults(func=run_down_pairs)
         self._build_args(optionlist=ARGS_DOWNDATA, parser=downdata_cmd)
+
+        # DbCmd
+        db_cmd = subparsers.add_parser('dbcmd', help='database cmd.', parents=[_common_parser])
+        from banbot.data.models.scripts import exec_dbcmd
+        db_cmd.set_defaults(func=exec_dbcmd)
+        self._build_args(optionlist=ARGS_DB, parser=db_cmd)
 
         # # Add webserver subcommand
         # webserver_cmd = subparsers.add_parser('webserver', help='Webserver module.',
