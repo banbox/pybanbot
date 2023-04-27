@@ -92,9 +92,18 @@ class Spider:
         old_start, old_end = KLine.query_range(pair)
         if old_start and old_end > old_start:
             if start_ms < old_start:
+                # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
                 predata = await self._fetch(pair, timeframe, start_ms, old_start)
                 KLine.insert(pair, predata)
-            start_ms = old_end + 1
+                start_ms = old_end + 1
+            elif end_ms > old_end:
+                # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+                predata = await self._fetch(pair, timeframe, old_end + 1, end_ms)
+                KLine.insert(pair, predata)
+                return
+            else:
+                # 要下载的数据全部存在，直接退出
+                return
         newdata = await self._fetch(pair, timeframe, start_ms, end_ms)
         KLine.insert(pair, newdata)
 

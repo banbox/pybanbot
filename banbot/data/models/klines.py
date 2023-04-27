@@ -3,14 +3,19 @@
 # File  : klines.py
 # Author: anyongjin
 # Date  : 2023/4/24
+import six
+
 from banbot.data.models.base import *
-from typing import Callable, Tuple
+from typing import Callable, Tuple, ClassVar, Dict
 from banbot.exchange.exchange_utils import timeframe_to_seconds
 from banbot.util import btime
 
 
 class KLine(BaseDbModel):
     __tablename__ = 'kline'
+    _sid_range_map: ClassVar[Dict[int, Tuple[int, int]]] = dict()
+    _interval: ClassVar[int] = 60000  # 每行是1m维度
+
     sid = Column(sa.Integer, primary_key=True)
     time = Column(sa.DateTime, primary_key=True)
     open = Column(sa.FLOAT)
@@ -87,9 +92,16 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
         conn.execute(sa.text(f"drop table if exists kline"))
 
     @classmethod
-    def _query_hyper(cls, pair: str, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable]):
-        from banbot.data.models.symbols import SymbolTF
-        sid = SymbolTF.get_id(pair)
+    def _get_sid(cls, symbol: Union[str, int]):
+        sid = symbol
+        if isinstance(symbol, six.string_types):
+            from banbot.data.models.symbols import SymbolTF
+            sid = SymbolTF.get_id(symbol)
+        return sid
+
+    @classmethod
+    def _query_hyper(cls, symbol: Union[str, int], timeframe: str, dct_sql: str, gp_sql: Union[str, Callable]):
+        sid = cls._get_sid(symbol)
         conn = db_conn()
         if timeframe in cls.tf_tbls:
             stmt = dct_sql.format(
@@ -140,19 +152,56 @@ order by time'''
         return [r for r in rows]
 
     @classmethod
-    def query_range(cls, pair: str) -> Tuple[Optional[int], Optional[int]]:
-        dct_sql = 'select min(time), max(time) from {tbl} where sid={sid}'
-        min_time, max_time = cls._query_hyper(pair, '1m', dct_sql, '').fetchone()
-        if min_time is not None and max_time is not None:
-            return round(btime.to_utcstamp(min_time) * 1000), round(btime.to_utcstamp(max_time) * 1000)
+    def query_range(cls, symbol: Union[str, int]) -> Tuple[Optional[int], Optional[int]]:
+        sid = cls._get_sid(symbol)
+        cache_val = cls._sid_range_map.get(sid)
+        if not cache_val:
+            dct_sql = 'select min(time), max(time) from {tbl} where sid={sid}'
+            min_time, max_time = cls._query_hyper(sid, '1m', dct_sql, '').fetchone()
+            if min_time is not None and max_time is not None:
+                min_time = btime.to_utcstamp(min_time, ms=True, round_int=True)
+                max_time = btime.to_utcstamp(max_time, ms=True, round_int=True)
+            cls._sid_range_map[sid] = min_time, max_time
+        else:
+            min_time, max_time = cache_val
         return min_time, max_time
+
+    @classmethod
+    def _update_range(cls, sid: int, start_ms: int, end_ms: int):
+        if sid not in cls._sid_range_map:
+            cls._sid_range_map[sid] = start_ms, end_ms
+        else:
+            old_start, old_stop = cls._sid_range_map[sid]
+            if old_start and old_stop:
+                old_start -= cls._interval
+                old_stop += cls._interval
+                if old_stop < start_ms or end_ms < old_start:
+                    raise ValueError(f'incontinus range, sid: {sid}, old range: [{old_start}, {old_stop}], '
+                                     f'new: [{start_ms}, {end_ms}]')
+                cls._sid_range_map[sid] = min(start_ms, old_start), max(end_ms, old_stop)
+            else:
+                cls._sid_range_map[sid] = start_ms, end_ms
 
     @classmethod
     def insert(cls, pair: str, rows: List[Tuple]):
         if not rows:
             return
-        from banbot.data.models.symbols import SymbolTF
-        sid = SymbolTF.get_id(pair)
+        rows = sorted(rows, key=lambda x: x[0])
+        if len(rows) > 1:
+            # 检查是否是1分钟间隔
+            row_interval = rows[1][0] - rows[0][0]
+            if row_interval != cls._interval:
+                raise ValueError(f'insert kline must be 1m interval, current: {row_interval/1000:.1f}s')
+        sid = cls._get_sid(pair)
+        start_ms, end_ms = rows[0][0], rows[-1][0]
+        old_start, old_stop = cls.query_range(sid)
+        if old_start and old_stop:
+            # 插入的数据应该和已有数据连续，避免出现空洞。
+            old_start -= cls._interval
+            old_stop += cls._interval
+            if old_stop < start_ms or end_ms < old_start:
+                raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
+                                 f'insert: [{start_ms}, {end_ms}]')
         sess = db_sess()
         ins_rows = []
         for r in rows:
@@ -162,8 +211,9 @@ order by time'''
             ))
         sess.bulk_insert_mappings(KLine, ins_rows)
         sess.commit()
+        # 更新区间
+        cls._update_range(sid, start_ms, end_ms)
         # 刷新连续聚合
-        start_ms, end_ms = rows[0][0], rows[-1][0]
         range_ms = (end_ms - start_ms) / 1000
         start_dt = btime.to_datetime(start_ms)
         conn = sess.connection(execution_options=dict(isolation_level="AUTOCOMMIT"))

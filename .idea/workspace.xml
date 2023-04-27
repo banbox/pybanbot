@@ -1,29 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update .idea">
-      <change afterPath="$PROJECT_DIR$/banbot/data/models/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/data/models/base.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/data/models/klines.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/data/models/scripts.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/data/models/symbols.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/banbot/util/redis_helper.py" afterDir="false" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="应用配置全局静态获取&#10;支持K线数据存储到时序数据库">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/arguments.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/arguments.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/cli_options.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/cli_options.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/entrys.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/entrys.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/configuration.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/downloader.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/range_stability_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/plugins/pairlist/range_stability_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/volatility_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/plugins/pairlist/volatility_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/volume_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/plugins/pairlist/volume_pairlist.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/models/klines.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/util/btime.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/btime.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/misc.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/misc.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -115,7 +97,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="down_data --timerange=1682390429- --pairs=BTC/TUSD -c E:\trade\banbot\banbot\config\config.json" />
+      <option name="PARAMETERS" value="down_data --timerange=1682564422- --pairs=BTC/TUSD -c E:\trade\banbot\banbot\config\config.json" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -140,7 +122,7 @@
       <workItem from="1682303356190" duration="21559000" />
       <workItem from="1682388616118" duration="26606000" />
       <workItem from="1682469571539" duration="31500000" />
-      <workItem from="1682556696019" duration="439000" />
+      <workItem from="1682556696019" duration="9758000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -149,7 +131,14 @@
       <option name="project" value="LOCAL" />
       <updated>1682303570862</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="应用配置全局静态获取&#10;支持K线数据存储到时序数据库">
+      <created>1682557151606</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1682557151606</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -168,21 +157,27 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="update .idea" />
-    <option name="LAST_COMMIT_MESSAGE" value="update .idea" />
+    <MESSAGE value="应用配置全局静态获取&#10;支持K线数据存储到时序数据库" />
+    <option name="LAST_COMMIT_MESSAGE" value="应用配置全局静态获取&#10;支持K线数据存储到时序数据库" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/data/spider.py</url>
-          <line>98</line>
+          <line>107</line>
           <option name="timeStamp" value="27" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/banbot/data/spider.py</url>
+          <line>91</line>
+          <option name="timeStamp" value="28" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
-    <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1682517836161" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1682567389198" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

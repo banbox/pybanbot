@@ -11,6 +11,7 @@
 import datetime
 from datetime import timedelta
 from banbot.config.consts import *
+from typing import Union
 
 global cur_timestamp, run_mode
 
@@ -40,8 +41,13 @@ def to_datetime(timestamp: int = None):
     return datetime.datetime.utcfromtimestamp(timestamp)
 
 
-def to_utcstamp(dt):
-    return dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+def to_utcstamp(dt, ms=False, round_int=False) -> Union[int, float]:
+    stamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    if ms:
+        stamp *= 1000
+    if round_int:
+        stamp = round(stamp)
+    return stamp
 
 
 def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
