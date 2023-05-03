@@ -27,7 +27,8 @@ def append_new_bar(row: np.ndarray) -> np.ndarray:
     if len(result) >= 3:
         cur_intv, prev_intv = result[-1][0] - result[-2][0], result[-2][0] - result[-3][0]
         if cur_intv != prev_intv:
-            logger.error(f'{symbol_tf.get()} bar interval error: {prev_intv} --> {cur_intv}')
+            stf, bar_date = symbol_tf.get(), btime.to_datestr(row[0])
+            logger.error(f'{stf} bar interval error: {prev_intv} --> {cur_intv} at {bar_date}')
     bar_arr.set(result)
     LongVar.update(result)
     return result

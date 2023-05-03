@@ -11,7 +11,7 @@ import orjson
 
 from banbot.config.appconfig import AppConfig, Config
 from banbot.util.misc import parallel_jobs
-from banbot.exchange.crypto_exchange import CryptoExchange
+from banbot.exchange.crypto_exchange import get_exchange
 from banbot.util.redis_helper import MyRedis
 from banbot.data.wacther import *
 from banbot.data.tools import *
@@ -41,13 +41,15 @@ async def down_pairs_by_config(config: Config):
     根据配置文件和解析的命令行参数，下载交易对数据（到数据库或文件）
     此方法由命令行调用。
     '''
+    from banbot.data.models.klines import KLine
+    await KLine.fill_holes()
     pairs = config['pairs']
     timerange = config['timerange']
     start_ms = round(timerange.startts * 1000)
     end_ms = round(timerange.stopts * 1000)
     cur_ms = round(time.time() * 1000)
     end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
-    exchange = CryptoExchange(config)
+    exchange = get_exchange()
     if config['medium'] == 'db':
         tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
         args_list = [(exchange, pair, start_ms, end_ms) for pair in pairs]
@@ -79,14 +81,14 @@ class LiveMiner(Watcher):
     '''
     交易对实时数据更新，仅用于实盘。
     '''
-    def __init__(self, exchange: CryptoExchange, pair: str, since: Optional[int] = None):
+    def __init__(self, exg_name, pair: str, since: Optional[int] = None):
         super(LiveMiner, self).__init__(pair, self._on_bar_finish)
-        self.exchange = exchange
+        self.exchange = get_exchange(exg_name)
         timeframe, tf_secs = '1m', 60  # 固定1m间隔更新数据
         self.tf_secs = tf_secs
         self.state = PairTFCache(timeframe, tf_secs)
         self.check_intv = get_check_interval(tf_secs)  # 3s更新一次
-        self.key = f'{self.exchange.name}_{pair}'  # 取消标志，启动时设置为tf_secs，删除时表示取消任务
+        self.key = f'{exg_name}_{pair}'  # 取消标志，启动时设置为tf_secs，删除时表示取消任务
         self.next_since = since if since else None
         self.auto_prefire = AppConfig.get().get('prefire')
 
@@ -154,9 +156,6 @@ class LiveSpider:
     历史数据下载请直接调用对应方法，效率更高。
     '''
     def __init__(self):
-        self.config = AppConfig.get()
-        self.exg_name = self.config['exchange']['name']
-        self.exg_map: Dict[str, CryptoExchange] = dict()
         self.redis = MyRedis()  # 需要持续监听redis，单独占用一个连接
         self.conn = self.redis.pubsub()
         self.conn.subscribe(self._key)
@@ -185,18 +184,11 @@ class LiveSpider:
             await self.redis.set(self._key, expire_time=5)
             await asyncio.sleep(4)
 
-    def _get_exchange(self, name: str) -> CryptoExchange:
-        if name not in self.exg_map:
-            self.config['exchange']['name'] = name
-            self.exg_map[name] = CryptoExchange(self.config)
-            self.config['exchange']['name'] = self.exg_name
-        return self.exg_map[name]
-
     async def watch_ohlcv(self, exg_name: str, pair: str, since: Optional[int] = None):
         key = f'{exg_name}_{pair}'
         if await self.redis.get(key):
             return
-        miner = LiveMiner(self._get_exchange(exg_name), pair, since)
+        miner = LiveMiner(exg_name, pair, since)
         await miner.run()
 
     @classmethod

@@ -23,6 +23,7 @@ from typing import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
+exg_map: Dict[str, 'CryptoExchange'] = dict()
 
 
 def loop_forever(func):
@@ -457,3 +458,20 @@ class CryptoExchange:
     def __str__(self):
         return self.name
 
+
+def get_exchange(name: Optional[str] = None) -> CryptoExchange:
+    '''
+    获取交易所实例，全局缓存
+    '''
+    if name is None:
+        config = AppConfig.get()
+        name = config['exchange']['name']
+        if name not in exg_map:
+            exg_map[name] = CryptoExchange(config)
+    elif name not in exg_map:
+        config = AppConfig.get()
+        bak_exg_name = config['exchange']['name']
+        config['exchange']['name'] = name
+        exg_map[name] = CryptoExchange(config)
+        config['exchange']['name'] = bak_exg_name
+    return exg_map[name]

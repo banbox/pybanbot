@@ -103,30 +103,30 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
     def _query_hyper(cls, exg_name: str, symbol: Union[str, int], timeframe: str,
                      dct_sql: str, gp_sql: Union[str, Callable]):
         sid = cls._get_sid(exg_name, symbol)
-        conn = db_conn()
-        if timeframe in cls.tf_tbls:
-            stmt = dct_sql.format(
-                tbl=cls.tf_tbls[timeframe],
-                sid=sid
-            )
-            return conn.execute(sa.text(stmt))
-        else:
-            # 时间帧没有直接符合的，从最接近的子timeframe聚合
-            tf_secs = timeframe_to_seconds(timeframe)
-            sub_tf, sub_tbl = None, None
-            for stf, stbl, stf_secs in cls.tf_list[::-1]:
-                if tf_secs % stf_secs == 0:
-                    sub_tf, sub_tbl = stf, stbl
-                    break
-            if not sub_tbl:
-                raise RuntimeError(f'unsupport timeframe {timeframe}')
-            if callable(gp_sql):
-                gp_sql = gp_sql()
-            stmt = gp_sql.format(
-                tbl=sub_tbl,
-                sid=sid,
-            )
-            return conn.execute(sa.text(stmt))
+        with db_conn() as conn:
+            if timeframe in cls.tf_tbls:
+                stmt = dct_sql.format(
+                    tbl=cls.tf_tbls[timeframe],
+                    sid=sid
+                )
+                return conn.execute(sa.text(stmt))
+            else:
+                # 时间帧没有直接符合的，从最接近的子timeframe聚合
+                tf_secs = timeframe_to_seconds(timeframe)
+                sub_tf, sub_tbl = None, None
+                for stf, stbl, stf_secs in cls.tf_list[::-1]:
+                    if tf_secs % stf_secs == 0:
+                        sub_tf, sub_tbl = stf, stbl
+                        break
+                if not sub_tbl:
+                    raise RuntimeError(f'unsupport timeframe {timeframe}')
+                if callable(gp_sql):
+                    gp_sql = gp_sql()
+                stmt = gp_sql.format(
+                    tbl=sub_tbl,
+                    sid=sid,
+                )
+                return conn.execute(sa.text(stmt))
 
     @classmethod
     def query(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
@@ -209,21 +209,21 @@ order by time'''
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')
-        sess = db_sess()
-        ins_rows = []
-        for r in rows:
-            row_ts = btime.to_datetime(r[0])
-            ins_rows.append(dict(
-                sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
-            ))
-        sess.bulk_insert_mappings(KLine, ins_rows)
-        sess.commit()
+        with db_sess() as sess:
+            ins_rows = []
+            for r in rows:
+                row_ts = btime.to_datetime(r[0])
+                ins_rows.append(dict(
+                    sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
+                ))
+            sess.bulk_insert_mappings(KLine, ins_rows)
+            sess.commit()
         # 更新区间
         cls._update_range(sid, start_ms, end_ms)
         # 刷新连续聚合
         range_ms = (end_ms - start_ms) / 1000
         start_dt = btime.to_datetime(start_ms)
-        conn = sess.connection(execution_options=dict(isolation_level="AUTOCOMMIT"))
+        conn = db_conn(iso_level='AUTOCOMMIT', cache=False)
         for intv in cls.agg_intvs:
             tf = intv[0]
             tf_secs = timeframe_to_seconds(tf)
@@ -235,3 +235,62 @@ order by time'''
             conn.execute(sa.text(stmt))
         conn.commit()
         conn.close()
+
+    @classmethod
+    def _find_sid_hole(cls, conn: sa.Connection, sid: int, since: float):
+        batch_size, true_intv = 1000, cls.interval / 1000
+        last_date = None
+        res_holes = []
+        while True:
+            hole_sql = f"SELECT time FROM kline where sid={sid} and time >= to_timestamp({since}) " \
+                       f"ORDER BY time limit {batch_size};"
+            rows = conn.execute(sa.text(hole_sql)).fetchall()
+            if not len(rows):
+                break
+            off_idx = 0
+            if last_date is None:
+                last_date = rows[0][0]
+                off_idx = 1
+            for row in rows[off_idx:]:
+                cur_intv = (row[0] - last_date).total_seconds()
+                if cur_intv > true_intv:
+                    hole_start = btime.to_utcstamp(last_date) + 0.1
+                    hold_end = btime.to_utcstamp(row[0]) - 0.1
+                    res_holes.append((hole_start, hold_end))
+                last_date = row[0]
+            since = btime.to_utcstamp(last_date) + 0.1
+        return res_holes
+
+    @classmethod
+    async def fill_holes(cls):
+        from banbot.data.tools import download_to_db
+        from banbot.data.models.symbols import SymbolTF
+        from banbot.exchange.crypto_exchange import get_exchange
+        logger.info('find and fill holes for kline...')
+        with db_conn() as conn:
+            gp_sql = 'SELECT sid, extract(epoch from min(time))::float as mtime FROM kline GROUP BY sid;'
+            sid_rows = conn.execute(sa.text(gp_sql)).fetchall()
+            if not len(sid_rows):
+                return
+            sess = db_sess()
+            for sid, start_ts in sid_rows:
+                hole_list = cls._find_sid_hole(conn, sid, start_ts)
+                if not hole_list:
+                    continue
+                stf: SymbolTF = sess.query(SymbolTF).get(sid)
+                exchange = get_exchange(stf.exchange)
+                for hole in hole_list:
+                    start_ms, end_ms = int(hole[0] * 1000), int(hole[1] * 1000)
+                    logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
+                    await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
+
+
+class KHole(BaseDbModel):
+    '''
+    交易所的K线数据可能有时因公司业务或系统故障等原因，出现空洞；记录到这里避免重复下载
+    '''
+    __tablename__ = 'khole'
+
+    sid = Column(sa.Integer, primary_key=True)
+    start = Column(sa.DateTime)
+    stop = Column(sa.DateTime)

@@ -20,7 +20,7 @@ class LiveTrader(Trader):
 
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
-        self.exchange = CryptoExchange(config)
+        self.exchange = get_exchange()
         self.data_mgr = LiveDataProvider(config, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)

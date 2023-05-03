@@ -243,7 +243,7 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
     return result[:end_pos + 1]
 
 
-async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int):
+async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int, check_exist=True):
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -251,21 +251,24 @@ async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int):
     timeframe = '1m'
     exg_name = exchange.name
     from banbot.data.models import KLine
-    old_start, old_end = KLine.query_range(exg_name, pair)
-    if old_start and old_end > old_start:
-        if start_ms < old_start:
-            # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
-            predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, old_start)
-            KLine.insert(exg_name, pair, predata)
-            start_ms = old_end + 1
-        elif end_ms > old_end:
-            # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-            predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end + 1, end_ms)
-            KLine.insert(exg_name, pair, predata)
-            return
-        else:
-            # 要下载的数据全部存在，直接退出
-            return
+    if check_exist:
+        old_start, old_end = KLine.query_range(exg_name, pair)
+        if old_start and old_end > old_start:
+            if start_ms < old_start:
+                # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
+                cur_end = round(old_start)
+                predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
+                KLine.insert(exg_name, pair, predata)
+                start_ms = old_end + 1
+            elif end_ms > old_end:
+                # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+                cur_start = round(old_end + 1)
+                predata = await fetch_api_ohlcv(exchange, pair, timeframe, cur_start, end_ms)
+                KLine.insert(exg_name, pair, predata)
+                return
+            else:
+                # 要下载的数据全部存在，直接退出
+                return
     newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
     KLine.insert(exg_name, pair, newdata)
 
@@ -295,27 +298,27 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
     df.to_feather(data_path, compression='lz4')
 
 
-async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optional[int] = None,
-                           end_ts: Optional[int] = None, limit: Optional[int] = None):
+async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Optional[int] = None,
+                           end_ms: Optional[int] = None, limit: Optional[int] = None):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
     :param exchange:
     :param pair:
     :param timeframe:
-    :param start_ts:
-    :param end_ts:
+    :param start_ms: 毫秒
+    :param end_ms: 毫秒
     :param limit:
     :return:
     '''
-    if not end_ts:
-        end_ts = int(btime.time() * 1000)
-    if not start_ts:
+    if not end_ms:
+        end_ms = int(btime.time() * 1000)
+    if not start_ms:
         tf_msecs = timeframe_to_seconds(timeframe) * 1000
-        start_ts = end_ts - tf_msecs * limit
-    await download_to_db(exchange, pair, start_ts, end_ts)
+        start_ms = end_ms - tf_msecs * limit
+    await download_to_db(exchange, pair, start_ms, end_ms)
     from banbot.data.models import KLine
-    return KLine.query(exchange.name, pair, timeframe, start_ts, end_ts)
+    return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
 
 if __name__ == '__main__':

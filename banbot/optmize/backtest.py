@@ -14,7 +14,7 @@ class BackTest(Trader):
     def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
-        self.exchange = CryptoExchange(config)
+        self.exchange = get_exchange()
         self.data_mgr = DBDataProvider(config, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
@@ -40,6 +40,7 @@ class BackTest(Trader):
             self.result['date_from'] = btime.to_datestr(row[0])
             self.result['ts_from'] = row[0]
             self.first_data = False
+            logger.info('backtest started')
         else:
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
@@ -69,6 +70,7 @@ class BackTest(Trader):
         await self.init()
         # 轮训数据
         self.data_mgr.loop_main()
+        logger.info('backtest complete')
         # 关闭未完成订单
         await self.cleanup()
         self._calc_result_done()
