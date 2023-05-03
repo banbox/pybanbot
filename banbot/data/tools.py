@@ -5,7 +5,63 @@
 # Date  : 2023/2/28
 import datetime
 import os
+import pandas as pd
 from banbot.util.common import logger
+from banbot.config.timerange import TimeRange
+from banbot.config.consts import *
+from banbot.exchange.exchange_utils import *
+from typing import Tuple, List
+
+
+def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
+    result = []
+    for trade in trades:
+        price = trade['price']
+        result.append((trade['timestamp'], price, price, price, price, trade['amount'], 1))
+    return result
+
+
+def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=None, ohlcvs=None):
+    '''
+    从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
+    :param details: 子OHLC列表。[[t,o,h,l,c,v,cnt], ...]
+    :param tf_secs: 指定要构建的时间粒度，单位：秒
+    :param prefire: 是否提前触发构建完成；用于在特定信号时早于其他交易者提早发出信号
+    :param since:
+    :param ohlcvs: 已有的待更新数组
+    :return:
+    '''
+    ms = tf_secs * 1000
+    off_ms = round(ms * prefire)
+    ohlcvs = ohlcvs or []
+    (timestamp, copen, high, low, close, volume, count) = (0, 1, 2, 3, 4, 5, 6)
+    raw_ts = []
+    for detail in details:
+        row = list(detail)
+        # 按给定粒度重新格式化时间戳
+        raw_ts.append(row[timestamp])
+        row[timestamp] = (row[timestamp] + off_ms) // ms * ms
+        if since and row[timestamp] < since:
+            continue
+        if not ohlcvs or (row[timestamp] >= ohlcvs[-1][timestamp] + ms):
+            # moved to a new timeframe -> create a new candle from opening trade
+            ohlcvs.append(row)
+        else:
+            prow = ohlcvs[-1]
+            # still processing the same timeframe -> update opening trade
+            prow[high] = max(prow[high], row[high])
+            prow[low] = min(prow[low], row[low])
+            prow[close] = row[close]
+            prow[volume] += row[volume]
+            if len(row) > count:
+                prow[count] += row[count]
+    last_finish = False
+    if len(raw_ts) >= 2:
+        # 至少有2个，判断最后一个bar是否结束
+        ts_interval = raw_ts[-1] - raw_ts[-2]
+        finish_ts = (raw_ts[-1] + ts_interval + off_ms) // ms * ms
+        last_finish = finish_ts > ohlcvs[-1][0]
+    return ohlcvs, last_finish
 
 
 def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):
@@ -56,6 +112,210 @@ def convert_bnb_klines_datas(data_dir: str, timeframe: str, group_num: int = 7):
         if not start_date:
             start_date = cdata_val
     merge_and_save()
+
+
+def parse_data_path(data_dir: str, pair: str, tf_secs: int) -> Tuple[str, int]:
+    '''
+    从给定的目录中，尝试查找给定交易对，符合时间维度的文件
+    '''
+    base_s, quote_s = pair.split('/')
+    try_list = []
+    for tf in NATIVE_TFS:
+        cur_secs = timeframe_to_seconds(tf)
+        if cur_secs > tf_secs:
+            break
+        if tf_secs % cur_secs != 0:
+            continue
+        try_list.append(tf)
+        data_path = os.path.join(data_dir, f'{base_s}_{quote_s}-{tf}.feather')
+        if not os.path.isfile(data_path):
+            continue
+        return data_path, cur_secs
+    raise FileNotFoundError(f'no data found, try: {try_list} in {data_dir}')
+
+
+def load_file_range(data_path: str, tr: Optional[TimeRange]) -> pd.DataFrame:
+    '''
+    加载数据文件，必须是feather，按给定的范围截取并返回DataFrame
+    '''
+    df = pd.read_feather(data_path)
+    if df.date.dtype != 'int64':
+        df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
+    start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
+    logger.info('loading data %s, range: %d-%d', os.path.basename(data_path), start_ts, end_ts)
+    if tr:
+        if tr.startts:
+            df = df[df['date'] >= tr.startts * 1000]
+        if tr.stopts:
+            df = df[df['date'] <= tr.stopts * 1000]
+        if len(df):
+            start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
+            tfrom, tto = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
+            logger.info('truncate data from %s(%d) to %s(%d)', tfrom, start_ts, tto, end_ts)
+        else:
+            tfrom, tto = btime.to_datestr(tr.startts), btime.to_datestr(tr.stopts)
+            raise FileNotFoundError('no data found after truncate from %s to %s', tfrom, tto)
+    return df
+
+
+def load_pair_file_range(data_dir: str, pair: str, timeframe: str, ts_from: float, ts_to: float) -> pd.DataFrame:
+    '''
+    从给定目录下，查找交易对的指定时间维度数据，按时间段截取返回.
+    '''
+    tf_secs = timeframe_to_seconds(timeframe)
+    trange = TimeRange.parse_timerange(f'{ts_from}-{ts_to}')
+    try:
+        data_path, fetch_tfsecs = parse_data_path(data_dir, pair, tf_secs)
+        df = load_file_range(data_path, trange)
+    except FileNotFoundError:
+        return pd.DataFrame()
+    if fetch_tfsecs == tf_secs:
+        return df.reset_index(drop=True)
+    if tf_secs % fetch_tfsecs > 0:
+        raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {fetch_tfsecs}')
+    details = df.values.tolist()
+    rows, last_finish = build_ohlcvc(details, tf_secs)
+    if not last_finish:
+        rows = rows[:-1]
+    return pd.DataFrame(rows, columns=df.columns.tolist())
+
+
+def load_data_range_from_bt(btres: dict):
+    '''
+    加载指定timeframe的数据，返回DataFrame。仅用于jupyter-lab中测试。
+    :param btres: 回测的结果
+    :return:
+    '''
+    return load_pair_file_range(
+        btres['data_dir'],
+        btres['pair'],
+        btres['timeframe'],
+        btres['ts_from'],
+        btres['ts_to'],
+    )
+
+
+async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optional[int] = None,
+                          end_ts: Optional[int] = None, limit: Optional[int] = None, show_info: bool = True):
+    '''
+    按给定时间段下载交易对的K线数据。
+    :param exchange:
+    :param pair:
+    :param timeframe:
+    :param start_ts: 毫秒时间戳（含）
+    :param end_ts: 毫秒时间戳（不含）
+    :param limit:
+    :param show_info: 是否显示进度信息
+    :return:
+    '''
+    from tqdm import tqdm
+    assert start_ts or limit, 'start or limit is required'
+    tf_msecs = timeframe_to_seconds(timeframe) * 1000
+    if not end_ts:
+        end_ts = int(btime.time() * 1000)
+    if not start_ts:
+        start_ts = end_ts - tf_msecs * limit
+    if show_info:
+        start_text, end_text = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
+        logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
+    batch_size = 1000
+    if limit and limit < batch_size:
+        batch_size = limit
+    since, total_tr = start_ts, end_ts - start_ts
+    result = []
+    pbar = tqdm() if show_info else None
+    while since + tf_msecs < end_ts:
+        data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
+        if not len(data):
+            break
+        result.extend(data)
+        cur_end = round(data[-1][0])
+        if show_info:
+            pbar.update(round((cur_end - since) * 100 / total_tr, 2))
+        since = cur_end + 1
+        if limit and len(result) >= limit:
+            break
+    if limit:
+        result = result[:limit]
+    end_pos = len(result) - 1
+    while end_pos >= 0 and result[end_pos][0] >= end_ts:
+        end_pos -= 1
+    return result[:end_pos + 1]
+
+
+async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int):
+    '''
+    从交易所下载K线数据到数据库。
+    跳过已有部分，同时保持数据连续
+    '''
+    timeframe = '1m'
+    exg_name = exchange.name
+    from banbot.data.models import KLine
+    old_start, old_end = KLine.query_range(exg_name, pair)
+    if old_start and old_end > old_start:
+        if start_ms < old_start:
+            # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
+            predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, old_start)
+            KLine.insert(exg_name, pair, predata)
+            start_ms = old_end + 1
+        elif end_ms > old_end:
+            # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+            predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end + 1, end_ms)
+            KLine.insert(exg_name, pair, predata)
+            return
+        else:
+            # 要下载的数据全部存在，直接退出
+            return
+    newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
+    KLine.insert(exg_name, pair, newdata)
+
+
+async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
+    fname = pair.replace('/', '_') + '-' + timeframe + '.feather'
+    data_path = os.path.join(out_dir, fname)
+    columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+    df_list = []
+    if os.path.isfile(data_path):
+        df = pd.read_feather(data_path)
+        if df.date.dtype != 'int64':
+            df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
+        old_start = df.iloc[0]['date']
+        df_list.append(df)
+        if start_ms < old_start:
+            predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, old_start)
+            if predata:
+                df_list.insert(0, pd.DataFrame(predata, columns=columns))
+        start_ms = round(df.iloc[-1]['date']) + 1
+        if start_ms >= end_ms:
+            return
+    newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
+    if newdata:
+        df_list.append(pd.DataFrame(newdata, columns=columns))
+    df = pd.concat(df_list).reset_index(drop=True)
+    df.to_feather(data_path, compression='lz4')
+
+
+async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optional[int] = None,
+                           end_ts: Optional[int] = None, limit: Optional[int] = None):
+    '''
+    获取给定交易对，给定时间维度，给定范围的K线数据。
+    先尝试从本地读取，不存在时从交易所下载，然后返回。
+    :param exchange:
+    :param pair:
+    :param timeframe:
+    :param start_ts:
+    :param end_ts:
+    :param limit:
+    :return:
+    '''
+    if not end_ts:
+        end_ts = int(btime.time() * 1000)
+    if not start_ts:
+        tf_msecs = timeframe_to_seconds(timeframe) * 1000
+        start_ts = end_ts - tf_msecs * limit
+    await download_to_db(exchange, pair, start_ts, end_ts)
+    from banbot.data.models import KLine
+    return KLine.query(exchange.name, pair, timeframe, start_ts, end_ts)
 
 
 if __name__ == '__main__':

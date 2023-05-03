@@ -44,7 +44,7 @@ class OrderManager(metaclass=SingletonArg):
         self.name = exchange.name
         self.exchange = exchange
         self.wallets = wallets
-        self.data_hold = data_hd
+        self.data_mgr = data_hd
         self.prices = dict()  # 所有产品对法币的价格
         self.open_orders: Dict[str, InOutOrder] = dict()  # 尚未退出的订单
         self.his_orders: OrderedDict[str, InOutOrder] = OrderedDict()  # 历史已完成或取消的订单
@@ -56,7 +56,7 @@ class OrderManager(metaclass=SingletonArg):
         self._load_fatal_stop()
         self.disabled = False
         self.forbid_pairs = set()
-        self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
+        self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
 
     def _load_fatal_stop(self):
         fatal_cfg = self.config.get('fatal_stop')
@@ -129,7 +129,7 @@ class OrderManager(metaclass=SingletonArg):
         return enter_ods, exit_ods
 
     def _get_pair_prices(self, pair: str) -> Tuple[Union[float, Callable], Union[float, Callable]]:
-        price = self.data_hold.get_latest_ohlcv(pair)[ccol]
+        price = self.data_mgr.get_latest_ohlcv(pair)[ccol]
         return price, price
 
     def enter_order(self, ctx: Context, strategy: str, tag: str, cost: float, price: Union[float, Callable]
@@ -234,7 +234,7 @@ class OrderManager(metaclass=SingletonArg):
         '''
         rate = min(1., self.network_cost / timeframe_to_seconds(timeframe))
         if candle is None:
-            candle = self.data_hold.get_latest_ohlcv(pair)
+            candle = self.data_mgr.get_latest_ohlcv(pair)
         open_p, high_p, low_p, close_p = candle[ocol: vcol]
         if open_p <= close_p:
             # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
@@ -318,7 +318,7 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = exit_tag
         od.exit_at = ctx[bar_num]
         _, base_s, quote_s, _ = get_cur_symbol(ctx)
-        candle = self.data_hold.get_latest_ohlcv(od.symbol)
+        candle = self.data_mgr.get_latest_ohlcv(od.symbol)
         hprice, lprice, cprice = candle[hcol: vcol]
         if not price:
             # 为提供价格时，以最低价卖出（即吃单方）
@@ -465,7 +465,7 @@ class LiveOrderManager(OrderManager):
 
     async def calc_price(self, pair: str, vol_secs=0):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
-        candle = self.data_hold.get_latest_ohlcv(pair)
+        candle = self.data_mgr.get_latest_ohlcv(pair)
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
         od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
         fees = self.exchange.calc_funding_fee(od)

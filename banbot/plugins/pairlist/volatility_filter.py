@@ -16,9 +16,9 @@ class VolatilityFilter(PairList):
     '''
     波动性过滤器。
     '''
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(VolatilityFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(VolatilityFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         self.backdays = handler_cfg.get('back_days', 10)
         self.min_val = handler_cfg.get('min', 0)
@@ -34,8 +34,8 @@ class VolatilityFilter(PairList):
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         new_pairs = [p for p in pairlist if p not in self.pair_cache]
         since = int(btime.time() - self.backdays * 86_400)
-        args_list = [(p, '1d', since) for p in new_pairs]
-        pair_res = parallel_jobs(self.data_mgr.fetch_ohlcv, args_list)
+        args_list = [(self.exchange.name, p, '1d', since) for p in new_pairs]
+        pair_res = parallel_jobs(auto_fetch_ohlcv, args_list)
         for job in pair_res:
             job_res = await job
             candles, p = job_res['data'], job_res['args'][0]

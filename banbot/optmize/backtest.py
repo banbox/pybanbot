@@ -15,8 +15,8 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.wallets = WalletsLocal()
         self.exchange = CryptoExchange(config)
-        self.data_mgr = DBDataProvider(config, self.exchange, self.on_data_feed)
-        self.pair_mgr = PairManager(config, self.exchange, self.data_mgr)
+        self.data_mgr = DBDataProvider(config, self.on_data_feed)
+        self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
@@ -47,7 +47,7 @@ class BackTest(Trader):
         enter_list, exit_list, ext_tags = super(BackTest, self).on_data_feed(pair, timeframe, row)
         if enter_list:
             ctx = get_context(f'{pair}/{timeframe}')
-            price = to_pytypes(ctx[bar_arr][-1, ccol])
+            price = to_pytypes(row[ccol])
             enter_text = ','.join([v[1] for v in enter_list])
             self.enter_list.append((ctx[bar_num], enter_text, price))
 
@@ -68,7 +68,7 @@ class BackTest(Trader):
         from banbot.optmize.bt_analysis import BTAnalysis
         await self.init()
         # 轮训数据
-        await self.data_mgr.loop_main(self._warmup_num)
+        self.data_mgr.loop_main()
         # 关闭未完成订单
         await self.cleanup()
         self._calc_result_done()
@@ -91,7 +91,10 @@ class BackTest(Trader):
 
     def _calc_result_done(self):
         # 输出入场信号
-        enter_ids, enter_tags, enter_prices = list(zip(*self.enter_list))
+        if self.enter_list:
+            enter_ids, enter_tags, enter_prices = list(zip(*self.enter_list))
+        else:
+            enter_ids, enter_tags, enter_prices = [], [], []
         self.result['enters'] = dict(ids=enter_ids, tags=enter_tags, valy=enter_prices)
         quote_s = 'TUSD'
         self.result['date_to'] = btime.to_datestr(self.result['date_to'])

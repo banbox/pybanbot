@@ -11,6 +11,7 @@ from banbot.util.common import logger
 from banbot.storage.common import *
 from banbot.core.async_events import *
 from banbot.config import AppConfig
+from banbot.util import btime
 
 
 def term_handler(signum, frame):
@@ -25,12 +26,8 @@ def start_trading(args: Dict[str, Any]) -> int:
     """
     Main entry point for trading mode
     """
-    # Import here to avoid loading worker module when it's not used
     from banbot.main.live_trader import LiveTrader
-    from banbot.util import btime
 
-
-    # Create and run worker
     config = AppConfig.init_by_args(args)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
     logger.warning("Run Mode: %s", btime.run_mode.value)
@@ -57,13 +54,16 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     """
     # Import here to avoid loading backtesting module when it's not used
     from banbot.optmize.backtest import BackTest
-    from banbot.util import btime
 
     config = AppConfig.init_by_args(args)
     btime.run_mode = btime.RunMode.BACKTEST
     backtesting = BackTest(config)
     try:
-        asyncio.run(backtesting.run())
+        if args.get('cprofile'):
+            import cProfile
+            cProfile.runctx('asyncio.run(backtesting.run())', globals(), locals(), sort='tottime')
+        else:
+            asyncio.run(backtesting.run())
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")

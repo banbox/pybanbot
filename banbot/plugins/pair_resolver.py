@@ -14,7 +14,7 @@ class PairResolver(IResolver):
     initial_search_path = Path(__file__).parent.joinpath('pairlist').resolve()
 
     @classmethod
-    def load_handlers(cls, exchange, manager, config: Config, data_mgr: DataProvider) -> List[PairList]:
+    def load_handlers(cls, exchange, manager, config: Config) -> List[PairList]:
         cls_list = cls.load_object_list(config)
         cls_map = {item.__name__: item for item in cls_list}
         pairlist = config.get('pairlists', [])
@@ -23,11 +23,5 @@ class PairResolver(IResolver):
             pair_cls = cls_map.get(handler_cfg['name'])
             if not pair_cls:
                 raise RuntimeError(f"unknown pair handler: {handler_cfg['name']}")
-            pair_handlers.append(pair_cls(
-                manager,
-                exchange,
-                data_mgr,
-                config,
-                handler_cfg
-            ))
+            pair_handlers.append(pair_cls(manager, exchange, config, handler_cfg))
         return pair_handlers

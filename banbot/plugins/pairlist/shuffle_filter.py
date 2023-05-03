@@ -9,9 +9,9 @@ from banbot.plugins.pairlist.base import *
 
 
 class ShuffleFilter(PairList):
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(ShuffleFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(ShuffleFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         if btime.run_mode in TRADING_MODES:
             self.seed = None

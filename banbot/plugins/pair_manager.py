@@ -14,12 +14,13 @@ class PairManager:
     暂时不建议在回测中使用：VolumePairlist, SpreadFilter, PriceFilter
     '''
 
-    def __init__(self, config: Config, exchange: CryptoExchange, data_mgr: DataProvider):
+    def __init__(self, config: Config, exchange: CryptoExchange):
         self.exchange = exchange
         self.config = config
-        self.handlers = PairResolver.load_handlers(exchange, self, config, data_mgr)
-        self._whitelist = config['exchange'].get('pair_whitelist')
-        self._blacklist = config['exchange'].get('pair_blacklist', [])
+        self.handlers = PairResolver.load_handlers(exchange, self, config)
+        exg_cfg = AppConfig.get_exchange(config)
+        self._whitelist = exg_cfg.get('pair_whitelist')
+        self._blacklist = exg_cfg.get('pair_blacklist', [])
         if not self.handlers:
             raise RuntimeError('no pairlist defined')
         ticker_names = [h.name for h in self.handlers if h.need_tickers]

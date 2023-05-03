@@ -30,6 +30,7 @@ setup(
         'arrow',
         'sqlalchemy',
         'psycopg2',
-        'redis'
+        'redis',
+        'hiredis'
     ]
 )

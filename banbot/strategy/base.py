@@ -3,9 +3,8 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-import numpy as np
-
 from banbot.strategy.common import *
+from banbot.util.common import logger
 
 
 def append_new_bar(row: np.ndarray) -> np.ndarray:
@@ -24,7 +23,11 @@ def append_new_bar(row: np.ndarray) -> np.ndarray:
         fea_col_start.set(len(row))
         result = exp_crow
     else:
-        result = np.append(result, exp_crow, axis=0)
+        result = np.append(result, exp_crow, axis=0)[-1000:]
+    if len(result) >= 3:
+        cur_intv, prev_intv = result[-1][0] - result[-2][0], result[-2][0] - result[-3][0]
+        if cur_intv != prev_intv:
+            logger.error(f'{symbol_tf.get()} bar interval error: {prev_intv} --> {cur_intv}')
     bar_arr.set(result)
     LongVar.update(result)
     return result

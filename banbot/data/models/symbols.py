@@ -10,7 +10,6 @@ from typing import Dict, ClassVar
 class SymbolTF(BaseDbModel):
     __tablename__ = 'symboltf'
     _object_map: ClassVar[Dict[str, int]] = dict()
-    _cur_exchange: ClassVar[Optional[str]] = None
 
     id = Column(sa.Integer, primary_key=True)
     exchange = Column(sa.String(50))
@@ -19,10 +18,8 @@ class SymbolTF(BaseDbModel):
     tf_secs = Column(sa.Integer)
 
     @classmethod
-    def get_id(cls, symbol: str, timeframe: str = '1m') -> int:
-        if cls._cur_exchange is None:
-            cls._cur_exchange = AppConfig.get()['exchange']['name']
-        key = f'{cls._cur_exchange}:{symbol}:{timeframe}'
+    def get_id(cls, exg_name: str, symbol: str, timeframe: str = '1m') -> int:
+        key = f'{exg_name}:{symbol}:{timeframe}'
         cache_val = cls._object_map.get(key)
         if cache_val:
             return cache_val
@@ -36,7 +33,7 @@ class SymbolTF(BaseDbModel):
                 return cls._object_map[key]
             from banbot.exchange.exchange_utils import timeframe_to_seconds
             tf_secs = timeframe_to_seconds(timeframe)
-            obj = SymbolTF(exchange=cls._cur_exchange, symbol=symbol, timeframe=timeframe, tf_secs=tf_secs)
+            obj = SymbolTF(exchange=exg_name, symbol=symbol, timeframe=timeframe, tf_secs=tf_secs)
             sess.add(obj)
             sess.flush()
             cls._object_map[key] = obj.id

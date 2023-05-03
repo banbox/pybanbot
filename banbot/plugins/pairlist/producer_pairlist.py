@@ -19,15 +19,17 @@ class ProducerPairList(PairList):
         ],
     '''
 
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(ProducerPairList, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(ProducerPairList, self).__init__(manager, exchange, config, handler_cfg)
 
         self.limit = handler_cfg.get('limit', 0)
         self.from_name = handler_cfg.get('producer', 'default')
 
     def _filter_pairlist(self, pairlist: Optional[List[str]]):
-        add_pairlist = self.data_mgr.get_producer_pairs(self.from_name)
+        # TODO: 这里需要从控制端获取当前机器人要处理的交易对。
+        # add_pairlist = self.data_mgr.get_producer_pairs(self.from_name)
+        add_pairlist = []
         if pairlist is None:
             pairlist = []
 

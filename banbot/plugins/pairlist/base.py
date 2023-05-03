@@ -13,11 +13,9 @@ from copy import deepcopy
 class PairList:
     need_tickers = False
 
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
-                 config: Config, handler_cfg: Dict[str, Any]):
+    def __init__(self, manager, exchange: CryptoExchange, config: Config, handler_cfg: Dict[str, Any]):
         self.exchange = exchange
         self.manager = manager
-        self.data_mgr = data_mgr
         self.config = config
         self.handler_cfg = handler_cfg
         self.stake_currency: Set[str] = set(config.get('stake_currency', []))

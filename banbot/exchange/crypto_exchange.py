@@ -11,15 +11,12 @@ from ccxt import TICK_SIZE
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import os
-import time
 
 import orjson
 
-from banbot.exchange.exchange_utils import *
-from banbot.util.common import logger
-from banbot.config.consts import *
-from banbot.util import btime
+from banbot.config.appconfig import AppConfig
 from banbot.util.misc import *
+from banbot.data.tools import *
 from banbot.storage.orders import Order
 from typing import *
 
@@ -49,7 +46,7 @@ def loop_forever(func):
 
 
 def _create_exchange(module, cfg: dict):
-    exg_cfg = cfg['exchange']
+    exg_cfg = AppConfig.get_exchange(cfg)
     exg_class = getattr(module, exg_cfg['name'])
     run_env = cfg["env"]
     credit = exg_cfg[f'credit_{run_env}']
@@ -72,7 +69,7 @@ def _create_exchange(module, cfg: dict):
 
 
 def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
-    exg_cfg = cfg['exchange']
+    exg_cfg = AppConfig.get_exchange(cfg)
     has_proxy = bool(exg_cfg.get('proxies'))
     if has_proxy:
         os.environ['HTTP_PROXY'] = exg_cfg['proxies']['http']
@@ -189,7 +186,7 @@ class CryptoExchange:
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.monotonic() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
-        self.pair_fee_limits = config['exchange'].get('pair_fee_limits')
+        self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits')
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
 
@@ -210,9 +207,8 @@ class CryptoExchange:
             # 非实时模式，缓存的交易对7天有效
             if restore_ts:
                 logger.warning('exchange markets expired, renew...')
-            with btime.TempRunMode(RunMode.DRY_RUN):
-                markets = await self.api_async.load_markets(True)
-                _save_markets(self.api_async, self.market_dir)
+            markets = await self.api_async.load_markets(True)
+            _save_markets(self.api_async, self.market_dir)
         self.api_ws.markets_by_id = self.api_async.markets_by_id
         _copy_markets(self.api_async, self.api_ws)
         _copy_markets(self.api_async, self.api)
@@ -398,7 +394,7 @@ class CryptoExchange:
         fetch_num = limit * round(cur_tf_secs / sub_tf_secs)
         count = 0
         if not since:
-            cur_time = int(math.floor(time.time() / cur_tf_secs) * cur_tf_secs)
+            cur_time = time.time() // cur_tf_secs * cur_tf_secs
             since = (cur_time - fetch_num * sub_tf_secs) * 1000
         result = []
         while count < fetch_num:

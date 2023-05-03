@@ -3,8 +3,6 @@
 # File  : precision_filter.py
 # Author: anyongjin
 # Date  : 2023/4/18
-import asyncio
-
 from banbot.plugins.pairlist.base import *
 from banbot.bar_driven.tainds import ccol
 
@@ -20,9 +18,9 @@ class PriceFilter(PairList):
     '''
     need_tickers = True
 
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(PriceFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(PriceFilter, self).__init__(manager, exchange, config, handler_cfg)
         self.precision = handler_cfg.get('precision', 0.001)
         self.min_price = handler_cfg.get('min_price', 0)
         self.max_price = handler_cfg.get('max_price', 0)
@@ -39,7 +37,7 @@ class PriceFilter(PairList):
         else:
             since_ts, to_ts = get_back_ts(300, 1, in_ms=False)
             loop = asyncio.get_running_loop()
-            candles = loop.run_until_complete(self.data_mgr.fetch_ohlcv(pair, '5m', since_ts))
+            candles = loop.run_until_complete(auto_fetch_ohlcv(self.exchange.name, pair, '5m', since_ts))
             price = candles[-1][ccol]
 
         if self.precision > 0:

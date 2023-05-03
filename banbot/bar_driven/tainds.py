@@ -25,7 +25,6 @@ from banbot.util.num_utils import *
 
 
 # 所有对上下文变量的数据访问，均应先获取锁，避免协程交互访问时发生混乱
-ctx_lock = Lock()
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
 bar_arr = ContextVar('bar_arr')
@@ -104,22 +103,6 @@ class TempContext:
         if not self.is_locked:
             return
         set_context(self.back_symbol)
-        self.is_locked = False
-
-    async def __aenter__(self):
-        self.back_symbol = symbol_tf.get()
-        if self.back_symbol != self.symbol:
-            # 仅当和当前环境的上下文不同时，才尝试获取协程锁；允许相同环境嵌套TempContext
-            await ctx_lock.acquire()
-            self.back_symbol = symbol_tf.get()
-            self.is_locked = True
-            set_context(self.symbol)
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if not self.is_locked:
-            return
-        set_context(self.back_symbol)
-        ctx_lock.release()
         self.is_locked = False
 
 

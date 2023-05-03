@@ -3,267 +3,182 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/3/28
-import numpy as np
-import pandas as pd
 
 from banbot.exchange.crypto_exchange import *
-from banbot.exchange.exchange_utils import *
-from banbot.util import btime
-from banbot.config.timerange import TimeRange
+from banbot.data.tools import *
+from banbot.data.wacther import *
 
 
-class PairTFCache:
-    def __init__(self, timeframe: str, tf_decs: int):
-        self.timeframe = timeframe
-        self.tf_secs = tf_decs
-        self.last_check = None  # 上次检查更新的时间戳
-        self.check_interval = get_check_interval(self.tf_secs)
-        self.bar_row = None
-
-    def need_check(self) -> bool:
-        return not self.last_check or self.last_check + self.check_interval <= btime.time()
-
-
-class PairDataFeeder:
+class DataFeeder(Watcher):
     '''
-    用于记录交易对的数据更新状态
+    每个Feeder对应一个交易对。可包含多个时间维度。
+    支持动态添加时间维度。
+    回测模式：根据Feeder的下次更新时间，按顺序调用执行回调。
+    实盘模式：订阅此交易对时间周期的新数据，被唤起时执行回调。
+    支持预热数据。每个策略+交易对全程单独预热，不可交叉预热，避免btime被污染。
+    LiveFeeder新交易对和新周期都需要预热；HistFeeder仅新周期需要预热
     '''
-    def __init__(self, pair: str, timeframes: List[str], auto_prefire=False):
-        self.pair = pair
-        self._tf_set = set()
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False):
+        super(DataFeeder, self).__init__(pair, callback)
+        self.warm_secs = warm_secs
         self.states: List[PairTFCache] = []
-        self.warmup_num = 600  # 默认前600个作为预热，可根据策略设置
-        self.prefire_secs = 0
-        self.min_interval = 1
         self.auto_prefire = auto_prefire
-        self.callback = None
-        self._per_details = None
-        self._fetch_intv = None
-        self._bar_fired = False
-        if timeframes:
-            self.sub_tflist(*timeframes)
+        self.sub_tflist(*timeframes)
 
     def sub_tflist(self, *timeframes):
-        timeframes = [tf for tf in timeframes if tf not in self._tf_set]
+        '''
+        订阅新的时间周期。此方法不做预热。
+        '''
+        added_tfs = {st.timeframe for st in self.states}
+        timeframes = [tf for tf in timeframes if tf not in added_tfs]
         if not timeframes:
             return
+        # 检查是否有效并添加到states
         tf_pairs = [(tf, timeframe_to_seconds(tf)) for tf in timeframes]
         tf_pairs = sorted(tf_pairs, key=lambda x: x[1])
-        min_tf = tf_pairs[0]
-        if self.states and self.states[0].tf_secs < min_tf[1]:
-            min_tf = [self.states[0].timeframe, self.states[0].tf_secs]
-        for _, tf_secs in tf_pairs:
-            err_msg = f'{_} of {self.pair} must be integer multiples of the first ({min_tf[0]})'
-            assert tf_secs % min_tf[1] == 0, err_msg
         new_states = [PairTFCache(tf, tf_sec) for tf, tf_sec in tf_pairs]
+        min_tf = new_states[0]
+        check_list = self.states
+        if self.states and self.states[0].tf_secs < min_tf.tf_secs:
+            min_tf = self.states[0]
+            check_list = new_states
+        for sta in check_list:
+            err_msg = f'{sta.timeframe} of {self.pair} must be integer multiples of the first ({min_tf.timeframe})'
+            assert sta.tf_secs % min_tf.tf_secs == 0, err_msg
         self.states.extend(new_states)
         self.states = sorted(self.states, key=lambda x: x.tf_secs)
-        self.min_interval = min(s.check_interval for s in self.states)
+        return timeframes
 
-    async def _get_feeds(self) -> Tuple[np.ndarray, float]:
-        raise NotImplementedError(f'_get_feeds in {self.__class__.__name__}')
-
-    async def try_fetch(self):
+    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
         '''
-        对当前交易对检查是否需要从交易所拉取数据
-        :return:
+        预热周期数据。当动态添加周期到已有的HistDataFeeder时，应调用此方法预热数据。
+        LiveFeeder在初始化时也应当调用此函数
+        :retrun 返回结束的时间戳（即下一个bar开始时间戳）
         '''
-        assert self.callback, '`callback` is not set!'
-        self._per_details = None
-        self._fetch_intv = None
-        self._bar_fired = False
-        # 第一个最小粒度，从api或ws更新行情数据
-        if not self.states[0].need_check():
-            return
-        self._per_details, self._fetch_intv = await self._get_feeds()
+        raise NotImplementedError
 
-    def try_update(self) -> bool:
-        if self._per_details is None:
-            return False
+    def on_new_data(self, details: List, fetch_intv: int) -> bool:
         # 获取从上次间隔至今期间，更新的子序列
-        details, fetch_intv = self._per_details, self._fetch_intv
         state = self.states[0]
         prefire = 0.1 if self.auto_prefire else 0
         if fetch_intv < state.tf_secs:
-            ohlcvs = [state.bar_row] if state.bar_row else []
+            ohlcvs = [state.wait_bar] if state.wait_bar else []
             ohlcvs, last_finish = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
-            self.prefire_secs = prefire * state.tf_secs
-        else:
+        elif fetch_intv == state.tf_secs:
             ohlcvs, last_finish = details, True
-            self.prefire_secs = 0
-        assert len(ohlcvs) <= 2, f'{self.pair} {state.timeframe} ohlc num err: {len(ohlcvs)}'
-        state.last_check = btime.time()
+        else:
+            raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
+        if len(ohlcvs) > 2:
+            raise RuntimeError(f'{self.pair} {state.timeframe} ohlc num err: {len(ohlcvs)}')
         # 子序列周期维度<=当前维度。最多涉及2个当前维度bar
-        for i in range(len(ohlcvs)):
-            new_bar = ohlcvs[i]
-            if state.bar_row and state.bar_row[0] < new_bar[0]:
-                self._fire_callback(state)
-            state.bar_row = new_bar
-        if last_finish:
-            self._fire_callback(state)
-            state.bar_row = None
-        if not self._bar_fired:
-            # 当前蜡烛未完成，后续更粗粒度也不会完成，直接退出
-            return False
+        min_finished = self._on_state_ohlcv(state, ohlcvs, last_finish)
         if len(self.states) > 1:
             # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
+            # 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
             if fetch_intv < state.tf_secs:
                 # 这里应该保留最后未完成的数据
                 ohlcvs, _ = build_ohlcvc(details, state.tf_secs, prefire)
             else:
                 ohlcvs = details
             for state in self.states[1:]:
-                cur_ohlcvs = [state.bar_row] if state.bar_row else []
+                cur_ohlcvs = [state.wait_bar] if state.wait_bar else []
                 prefire = 0.05 if self.auto_prefire else 0
                 cur_ohlcvs, last_finish = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
-                state.last_check = btime.time()
-                for i in range(len(cur_ohlcvs)):
-                    new_bar = cur_ohlcvs[i]
-                    if state.bar_row and state.bar_row[0] < new_bar[0]:
-                        self._fire_callback(state)
-                    state.bar_row = new_bar
-                if last_finish:
-                    self._fire_callback(state)
-                    state.bar_row = None
-        return True
-
-    def _fire_callback(self, state: PairTFCache):
-        bar_end_secs = state.bar_row[0] / 1000 + state.tf_secs
-        if btime.run_mode in TRADING_MODES:
-            if bar_end_secs + state.tf_secs < btime.time():
-                # 当蜡烛的触发时间过于滞后时，输出错误信息
-                delay = btime.time() - bar_end_secs
-                logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, state.timeframe, delay)
-        else:
-            btime.cur_timestamp = bar_end_secs
-        self.callback(self.pair, state.timeframe, state.bar_row)
-        self._bar_fired = True
+                self._on_state_ohlcv(state, cur_ohlcvs, last_finish)
+        return min_finished
 
 
-class LocalPairDataFeeder(PairDataFeeder):
-
-    def __init__(self, pair: str, timeframes: List[str], data_dir: str, auto_prefire=False,
+class HistDataFeeder(DataFeeder):
+    '''
+    历史数据反馈器。是文件反馈器和数据库反馈器的基类。
+    可通过next_at属性获取下个bar的达到时间。按到达时间对所有Feeder排序。
+    然后针对第一个Feeder，直接调用对象即可触发数据回调
+    '''
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        super(LocalPairDataFeeder, self).__init__(pair, timeframes, auto_prefire)
-        self.data_dir = data_dir
-        self.fetch_tfsecs = 0
-        self.dataframe: Optional[pd.DataFrame] = None
-        self.data_path: Optional[str] = None
-        self.row_id = 0
+        super(HistDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire)
+        if timerange and self.warm_secs:
+            timerange = TimeRange(timerange.startts - self.warm_secs, timerange.stopts)
+        if not timerange.stopts:
+            timerange.stopts = btime.time()
         self.timerange = timerange
-        self._check_data()
-        self.min_interval = max(self.min_interval, self.fetch_tfsecs)
         self.total_len = 0
+        self.row_id = 0
+        self._next_arr = []  # 下个bar的数据
 
-    def _check_data(self):
-        req_tfsecs = self.states[0].tf_secs
-        base_s, quote_s = self.pair.split('/')
-        try_list = []
-        for tf in NATIVE_TFS:
-            cur_secs = timeframe_to_seconds(tf)
-            if cur_secs > req_tfsecs:
-                break
-            if req_tfsecs % cur_secs != 0:
-                continue
-            try_list.append(tf)
-            data_path = os.path.join(self.data_dir, f'{base_s}_{quote_s}-{tf}.feather')
-            if not os.path.isfile(data_path):
-                continue
-            self.data_path = data_path
-            self.fetch_tfsecs = cur_secs
-            break
-        if not self.data_path:
-            raise FileNotFoundError(f'no data found, try: {try_list} in {self.data_dir}')
+    @property
+    def next_at(self):
+        if not self._next_arr:
+            return sys.maxsize
+        return self._next_arr[-1][0]
 
-    def _load_sml_data(self):
-        df = pd.read_feather(self.data_path)
-        if df.date.dtype != 'int64':
-            df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
-        start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
-        logger.info('loading data %s, range: %d-%d', os.path.basename(self.data_path), start_ts, end_ts)
-        if self.timerange:
-            if self.timerange.startts:
-                df = df[df['date'] >= self.timerange.startts * 1000]
-            if self.timerange.stopts:
-                df = df[df['date'] <= self.timerange.stopts * 1000]
-            if len(df):
-                start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000
-                tfrom, tto = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
-                logger.info('truncate data from %s(%d) to %s(%d)', tfrom, start_ts, tto, end_ts)
-            else:
-                tfrom, tto = btime.to_datestr(self.timerange.startts), btime.to_datestr(self.timerange.stopts)
-                raise FileNotFoundError('no data found after truncate from %s to %s', tfrom, tto)
-        self.dataframe = df
-        self.total_len = len(df)
-        return df
+    def _set_next(self):
+        pass
 
-    async def _get_feeds(self):
-        if self.dataframe is None:
-            self._load_sml_data()
-        if self.row_id >= len(self.dataframe):
-            raise EOFError()
-        req_tfsecs = self.states[0].tf_secs
-        if req_tfsecs == self.fetch_tfsecs:
+    def __call__(self, *args, **kwargs):
+        ret_arr = self._next_arr
+        self.on_new_data(ret_arr, self.states[0].tf_secs)
+        self._set_next()
+        return ret_arr
+
+
+class FileDataFeeder(HistDataFeeder):
+
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, data_dir: str, auto_prefire=False,
+                 timerange: Optional[TimeRange] = None):
+        super(FileDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
+        self.data_dir = data_dir
+        self.min_tfsecs = self.states[0].tf_secs
+        self.data_path, self.fetch_tfsecs = parse_data_path(self.data_dir, self.pair, self.min_tfsecs)
+        self.dataframe = load_file_range(self.data_path, self.timerange)
+        self.total_len = len(self.dataframe)
+        self._set_next()
+
+    def _set_next(self):
+        if self.row_id >= self.total_len:
+            self._next_arr = []
+            return
+        if self.min_tfsecs == self.fetch_tfsecs:
             ret_arr = [self.dataframe.iloc[self.row_id].values.tolist()]
             self.row_id += 1
         else:
-            back_len = round(req_tfsecs / self.fetch_tfsecs)
+            back_len = round(self.min_tfsecs / self.fetch_tfsecs)
             ret_arr = self.dataframe.iloc[self.row_id: self.row_id + back_len].values.tolist()
             self.row_id += back_len
-        return ret_arr, self.fetch_tfsecs
+        self._next_arr = ret_arr
 
-    @staticmethod
-    def load_data(data_dir: str, pair: str, timeframe: str, ts_from: float, ts_to: float):
-        tf_secs = timeframe_to_seconds(timeframe)
-        trange = TimeRange.parse_timerange(f'{ts_from}-{ts_to}')
-        try:
-            loader = LocalPairDataFeeder(pair, [timeframe], data_dir, timerange=trange)
-            df = loader._load_sml_data()
-        except FileNotFoundError:
-            return pd.DataFrame()
-        if loader.fetch_tfsecs == tf_secs:
-            return df.reset_index(drop=True)
-        if tf_secs % loader.fetch_tfsecs > 0:
-            raise ValueError(f'unsupport timeframe: {timeframe}, min tf secs: {loader.fetch_tfsecs}')
-        details = df.values.tolist()
-        rows, last_finish = build_ohlcvc(details, tf_secs)
-        if not last_finish:
-            rows = rows[:-1]
-        return pd.DataFrame(rows, columns=df.columns.tolist())
-
-    @staticmethod
-    def load_data_from_bt(btres: dict):
-        '''
-        加载指定timeframe的数据，返回DataFrame。仅用于jupyter-lab中测试。
-        :param btres: 回测的结果
-        :return:
-        '''
-        return LocalPairDataFeeder.load_data(
-            btres['data_dir'],
-            btres['pair'],
-            btres['timeframe'],
-            btres['ts_from'],
-            btres['ts_to'],
-        )
+    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
+        tr = TimeRange(btime.time() - warm_secs, btime.time() + 0.1)
+        ohlcv_arr: List[Tuple] = load_file_range(self.data_path, tr).values.tolist()
+        max_end_ms = 0
+        if not ohlcv_arr:
+            return
+        for tf in timeframes:
+            tf_secs = timeframe_to_seconds(tf)
+            if tf_secs > self.fetch_tfsecs:
+                ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, tf_secs)
+            for row in ohlcv_arr:
+                self._fire_callback(row, tf, tf_secs)
+            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
+        return max_end_ms
 
 
-class DBPairDataFeeder(PairDataFeeder):
+class DBDataFeeder(HistDataFeeder):
 
-    def __init__(self, pair: str, timeframes: List[str], auto_prefire=False,
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        super(DBPairDataFeeder, self).__init__(pair, timeframes, auto_prefire)
-        self.timerange = timerange
-        self.offset_ts = self.timerange.startts * 1000
-        self.batch_size = 300
+        super(DBDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
+        self._offset_ts = self.timerange.startts * 1000
+        self.exg_name = AppConfig.get()['exchange']['name']
+        self._batch_size = 300
         self._row_id = 0
         self._cache_arr = []
-        self.total_len = -1
-        self.row_id = 0
+        self._calc_total()
+        self._set_next()
 
     def _calc_total(self):
-        self.total_len = 0
         from banbot.data.models import KLine
-        start_ts, stop_ts = KLine.query_range(self.pair)
+        start_ts, stop_ts = KLine.query_range(self.exg_name, self.pair)
         if start_ts and stop_ts:
             vstart = max(start_ts, self.timerange.startts * 1000)
             vend = min(stop_ts, self.timerange.stopts * 1000)
@@ -271,70 +186,55 @@ class DBPairDataFeeder(PairDataFeeder):
                 div_m = self.states[0].tf_secs * 1000
                 self.total_len = (vend - vstart) // div_m + 1
 
-    async def _get_feeds(self):
-        state = self.states[0]
+    def _set_next(self):
         if self._row_id >= len(self._cache_arr):
             # 缓存结束，重新读取数据库
-            if self.total_len < 0:
-                self._calc_total()
+            if self.row_id >= self.total_len:
+                self._next_arr = []
+                return
             from banbot.data.models import KLine
             end = self.timerange.stopts * 1000
-            self._cache_arr = KLine.query(self.pair, state.timeframe, self.offset_ts, end, self.batch_size)
+            min_tf = self.states[0].timeframe
+            self._cache_arr = KLine.query(self.exg_name, self.pair, min_tf, self._offset_ts, end, self._batch_size)
             self._row_id = 0
             if not self._cache_arr:
-                raise EOFError('no more data')
-            self.offset_ts = self._cache_arr[-1][0] + 1
-        row = self._cache_arr[self._row_id]
+                self.total_len = self.row_id
+                self._next_arr = []
+                return
+            self._offset_ts = self._cache_arr[-1][0] + 1
+        self._next_arr = [self._cache_arr[self._row_id]]
         self._row_id += 1
         self.row_id += 1
-        return [row], state.tf_secs
+
+    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
+        from banbot.data.models import KLine
+        end_ms = int(btime.time() * 1000) + 1
+        start_ms = end_ms - warm_secs
+        max_end_ms = 0
+        for tf in timeframes:
+            tf_secs = timeframe_to_seconds(tf)
+            ohlcv_arr = KLine.query(self.exg_name, self.pair, tf, start_ms, end_ms, 90000)
+            if not ohlcv_arr:
+                continue
+            for row in ohlcv_arr:
+                self._fire_callback(row, tf, tf_secs)
+            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
+        return max_end_ms
 
 
-class LivePairDataFeader(PairDataFeeder):
+class LiveDataFeader(DBDataFeeder):
+    '''
+    每个Feeder对应一个交易对。可包含多个时间维度。
+    支持动态添加时间维度。
+    实盘模式：订阅此交易对时间周期的新数据，被唤起时执行回调。
+    支持返回预热数据。每个策略+交易对全程单独预热，不可交叉预热，避免btime被污染。
 
-    def __init__(self, pair: str, timeframes: List[str], exchange: CryptoExchange, auto_prefire=False):
-        super(LivePairDataFeader, self).__init__(pair, timeframes, auto_prefire)
-        # 超过3s检查一次的（1分钟及以上维度），通过API获取；否则通过Websocket获取
-        self.is_ws = self.min_interval <= 2
-        self.exchange = exchange
-        self.next_since = None
-        self.is_warmed = False
-        self.warm_data = None
-        self.warm_id = 0
-        self.back_rmode = btime.run_mode
+    通过redis检查此交易对是否已在监听刷新，如没有则发消息给爬虫监听。
+    '''
 
-    async def _get_feeds(self):
-        state = self.states[0]
-        if not self.is_warmed:
-            # 先请求前900周期数据作为预热
-            if self.warm_data is None:
-                fetch_num = round(self.states[-1].tf_secs / state.tf_secs) * self.warmup_num
-                assert 0 < fetch_num <= 1000, 'fetch warmup num > 1000'
-                # 这里请求网络，内部有超时逻辑，故临时切换到实时模式
-                with btime.TempRunMode(RunMode.DRY_RUN):
-                    self.warm_data = await self.exchange.fetch_ohlcv_plus(self.pair, state.timeframe, limit=fetch_num)
-            if self.warm_id >= len(self.warm_data):
-                logger.info('warm up complete with %d', self.warmup_num)
-                self.is_warmed = True
-                self.next_since = self.warm_data[-1][0] + state.tf_secs + 1
-                del self.warm_data
-                btime.run_mode = self.back_rmode
-                btime.cur_timestamp = btime.time()
-            else:
-                details = [self.warm_data[self.warm_id]]
-                self.warm_id += 1
-                return details, state.tf_secs
-        try:
-            if not self.is_ws:
-                # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
-                details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
-                self.next_since = details[-1][0] + 1
-                detail_interval = 1
-            else:
-                details = await self.exchange.watch_trades(self.pair)
-                detail_interval = 0.1
-            return details, detail_interval
-        except ccxt.NetworkError:
-            logger.exception(f'get live data exception: {self.pair}')
-            return None, None
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable):
+        # 实盘数据的auto_prefire在爬虫端进行。
+        super(LiveDataFeader, self).__init__(pair, warm_secs, timeframes, callback)
+
+
 

@@ -134,5 +134,5 @@ else:
         _loop_factory = BanEventLoop
 
 
-BanEventLoop.call_at = call_at
-asyncio.set_event_loop_policy(BanEventLoopPolicy())
+# BanEventLoop.call_at = call_at
+# asyncio.set_event_loop_policy(BanEventLoopPolicy())

@@ -6,7 +6,7 @@
 import time
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, Column
+from sqlalchemy import create_engine, pool, Column
 from sqlalchemy import event as db_event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -17,6 +17,7 @@ from sqlalchemy.orm.session import make_transient
 from typing import Optional, List, Union, Type
 from banbot.util.common import logger
 from banbot.config import AppConfig
+from banbot.util import btime
 
 
 _BaseDbModel = declarative_base()
@@ -38,10 +39,13 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
 
 
 def new_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
-    db_url = AppConfig.get()['database']['url']
+    db_cfg = AppConfig.get()['database']
+    db_url = db_cfg['url']
+    pool_size = db_cfg.get('pool_size', 30) if btime.run_mode in btime.TRADING_MODES else 3
+    max_psize = pool_size * 2
     logger.info(f'db url:{db_url}')
     # pool_recycle 连接过期时间，根据mysql服务器端连接的存活时间wait_timeout略小些
-    create_args = dict(pool_recycle=300)
+    create_args = dict(pool_recycle=3600, poolclass=pool.QueuePool, pool_size=pool_size, max_overflow=max_psize)
     if debug is not None:
         create_args['echo'] = debug
     create_args['isolation_level'] = iso_level

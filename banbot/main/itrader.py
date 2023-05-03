@@ -22,21 +22,21 @@ class Trader:
         self.order_mgr: OrderManager = None
         self.data_mgr: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
-        self._warmup_num = 0
         self._job_exp_end = btime.time() + 5
         self._run_tasks: List[asyncio.Task] = []
 
-    def _load_strategies(self, pairlist: List[str]) -> Dict[str, Set[str]]:
+    def _load_strategies(self, pairlist: List[str]) -> Dict[Tuple[str, int], Set[str]]:
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist)
         pair_tfs = dict()
-        for pair, timeframe, cls_list in run_jobs:
-            if pair not in pair_tfs:
-                pair_tfs[pair] = set()
-            pair_tfs[pair].add(timeframe)
-            symbol = f'{pair}/{timeframe}'
-            with TempContext(symbol):
-                self.symbol_stgs[symbol] = [cls(self.config) for cls in cls_list]
-                self._warmup_num = max(self._warmup_num, *[cls.warmup_num for cls in cls_list])
+        for pair, (warm_secs, tf_dic) in run_jobs.items():
+            for timeframe, stg_set in tf_dic.items():
+                res_key = pair, warm_secs
+                if res_key not in pair_tfs:
+                    pair_tfs[res_key] = set()
+                pair_tfs[res_key].add(timeframe)
+                symbol = f'{pair}/{timeframe}'
+                with TempContext(symbol):
+                    self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):

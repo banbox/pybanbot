@@ -16,13 +16,17 @@ from typing import Union
 global cur_timestamp, run_mode
 
 run_mode = RunMode.DRY_RUN
-cur_timestamp = 1679883802
+cur_timestamp = 0
 
 
 def time():
+    global cur_timestamp
     if run_mode in TRADING_MODES:
         import time
         return time.time()
+    elif not cur_timestamp:
+        import time
+        cur_timestamp = time.time()
     return cur_timestamp
 
 
@@ -53,18 +57,4 @@ def to_utcstamp(dt, ms=False, round_int=False) -> Union[int, float]:
 def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
     dt = to_datetime(timestamp)
     return dt.strftime(fmt)
-
-
-class TempRunMode:
-    def __init__(self, mode: RunMode):
-        self.tmp_mode = mode
-        self.bak_mode = run_mode
-
-    def __enter__(self):
-        global run_mode
-        run_mode = self.tmp_mode
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        global run_mode
-        run_mode = self.bak_mode
 

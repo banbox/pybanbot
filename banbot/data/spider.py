@@ -6,130 +6,210 @@
 import asyncio
 import os.path
 import time
-from tqdm import tqdm
-import pandas as pd
-from typing import Dict, Any, List
+
+import orjson
+
 from banbot.config.appconfig import AppConfig, Config
-from banbot.util import btime
-from banbot.util.common import logger
 from banbot.util.misc import parallel_jobs
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.exchange.exchange_utils import timeframe_to_seconds
+from banbot.util.redis_helper import MyRedis
+from banbot.data.wacther import *
+from banbot.data.tools import *
 
 
-class Spider:
-    def __init__(self, config: Config):
-        self.config = config
-        self.exchange = CryptoExchange(config)
+def get_check_interval(timeframe_secs: int) -> float:
+    '''
+    根据监听的交易对和时间帧。计算最小检查间隔。
+    <60s的通过WebSocket获取数据，检查更新间隔可以比较小。
+    1m及以上的通过API的秒级接口获取数据，3s更新一次
+    :param timeframe_secs:
+    :return:
+    '''
+    if timeframe_secs <= 3:
+        check_interval = 0.2
+    elif timeframe_secs <= 10:
+        check_interval = 0.5
+    elif timeframe_secs < 60:
+        check_interval = 1
+    else:
+        return 3
+    return check_interval
 
-    async def _fetch(self, pair: str, timeframe: str, start_ts: int, end_ts: int):
-        '''
-        按给定时间段下载交易对的K线数据。
-        :param pair:
-        :param timeframe:
-        :param start_ts: 毫秒时间戳（含）
-        :param end_ts: 毫秒时间戳（不含）
-        :return:
-        '''
-        start_text, end_text = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
-        logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
-        tf_msecs = timeframe_to_seconds(timeframe) * 1000
-        batch_size = 1000
-        since, total_tr = start_ts, end_ts - start_ts
-        result = []
-        pbar = tqdm()
-        while since + tf_msecs < end_ts:
-            data = await self.exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
-            if not len(data):
-                break
-            result.extend(data)
-            cur_end = round(data[-1][0])
-            pbar.update(round((cur_end - since) * 100 / total_tr, 2))
-            since = cur_end + 1
-        end_pos = len(result) - 1
-        while end_pos >= 0 and result[end_pos][0] >= end_ts:
-            end_pos -= 1
-        return result[:end_pos + 1]
 
-    async def _download_to_file(self, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
-        fname = pair.replace('/', '_') + '-' + timeframe + '.feather'
-        data_path = os.path.join(out_dir, fname)
-        columns = ['date', 'open', 'high', 'low', 'close', 'volume']
-        df_list = []
-        if os.path.isfile(data_path):
-            df = pd.read_feather(data_path)
-            if df.date.dtype != 'int64':
-                df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
-            old_start = df.iloc[0]['date']
-            df_list.append(df)
-            if start_ms < old_start:
-                predata = await self._fetch(pair, timeframe, start_ms, old_start)
-                if predata:
-                    df_list.insert(0, pd.DataFrame(predata, columns=columns))
-            start_ms = round(df.iloc[-1]['date']) + 1
-            if start_ms >= end_ms:
-                return
-        newdata = await self._fetch(pair, timeframe, start_ms, end_ms)
-        if newdata:
-            df_list.append(pd.DataFrame(newdata, columns=columns))
-        df = pd.concat(df_list).reset_index(drop=True)
-        df.to_feather(data_path, compression='lz4')
-
-    async def _down_pairs2file(self, pairs: List[str], start_ms: int, end_ms: int):
-        data_dir = self.config['data_dir']
-        if not os.path.isdir(data_dir):
-            os.mkdir(data_dir)
-        timeframes = self.config['timeframes']
+async def down_pairs_by_config(config: Config):
+    '''
+    根据配置文件和解析的命令行参数，下载交易对数据（到数据库或文件）
+    此方法由命令行调用。
+    '''
+    pairs = config['pairs']
+    timerange = config['timerange']
+    start_ms = round(timerange.startts * 1000)
+    end_ms = round(timerange.stopts * 1000)
+    cur_ms = round(time.time() * 1000)
+    end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
+    exchange = CryptoExchange(config)
+    if config['medium'] == 'db':
         tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
-        args_list = [(pair, tf, start_ms, end_ms, data_dir) for pair in pairs for tf in timeframes]
-        for job in parallel_jobs(self._down_pairs2file, args_list):
-            pair, tf = (await job)['args'][:2]
-            logger.warning(f'{pair}/{tf} down {tr_text} complete')
-
-    async def _download_to_db(self, pair: str, start_ms: int, end_ms: int):
-        timeframe = '1m'
-        from banbot.data.models import KLine
-        old_start, old_end = KLine.query_range(pair)
-        if old_start and old_end > old_start:
-            if start_ms < old_start:
-                # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
-                predata = await self._fetch(pair, timeframe, start_ms, old_start)
-                KLine.insert(pair, predata)
-                start_ms = old_end + 1
-            elif end_ms > old_end:
-                # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-                predata = await self._fetch(pair, timeframe, old_end + 1, end_ms)
-                KLine.insert(pair, predata)
-                return
-            else:
-                # 要下载的数据全部存在，直接退出
-                return
-        newdata = await self._fetch(pair, timeframe, start_ms, end_ms)
-        KLine.insert(pair, newdata)
-
-    async def _down_pairs2db(self, pairs: List[str], start_ms: int, end_ms: int):
-        tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
-        args_list = [(pair, start_ms, end_ms) for pair in pairs]
-        for job in parallel_jobs(self._download_to_db, args_list):
+        args_list = [(exchange, pair, start_ms, end_ms) for pair in pairs]
+        for job in parallel_jobs(download_to_db, args_list):
             pair = (await job)['args'][0]
             logger.warning(f'{pair} down {tr_text} complete')
-
-    async def down_pairs(self):
-        pairs = self.config['pairs']
-        timerange = self.config['timerange']
-        start_ms = round(timerange.startts * 1000)
-        end_ms = round(timerange.stopts * 1000)
-        cur_ms = round(time.time() * 1000)
-        end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
-        if self.config['medium'] == 'db':
-            await self._down_pairs2db(pairs, start_ms, end_ms)
-        else:
-            await self._down_pairs2file(pairs, start_ms, end_ms)
-        await self.exchange.close()
+    else:
+        data_dir = config['data_dir']
+        timeframes = config['timeframes']
+        if not os.path.isdir(data_dir):
+            os.mkdir(data_dir)
+        tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
+        args_list = [(exchange, pair, tf, start_ms, end_ms, data_dir) for pair in pairs for tf in timeframes]
+        for job in parallel_jobs(download_to_file, args_list):
+            pair, tf = (await job)['args'][:2]
+            logger.warning(f'{pair}/{tf} down {tr_text} complete')
+    await exchange.close()
 
 
 def run_down_pairs(args: Dict[str, Any]):
+    '''
+    解析命令行参数并下载交易对数据
+    '''
     config = AppConfig.init_by_args(args)
-    main = Spider(config)
-    asyncio.run(main.down_pairs())
+    asyncio.run(down_pairs_by_config(config))
 
+
+class LiveMiner(Watcher):
+    '''
+    交易对实时数据更新，仅用于实盘。
+    '''
+    def __init__(self, exchange: CryptoExchange, pair: str, since: Optional[int] = None):
+        super(LiveMiner, self).__init__(pair, self._on_bar_finish)
+        self.exchange = exchange
+        timeframe, tf_secs = '1m', 60  # 固定1m间隔更新数据
+        self.tf_secs = tf_secs
+        self.state = PairTFCache(timeframe, tf_secs)
+        self.check_intv = get_check_interval(tf_secs)  # 3s更新一次
+        self.key = f'{self.exchange.name}_{pair}'  # 取消标志，启动时设置为tf_secs，删除时表示取消任务
+        self.next_since = since if since else None
+        self.auto_prefire = AppConfig.get().get('prefire')
+
+    async def run(self):
+        with MyRedis() as redis:
+            await redis.set(self.key, self.tf_secs)
+        while True:
+            with MyRedis() as redis:
+                if await redis.get(self.key) != self.tf_secs:
+                    break
+            await self._try_update()
+            await asyncio.sleep(self.check_intv)
+
+    def _on_bar_finish(self, pair: str, timeframe: str, bar_arr: List[Tuple]):
+        from banbot.data.models import KLine
+        KLine.insert(self.exchange.name, pair, bar_arr)
+
+    async def _try_update(self):
+        import ccxt
+        try:
+            if self.check_intv > 2:
+                # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
+                details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
+                self.next_since = details[-1][0] + 1
+            else:
+                details = await self.exchange.watch_trades(self.pair)
+                details = trades_to_ohlcv(details)
+            # 合并得到数据库周期维度1m的数据
+            prefire = 0.06 if self.auto_prefire else 0
+            ohlcvs_upd, _ = build_ohlcvc(details, self.tf_secs, prefire)
+            ohlcvs = [self.state.wait_bar] if self.state.wait_bar else []
+            # 和旧的bar_row合并更新，判断是否有完成的bar
+            ohlcvs, last_finish = build_ohlcvc(ohlcvs_upd, self.tf_secs, ohlcvs=ohlcvs)
+            # 检查是否有完成的bar。写入到数据库
+            self._on_state_ohlcv(self.state, ohlcvs, last_finish)
+            # 发布间隔数据到redis订阅方
+            sre_data = orjson.dumps((ohlcvs_upd, self.tf_secs))
+            with MyRedis() as redis:
+                await redis.publish(self.key, sre_data)
+        except ccxt.NetworkError:
+            logger.exception(f'get live data exception: {self.pair} {self.tf_secs}')
+
+
+class SpiderJob:
+    def __init__(self, action: str, *args, **kwargs):
+        self.action = action
+        self.args = args
+        self.kwargs = kwargs
+
+    def dumps(self) -> bytes:
+        data = dict(action=self.action, args=self.args, kwargs=self.kwargs)
+        return orjson.dumps(data)
+
+
+def start_spider():
+    spider = LiveSpider()
+    asyncio.run(spider.run_listeners())
+
+
+class LiveSpider:
+    _key = 'spider'
+
+    '''
+    实时数据爬虫；仅用于实盘。负责：实时K线、订单簿等公共数据监听
+    历史数据下载请直接调用对应方法，效率更高。
+    '''
+    def __init__(self):
+        self.config = AppConfig.get()
+        self.exg_name = self.config['exchange']['name']
+        self.exg_map: Dict[str, CryptoExchange] = dict()
+        self.redis = MyRedis()  # 需要持续监听redis，单独占用一个连接
+        self.conn = self.redis.pubsub()
+        self.conn.subscribe(self._key)
+
+    async def run_listeners(self):
+        asyncio.create_task(self._heartbeat())
+        async for msg in self.conn.listen():
+            if msg['type'] != 'message':
+                continue
+            kwargs = orjson.loads(msg['data'])
+            asyncio.create_task(self._run_job(kwargs))
+
+    async def _run_job(self, params: dict):
+        action, args, kwargs = params['action'], params['args'], params['kwargs']
+        try:
+            if hasattr(self, action):
+                await getattr(self, action)(*args, **kwargs)
+            else:
+                logger.error(f'unknown spider job: {params}')
+                return
+        except Exception:
+            logger.exception(f'run spider job error: {params}')
+
+    async def _heartbeat(self):
+        while True:
+            await self.redis.set(self._key, expire_time=5)
+            await asyncio.sleep(4)
+
+    def _get_exchange(self, name: str) -> CryptoExchange:
+        if name not in self.exg_map:
+            self.config['exchange']['name'] = name
+            self.exg_map[name] = CryptoExchange(self.config)
+            self.config['exchange']['name'] = self.exg_name
+        return self.exg_map[name]
+
+    async def watch_ohlcv(self, exg_name: str, pair: str, since: Optional[int] = None):
+        key = f'{exg_name}_{pair}'
+        if await self.redis.get(key):
+            return
+        miner = LiveMiner(self._get_exchange(exg_name), pair, since)
+        await miner.run()
+
+    @classmethod
+    async def send(cls, *job_list: SpiderJob):
+        '''
+        发送命令到爬虫。不等待执行完成；发送成功即返回。
+        '''
+        redis = MyRedis()
+        if not await redis.get(cls._key):
+            async with redis.lock(cls._key + '_lock'):
+                if not await redis.get(cls._key):
+                    from threading import Thread
+                    td = Thread(target=start_spider, daemon=True)
+                    td.start()
+        for job in job_list:
+            await redis.publish(cls._key, job.dumps())

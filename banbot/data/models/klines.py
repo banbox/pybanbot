@@ -92,16 +92,17 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
         conn.execute(sa.text(f"drop table if exists kline"))
 
     @classmethod
-    def _get_sid(cls, symbol: Union[str, int]):
+    def _get_sid(cls, exg_name: str, symbol: Union[str, int]):
         sid = symbol
         if isinstance(symbol, six.string_types):
             from banbot.data.models.symbols import SymbolTF
-            sid = SymbolTF.get_id(symbol)
+            sid = SymbolTF.get_id(exg_name, symbol)
         return sid
 
     @classmethod
-    def _query_hyper(cls, symbol: Union[str, int], timeframe: str, dct_sql: str, gp_sql: Union[str, Callable]):
-        sid = cls._get_sid(symbol)
+    def _query_hyper(cls, exg_name: str, symbol: Union[str, int], timeframe: str,
+                     dct_sql: str, gp_sql: Union[str, Callable]):
+        sid = cls._get_sid(exg_name, symbol)
         conn = db_conn()
         if timeframe in cls.tf_tbls:
             stmt = dct_sql.format(
@@ -128,21 +129,23 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
             return conn.execute(sa.text(stmt))
 
     @classmethod
-    def query(cls, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None, limit: int = 3000):
+    def query(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
+              limit: int = 3000):
         tf_secs = timeframe_to_seconds(timeframe)
         limit_end_ms = start_ms + tf_secs * limit * 1000
-        end_ms = min(limit_end_ms, end_ms) if end_ms else limit_end_ms
+        max_end_ms = end_ms or btime.time() * 1000
+        end_ms = min(limit_end_ms, max_end_ms)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
 
         dct_sql = f'''
-select time,open,high,low,close,volume from {{tbl}}
+select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from {{tbl}}
 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
 order by time'''
 
         def gen_gp_sql():
             return f'''
-                select time_bucket('{timeframe}', time) AS time,
+                select (extract(epoch from time_bucket('{timeframe}', time)) * 1000)::float AS time,
                   first(open, time) AS open,  
                   max(high) AS high,
                   min(low) AS low, 
@@ -152,19 +155,19 @@ order by time'''
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
                 group by time
                 order by time'''
-        rows = cls._query_hyper(pair, timeframe, dct_sql, gen_gp_sql).fetchall()
-        return [(btime.to_utcstamp(r[0], True, True), *r[1:]) for r in rows]
+        rows = cls._query_hyper(exg_name, pair, timeframe, dct_sql, gen_gp_sql).fetchall()
+        if not len(rows) and max_end_ms - end_ms > tf_secs * 1000:
+            rows = cls.query(exg_name, pair, timeframe, end_ms, max_end_ms, limit)
+        return rows
 
     @classmethod
-    def query_range(cls, symbol: Union[str, int]) -> Tuple[Optional[int], Optional[int]]:
-        sid = cls._get_sid(symbol)
+    def query_range(cls, exg_name: str, symbol: Union[str, int]) -> Tuple[Optional[int], Optional[int]]:
+        sid = cls._get_sid(exg_name, symbol)
         cache_val = cls._sid_range_map.get(sid)
         if not cache_val:
-            dct_sql = 'select min(time), max(time) from {tbl} where sid={sid}'
-            min_time, max_time = cls._query_hyper(sid, '1m', dct_sql, '').fetchone()
-            if min_time is not None and max_time is not None:
-                min_time = btime.to_utcstamp(min_time, ms=True, round_int=True)
-                max_time = btime.to_utcstamp(max_time, ms=True, round_int=True)
+            dct_sql = 'select (extract(epoch from min(time)) * 1000)::float, ' \
+                      '(extract(epoch from max(time)) * 1000)::float from {tbl} where sid={sid}'
+            min_time, max_time = cls._query_hyper(exg_name, sid, '1m', dct_sql, '').fetchone()
             cls._sid_range_map[sid] = min_time, max_time
         else:
             min_time, max_time = cache_val
@@ -187,7 +190,7 @@ order by time'''
                 cls._sid_range_map[sid] = start_ms, end_ms
 
     @classmethod
-    def insert(cls, pair: str, rows: List[Tuple]):
+    def insert(cls, exg_name: str, pair: str, rows: List[Tuple]):
         if not rows:
             return
         rows = sorted(rows, key=lambda x: x[0])
@@ -196,9 +199,9 @@ order by time'''
             row_interval = rows[1][0] - rows[0][0]
             if row_interval != cls.interval:
                 raise ValueError(f'insert kline must be 1m interval, current: {row_interval/1000:.1f}s')
-        sid = cls._get_sid(pair)
+        sid = cls._get_sid(exg_name, pair)
         start_ms, end_ms = rows[0][0], rows[-1][0]
-        old_start, old_stop = cls.query_range(sid)
+        old_start, old_stop = cls.query_range(exg_name, sid)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
             old_start -= cls.interval

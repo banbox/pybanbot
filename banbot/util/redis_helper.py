@@ -4,10 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/4/25
 import re
-from redis import StrictRedis
+import time
+import asyncio
+import redis.asyncio as aioredis
+from redis.asyncio.client import PubSub
 from banbot.util.common import Instance
 from banbot.config.appconfig import AppConfig
-from typing import Callable
 
 reg_non_key = re.compile(r'[^a-zA-Z0-9_]+')
 
@@ -18,19 +20,17 @@ Expire_time_minute = 60
 
 
 def _get_redis_pool(**kwargs):
-    redis_url = AppConfig.get()['redis_url']
 
     def create_redis():
-        from redis import BlockingConnectionPool
-        redis_pool = BlockingConnectionPool.from_url(redis_url, **kwargs)
-        return redis_pool
+        redis_url = AppConfig.get()['redis_url']
+        return aioredis.ConnectionPool.from_url(redis_url, **kwargs)
 
     return Instance.getobj(f'redis', create_redis)
 
 
-def get_native_redis(decode_rsp=True, connect_timeout=10):
-    return StrictRedis(connection_pool=_get_redis_pool(decode_responses=decode_rsp),
-                       socket_connect_timeout=connect_timeout, socket_timeout=15)
+def get_native_redis(decode_rsp=False, connect_timeout=10):
+    return aioredis.Redis(connection_pool=_get_redis_pool(decode_responses=decode_rsp),
+                          socket_connect_timeout=connect_timeout, socket_timeout=15)
 
 
 def build_serializer(json_serializer=None, raise_error=True):
@@ -97,50 +97,39 @@ def build_deserializer(json_deserializer=None, raise_on_error=True):
 
 
 class RedisLock:
-    def __init__(self, redis: 'MyRedis', lock_name: str, acquire_timeout=3, lock_timeout=2, force=False):
-        self.myredis = redis
-        self.lock_name = lock_name
+    def __init__(self, redis: aioredis.Redis, name: str, acquire_timeout=3, lock_timeout=2, force=False):
+        self._redis = redis
+        self._key = f'lock:{name}'
         self.acquire_timeout = acquire_timeout
         self.lock_timeout = lock_timeout
         self.force = force
-        self.lock_val = None
+        self.lock_by = None
 
-    def has_lock(self):
-        return self.lock_val
-
-    def __enter__(self):
-        import uuid, time
+    async def __aenter__(self):
+        import uuid
         identifier = str(uuid.uuid4())
-        lockname = f'lock:{self.lock_name}'
-        end = time.time() + self.acquire_timeout
+        end = time.monotonic() + self.acquire_timeout
 
-        while time.time() < end:
+        while time.monotonic() < end:
             # 如果不存在这个锁则加锁并设置过期时间，避免死锁
-            if self.myredis.redis.set(lockname, identifier, ex=self.lock_timeout, nx=True):
-                self.lock_val = identifier
+            if await self._redis.set(self._key, identifier, ex=self.lock_timeout, nx=True):
+                self.lock_by = identifier
                 return self
-            time.sleep(0.01)
+            await asyncio.sleep(0.01)
 
-        if self.force and self.myredis.redis.set(lockname, identifier, ex=self.lock_timeout):
-            self.lock_val = identifier
+        if self.force and self._redis.set(self._key, identifier, ex=self.lock_timeout):
+            self.lock_by = identifier
             return self
 
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        ret_val = 0
-        if self.lock_val:
-            unlock_script = """
-                    if redis.call("get",KEYS[1]) == ARGV[1] then
-                        return redis.call("del",KEYS[1])
-                    else
-                        return 0
-                    end
-                    """
-            lockname = f'lock:{self.lock_name}'
-            unlock = self.myredis.redis.register_script(unlock_script)
-            ret_val = unlock(keys=[lockname], args=[self.lock_val])
-            self.lock_val = None
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if not self.lock_by:
+            return 0
+        if self.lock_by != await self._redis.get(self._key):
+            return 0
+        ret_val = await self._redis.delete(self._key)
+        self.lock_by = None
         return ret_val
 
 
@@ -149,18 +138,22 @@ def_deserializer = build_deserializer()
 
 
 class MyRedis:
+    '''
+    经过包装的Redis客户端。可自动序列化/反序列化数据。
+    如果在循环中长期使用，请在sleep前调用del释放连接到连接池
+    '''
     def __init__(self, serializer=None, deserializer=None, connect_timeout=10):
         self.redis = get_native_redis(connect_timeout=connect_timeout)
         self.serializer = serializer or def_serializer
         self.deserializer = deserializer or def_deserializer
 
-    def get_key(self, key: str, max_len=100):
+    async def get_key(self, key: str, max_len=100):
         if not key:
             return key
         if key == 'random':
             import uuid
             token = str(uuid.uuid4())
-            while self.redis.exists(token):
+            while await self.redis.exists(token):
                 token = str(uuid.uuid4())
             key = token
         safe_key = reg_non_key.sub('_', key)
@@ -168,7 +161,7 @@ class MyRedis:
             return None
         return safe_key[:max_len]
 
-    def set(self, key, val='1', expire_time=None):
+    async def set(self, key, val='1', expire_time=None):
         '''
         设置redis的键值，过期时间可选
         :param key:
@@ -176,42 +169,42 @@ class MyRedis:
         :param expire_time: 过期的秒数
         :return:
         '''
-        key = self.get_key(key)
+        key = await self.get_key(key)
         if not key:
             return False
-        self.redis.set(key, self.serializer(val), ex=expire_time)
+        await self.redis.set(key, self.serializer(val), ex=expire_time)
         return True
 
-    def get(self, key: str, default_val=None):
+    async def get(self, key: str, default_val=None):
         '''
         从redis获取某个值
         :param key:
         :param default_val: 当缓存为None时，默认返回值
         :return:
         '''
-        key = self.get_key(key)
+        key = await self.get_key(key)
         if not key:
             return default_val
-        val = self.redis.get(key)
+        val = await self.redis.get(key)
         decode_val = self.deserializer(val)
         if decode_val is None:
             return default_val
         return decode_val
 
-    def ttl(self, key: str):
-        key = self.get_key(key)
+    async def ttl(self, key: str):
+        key = await self.get_key(key)
         if not key:
             return -1
-        return self.redis.ttl(key)
+        return await self.redis.ttl(key)
 
-    def delete(self, *keys):
+    async def delete(self, *keys):
         if not keys:
             return 0
-        clean_keys = [self.get_key(k) for k in keys]
+        clean_keys = [await self.get_key(k) for k in keys]
         clean_keys = [k for k in clean_keys if k]
         if not clean_keys:
             return 0
-        return self.redis.delete(*clean_keys)
+        return await self.redis.delete(*clean_keys)
 
     def lock(self, lock_name, acquire_timeout=3, lock_timeout=2, force=False) -> RedisLock:
         '''
@@ -222,11 +215,22 @@ class MyRedis:
         :param force: 超时未获取到锁是否强制加锁
         :return:
         '''
-        return RedisLock(self, lock_name, acquire_timeout, lock_timeout, force)
+        return RedisLock(self.redis, lock_name, acquire_timeout, lock_timeout, force)
 
-    def subscribe(self, **kwargs):
-        p = self.redis.pubsub()
-        p.subscribe(**kwargs)
+    def pubsub(self) -> PubSub:
+        '''
+        返回一个redis连接，用于监听或取消监听某个消息
+        '''
+        return self.redis.pubsub()
+
+    async def publish(self, channel: str, msg) -> int:
+        return await self.redis.publish(channel, msg)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.redis.close()
 
 
 def get_redis(serializer=None, deserializer=None, connect_timeout=10) -> MyRedis:

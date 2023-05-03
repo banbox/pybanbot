@@ -7,9 +7,9 @@ from banbot.plugins.pairlist.base import *
 
 
 class OffsetFilter(PairList):
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(OffsetFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(OffsetFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         self.offset = handler_cfg.get('offset', 0)
         self.limit = handler_cfg.get('limit', 0)

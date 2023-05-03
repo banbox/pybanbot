@@ -7,6 +7,7 @@ import numpy as np
 from tabulate import tabulate
 from typing import *
 import pandas as pd
+from banbot.util.common import logger
 
 
 def _calc_winloss(df: pd.DataFrame):
@@ -178,22 +179,26 @@ def text_markets(market_map: Dict[str, Any], min_num: int = 10):
 
 
 def print_backtest(order_df: pd.DataFrame, result: dict):
-    table = text_day_profits(order_df)
-    if isinstance(table, str) and len(table) > 0:
-        print(' Day Profits '.center(len(table.splitlines()[0]), '='))
-        print(table)
-    table = text_profit_groups(order_df)
-    if isinstance(table, str) and len(table) > 0:
-        print(' Profit Groups '.center(len(table.splitlines()[0]), '='))
-        print(table)
-    table = text_order_tags(order_df, 'enter')
-    if isinstance(table, str) and len(table) > 0:
-        print(' Enter Tag '.center(len(table.splitlines()[0]), '='))
-        print(table)
-    table = text_order_tags(order_df, 'exit')
-    if isinstance(table, str) and len(table) > 0:
-        print(' Exit Tag '.center(len(table.splitlines()[0]), '='))
-        print(table)
+    print('')
+    if len(order_df):
+        table = text_day_profits(order_df)
+        if isinstance(table, str) and len(table) > 0:
+            print(' Day Profits '.center(len(table.splitlines()[0]), '='))
+            print(table)
+        table = text_profit_groups(order_df)
+        if isinstance(table, str) and len(table) > 0:
+            print(' Profit Groups '.center(len(table.splitlines()[0]), '='))
+            print(table)
+        table = text_order_tags(order_df, 'enter')
+        if isinstance(table, str) and len(table) > 0:
+            print(' Enter Tag '.center(len(table.splitlines()[0]), '='))
+            print(table)
+        table = text_order_tags(order_df, 'exit')
+        if isinstance(table, str) and len(table) > 0:
+            print(' Exit Tag '.center(len(table.splitlines()[0]), '='))
+            print(table)
+    else:
+        logger.error('NO Order Found !')
     table = text_bt_metrics(result)
     if isinstance(table, str) and len(table) > 0:
         print(' SUMMARY METRICS '.center(len(table.splitlines()[0]), '='))

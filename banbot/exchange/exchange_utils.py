@@ -3,7 +3,6 @@
 # File  : exchange_utils.py
 # Author: anyongjin
 # Date  : 2023/3/25
-import math
 import ccxt
 from typing import *
 from banbot.util import btime
@@ -36,73 +35,6 @@ def timeframe_to_seconds(timeframe: str) -> int:
     of seconds for one timeframe interval.
     """
     return ccxt.Exchange.parse_timeframe(timeframe)
-
-
-def get_check_interval(timeframe_secs: int) -> float:
-    '''
-    根据监听的交易对和时间帧。计算最小检查间隔。
-    <60s的通过WebSocket获取数据，检查更新间隔可以比较小。
-    1m及以上的通过API的秒级接口获取数据，3s更新一次
-    :param timeframe_secs:
-    :return:
-    '''
-    if timeframe_secs <= 3:
-        check_interval = 0.2
-    elif timeframe_secs <= 10:
-        check_interval = 0.5
-    elif timeframe_secs < 60:
-        check_interval = 1
-    else:
-        return 3
-    return check_interval
-
-
-def trade2ohlc(trade: dict) -> Tuple[int, float, float, float, float, float, int]:
-    price = trade['price']
-    return trade['timestamp'], price, price, price, price, trade['amount'], 1
-
-
-def build_ohlcvc(details, tf_secs: int, prefire: float = 0., since=None, ohlcvs=None):
-    '''
-    从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
-    :param details: 可以是交易列表或子OHLC列表。[dict] or [[t,o,h,l,c,v,cnt]]
-    :param tf_secs: 指定要构建的时间粒度，单位：秒
-    :param prefire: 是否提前触发构建完成；用于在特定信号时早于其他交易者提早发出信号
-    :param since:
-    :param ohlcvs: 已有的待更新数组
-    :return:
-    '''
-    ms = tf_secs * 1000
-    off_ms = round(ms * prefire)
-    ohlcvs = ohlcvs or []
-    (timestamp, copen, high, low, close, volume, count) = (0, 1, 2, 3, 4, 5, 6)
-    raw_ts = []
-    for detail in details:
-        row = list(trade2ohlc(detail)) if isinstance(detail, dict) else list(detail)
-        # 按给定粒度重新格式化时间戳
-        raw_ts.append(row[timestamp])
-        row[timestamp] = int(math.floor((row[timestamp] + off_ms) / ms) * ms)
-        if since and row[timestamp] < since:
-            continue
-        if not ohlcvs or (row[timestamp] >= ohlcvs[-1][timestamp] + ms):
-            # moved to a new timeframe -> create a new candle from opening trade
-            ohlcvs.append(row)
-        else:
-            prow = ohlcvs[-1]
-            # still processing the same timeframe -> update opening trade
-            prow[high] = max(prow[high], row[high])
-            prow[low] = min(prow[low], row[low])
-            prow[close] = row[close]
-            prow[volume] += row[volume]
-            if len(row) > count:
-                prow[count] += row[count]
-    last_finish = False
-    if len(raw_ts) >= 2 and not isinstance(details[0], dict):
-        # 至少有2个，且不是交易列表，判断最后一个bar是否结束
-        ts_interval = raw_ts[-1] - raw_ts[-2]
-        finish_ts = int(math.floor((raw_ts[-1] + ts_interval + off_ms) / ms) * ms)
-        last_finish = finish_ts > ohlcvs[-1][0]
-    return ohlcvs, last_finish
 
 
 def get_back_ts(tf_secs: int, back_period: int, in_ms: bool = True) -> Tuple[int, int]:

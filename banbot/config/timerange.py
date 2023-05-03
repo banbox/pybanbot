@@ -21,11 +21,7 @@ class TimeRange:
     if *type is None, don't use corresponding startvalue.
     """
 
-    def __init__(self, starttype: Optional[str] = None, stoptype: Optional[str] = None,
-                 startts: int = 0, stopts: int = 0):
-
-        self.starttype: Optional[str] = starttype
-        self.stoptype: Optional[str] = stoptype
+    def __init__(self, startts: int = 0, stopts: int = 0):
         self.startts: int = startts
         self.stopts: int = stopts
 
@@ -80,36 +76,7 @@ class TimeRange:
 
     def __eq__(self, other):
         """Override the default Equals behavior"""
-        return (self.starttype == other.starttype and self.stoptype == other.stoptype
-                and self.startts == other.startts and self.stopts == other.stopts)
-
-    def subtract_start(self, seconds: int) -> None:
-        """
-        Subtracts <seconds> from startts if startts is set.
-        :param seconds: Seconds to subtract from starttime
-        :return: None (Modifies the object in place)
-        """
-        if self.startts:
-            self.startts = self.startts - seconds
-
-    def adjust_start_if_necessary(self, timeframe_secs: int, startup_candles: int,
-                                  min_date: datetime) -> None:
-        """
-        Adjust startts by <startup_candles> candles.
-        Applies only if no startup-candles have been available.
-        :param timeframe_secs: Timeframe in seconds e.g. `timeframe_to_seconds('5m')`
-        :param startup_candles: Number of candles to move start-date forward
-        :param min_date: Minimum data date loaded. Key kriterium to decide if start-time
-                         has to be moved
-        :return: None (Modifies the object in place)
-        """
-        if (not self.starttype or (startup_candles
-                                   and min_date.timestamp() >= self.startts)):
-            # If no startts was defined, or backtest-data starts at the defined backtest-date
-            logger.warning("Moving start-date by %s candles to account for startup time.",
-                           startup_candles)
-            self.startts = int(min_date.timestamp() + timeframe_secs * startup_candles)
-            self.starttype = 'date'
+        return self.startts == other.startts and self.stopts == other.stopts
 
     @staticmethod
     def parse_timerange(text: Optional[str]) -> 'TimeRange':
@@ -119,7 +86,7 @@ class TimeRange:
         :return: Start and End range period
         """
         if text is None:
-            return TimeRange(None, None, 0, 0)
+            return TimeRange(0, 0)
         syntax = [(r'^-(\d{8})$', (None, 'date')),
                   (r'^(\d{8})-$', ('date', None)),
                   (r'^(\d{8})-(\d{8})$', ('date', 'date')),
@@ -158,5 +125,5 @@ class TimeRange:
                 if start > stop > 0:
                     raise ValueError(
                         f'Start date is after stop date for timerange "{text}"')
-                return TimeRange(stype[0], stype[1], start, stop)
+                return TimeRange(start, stop)
         raise ValueError(f'Incorrect syntax for timerange "{text}"')

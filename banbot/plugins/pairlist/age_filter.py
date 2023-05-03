@@ -8,9 +8,9 @@ from banbot.util.cache import *
 
 
 class AgeFilter(PairList):
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(AgeFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(AgeFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         # Checked symbols cache (dictionary of ticker symbol => timestamp)
         self._checked: Dict[str, int] = {}
@@ -39,7 +39,7 @@ class AgeFilter(PairList):
         since_days = (self.max_days if self.max_days else self.min_days) + 1
         since = int(btime.time() - since_days * 86_400)
         for pair in new_pairs:
-            candles = await self.data_mgr.fetch_ohlcv(pair, '1d', since)
+            candles = await auto_fetch_ohlcv(self.exchange.name, pair, '1d', since)
             knum = len(candles)
             cur_ms = btime.time() * 1000
             if knum >= self.min_days and (not self.max_days or knum <= self.max_days):

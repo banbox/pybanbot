@@ -21,8 +21,8 @@ class LiveTrader(Trader):
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
         self.exchange = CryptoExchange(config)
-        self.data_mgr = LiveDataProvider(config, self.exchange, self.on_data_feed)
-        self.pair_mgr = PairManager(config, self.exchange, self.data_mgr)
+        self.data_mgr = LiveDataProvider(config, self.on_data_feed)
+        self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.rpc = RPCManager(self)
@@ -45,7 +45,7 @@ class LiveTrader(Trader):
             profit=od.profit,
             profit_rate=od.profit_rate
         )
-        await self.rpc.send_msg(msg)
+        asyncio.create_task(self.rpc.send_msg(msg))
 
     async def init(self):
         await self.exchange.load_markets()
@@ -73,8 +73,8 @@ class LiveTrader(Trader):
         ])
 
     async def _start_tasks(self):
-        # 数据循环
-        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main(self._warmup_num)))
+        # 监听实时数据推送
+        self._run_tasks.append(asyncio.create_task(LiveDataProvider.watch_ohlcvs()))
         if btime.run_mode == RunMode.LIVE:
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([

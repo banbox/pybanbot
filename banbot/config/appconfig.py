@@ -82,13 +82,13 @@ class AppConfig(metaclass=Singleton):
     在应用启动时即初始化完成。
     后续可通过`AppConfig.get()`获取使用
     '''
-    _instance: Optional['AppConfig'] = None
+    obj: Optional['AppConfig'] = None
 
     def __init__(self, args: Dict[str, Any], runmode: Optional[RunMode] = None):
         self.args = args
         self.config: Optional[Config] = None
         self.runmode = runmode
-        AppConfig._instance = self
+        AppConfig.obj = self
 
     def get_config(self) -> Config:
         """
@@ -105,15 +105,25 @@ class AppConfig(metaclass=Singleton):
         Extract information for sys.argv and load the bot configuration
         :return: Configuration dictionary
         """
-        # Load all configs
-        config: Config = load_from_files(self.args.get("config", []))
+        return load_from_files(self.args.get("config", []))
 
-        return config
+    @property
+    def exchange_cfg(self):
+        return AppConfig.get_exchange(self.config)
+
+    @classmethod
+    def get_exchange(cls, config: Config):
+        exchange_all = config['exchange']
+        exg_name = exchange_all['name']
+        result = exchange_all[exg_name]
+        result['name'] = exg_name
+        result.update(exchange_all.get('common', dict()))
+        return result
 
     @classmethod
     def get(cls) -> Config:
-        assert cls._instance, '`AppConfig` is not initialized yet!'
-        return cls._instance.get_config()
+        assert cls.obj, '`AppConfig` is not initialized yet!'
+        return cls.obj.get_config()
 
     @classmethod
     def init_by_args(cls, args: dict) -> Config:
@@ -125,8 +135,12 @@ class AppConfig(metaclass=Singleton):
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
         if not args.get('no_db'):
             # 测试数据库连接
-            from banbot.data.models.base import db_conn, sa
+            from banbot.data.models.base import init_db_session, db_conn, sa
+            init_db_session()
             with db_conn() as conn:
-                conn.execute(sa.text('select 1'))
-                logger.info('Connect DataBase Success')
+                db_tz = conn.execute(sa.text('show timezone;')).scalar()
+                if str(db_tz).lower() != 'utc':
+                    raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
+                                       'and exec `select pg_reload_conf();` to apply; then re-download all data')
+                logger.info(f'Connect DataBase Success')
         return config

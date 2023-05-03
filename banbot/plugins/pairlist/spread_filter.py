@@ -14,9 +14,9 @@ class SpreadFilter(PairList):
     '''
     need_tickers = True
 
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(SpreadFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(SpreadFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         self.max_ratio = handler_cfg.get('max_ratio', 0.005)
         self.enable = self.enable and self.max_ratio > 0

@@ -15,9 +15,9 @@ class VolumePairList(PairList):
     '''
     交易量倒排产品列表
     '''
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(VolumePairList, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(VolumePairList, self).__init__(manager, exchange, config, handler_cfg)
 
         self.limit = handler_cfg.get('limit', sys.maxsize)
         self.sort_key: str = handler_cfg.get('sort_key', 'quoteVolume')
@@ -67,8 +67,8 @@ class VolumePairList(PairList):
             tf_secs = self.tf_mins * 60
             since_ts, to_ts = get_back_ts(tf_secs, self.backperiod, in_ms=False)
 
-            arg_list = [(p, self.backtf, since_ts) for p in pairlist]
-            res_list = parallel_jobs(self.data_mgr.fetch_ohlcv, arg_list)
+            arg_list = [(self.exchange.name, p, self.backtf, since_ts) for p in pairlist]
+            res_list = parallel_jobs(auto_fetch_ohlcv, arg_list)
             for job in res_list:
                 item = await job
                 data, args, kwargs = item['data'], item['args'], item['kwargs']

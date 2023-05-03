@@ -10,9 +10,9 @@ from banbot.bar_driven.tainds import hcol, lcol
 
 class RangeStabilityFilter(PairList):
 
-    def __init__(self, manager, exchange: CryptoExchange, data_mgr: DataProvider,
+    def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
-        super(RangeStabilityFilter, self).__init__(manager, exchange, data_mgr, config, handler_cfg)
+        super(RangeStabilityFilter, self).__init__(manager, exchange, config, handler_cfg)
 
         self.backdays = handler_cfg.get('back_days', 10)
         self.min_roc = handler_cfg.get('min_chg_rate', 0.01)
@@ -30,8 +30,8 @@ class RangeStabilityFilter(PairList):
             return pairlist
         new_pairs = [pair for pair in pairlist if pair not in self.pair_cache]
         since = int(btime.time() - self.backdays * 86_400)
-        args_list = [(p, '1d', since) for p in new_pairs]
-        pair_res = parallel_jobs(self.data_mgr.fetch_ohlcv, args_list)
+        args_list = [(self.exchange.name, p, '1d', since) for p in new_pairs]
+        pair_res = parallel_jobs(auto_fetch_ohlcv, args_list)
         for job in pair_res:
             job_res = await job
             candles, p = job_res['data'], job_res['args'][0]

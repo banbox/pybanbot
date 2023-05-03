@@ -10,11 +10,11 @@ from banbot.cmds.cli_options import *
 
 ARGS_COMMON = ["config", "logfile", "data_dir", "no_db"]
 
-ARGS_TRADE = ["dry_run", "dry_run_wallet", "fee"]
+ARGS_TRADE = ["fee"]
 
 ARGS_WEBSERVER: List[str] = []
 
-ARGS_BACKTEST = ["timerange", "stake_amount", "fee", "pairs"]
+ARGS_BACKTEST = ["timerange", "stake_amount", "fee", "pairs", "cprofile"]
 
 ARGS_DOWNDATA = ["timerange", "pairs", "timeframes", "medium"]
 

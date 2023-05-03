@@ -33,16 +33,6 @@ AVAILABLE_CLI_OPTIONS = {
         help='Path to directory with historical backtesting data.',
         metavar='PATH',
     ),
-    "dry_run": Arg(
-        '--dry-run',
-        help='Enforce dry-run for trading (removes Exchange secrets and simulates trades).',
-        action='store_true',
-    ),
-    "dry_run_wallet": Arg(
-        '--dry-run-wallet', '--starting-balance',
-        help='Starting balance, used for backtesting / hyperopt and dry-runs.',
-        type=float,
-    ),
     "fee": Arg(
         '--fee',
         help='Specify fee ratio. Will be applied twice (on trade entry and exit).',
@@ -69,6 +59,7 @@ AVAILABLE_CLI_OPTIONS = {
         help='Limit command to these pairs. Pairs are space-separated.',
         nargs='+',
     ),
+    "cprofile": Arg('--cprofile', help='perfoamance profile', action='store_true', default=False),
     "action": Arg('--action', help='action name'),
     "tables": Arg('--tables', help='db tables, comma-separated.', nargs='+'),
     "force": Arg('--force', help='force action', action='store_true', default=False),
