@@ -237,13 +237,15 @@ order by time'''
         conn.close()
 
     @classmethod
-    def _find_sid_hole(cls, conn: sa.Connection, sid: int, since: float):
+    def _find_sid_hole(cls, conn: sa.Connection, sid: int, since: float, until: float = 0., as_ts=True):
         batch_size, true_intv = 1000, cls.interval / 1000
         last_date = None
         res_holes = []
         while True:
-            hole_sql = f"SELECT time FROM kline where sid={sid} and time >= to_timestamp({since}) " \
-                       f"ORDER BY time limit {batch_size};"
+            hole_sql = f"SELECT time FROM kline where sid={sid} and time >= to_timestamp({since}) "
+            if until:
+                hole_sql += f'and time < to_timestamp({until}) '
+            hole_sql += f"ORDER BY time limit {batch_size};"
             rows = conn.execute(sa.text(hole_sql)).fetchall()
             if not len(rows):
                 break
@@ -254,9 +256,13 @@ order by time'''
             for row in rows[off_idx:]:
                 cur_intv = (row[0] - last_date).total_seconds()
                 if cur_intv > true_intv:
-                    hole_start = btime.to_utcstamp(last_date) + 0.1
-                    hold_end = btime.to_utcstamp(row[0]) - 0.1
+                    if as_ts:
+                        hole_start, hold_end = btime.to_utcstamp(last_date), btime.to_utcstamp(row[0])
+                    else:
+                        hole_start, hold_end = last_date, row[0]
                     res_holes.append((hole_start, hold_end))
+                elif cur_intv < true_intv:
+                    logger.warning(f'invalid kline interval: {cur_intv:.3f}, sid: {sid}')
                 last_date = row[0]
             since = btime.to_utcstamp(last_date) + 0.1
         return res_holes
@@ -277,12 +283,24 @@ order by time'''
                 hole_list = cls._find_sid_hole(conn, sid, start_ts)
                 if not hole_list:
                     continue
+                old_holes = sess.query(KHole).filter(KHole.sid == sid).all()
+                old_holes = [(btime.to_utcstamp(row.start), btime.to_utcstamp(row.stop)) for row in old_holes]
+                hole_list = [h for h in hole_list if h not in old_holes]
+                if not hole_list:
+                    continue
                 stf: SymbolTF = sess.query(SymbolTF).get(sid)
                 exchange = get_exchange(stf.exchange)
                 for hole in hole_list:
-                    start_ms, end_ms = int(hole[0] * 1000), int(hole[1] * 1000)
+                    start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
                     logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
                     await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
+                    real_holes = cls._find_sid_hole(conn, sid, hole[0], hole[1] + 0.1, as_ts=False)
+                    if not real_holes:
+                        continue
+                    logger.warning(f'REAL Holes: {stf.symbol} {real_holes}')
+                    for rhole in real_holes:
+                        sess.add(KHole(sid=sid, start=rhole[0], stop=rhole[1]))
+                    sess.commit()
 
 
 class KHole(BaseDbModel):
