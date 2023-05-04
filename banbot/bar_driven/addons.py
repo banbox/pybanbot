@@ -3,7 +3,6 @@
 # File  : addons.py
 # Author: anyongjin
 # Date  : 2023/3/17
-import numpy as np
 from banbot.compute.patterns import *
 
 

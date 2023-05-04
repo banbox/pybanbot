@@ -5,7 +5,7 @@
 # Date  : 2023/3/17
 from __future__ import annotations
 
-from banbot.strategy.base import *
+from banbot.bar_driven.common import append_new_bar
 from banbot.storage.od_manager import *
 from banbot.data.data_provider import *
 from banbot.strategy.resolver import StrategyResolver
@@ -53,7 +53,7 @@ class Trader:
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
-            pair_arr = append_new_bar(row)
+            pair_arr = append_new_bar(row, tf_secs)
             self.order_mgr.update_by_bar(pair_arr)
             start_time = time.monotonic()
             ext_tags: Dict[str, str] = dict()

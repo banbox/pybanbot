@@ -201,9 +201,10 @@ class DBDataFeeder(HistDataFeeder):
                 self.total_len = self.row_id
                 self._next_arr = []
                 return
-            delay_num = int(self._cache_arr[0][0] - self._offset_ts) / self.states[0].tf_secs / 1000
+            first_ts = self._cache_arr[0][0]
+            delay_num = int(first_ts - self._offset_ts) // self.states[0].tf_secs // 1000
             if delay_num > 1:
-                logger.error(f'candles start from {btime.to_datestr(self._cache_arr[0][0])}, lack: {delay_num}')
+                logger.error(f'candles start from {btime.to_datestr(first_ts)}, lack: {delay_num}')
             self._offset_ts = self._cache_arr[-1][0] + 1
         self._next_arr = [self._cache_arr[self._row_id]]
         self._row_id += 1
