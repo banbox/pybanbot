@@ -6,7 +6,7 @@
 import numpy as np
 
 from banbot.strategy.base import *
-from banbot.bar_driven.addons import *
+from banbot.compute.addons import *
 from typing import Tuple, Optional
 
 

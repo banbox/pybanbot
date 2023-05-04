@@ -11,7 +11,7 @@ import uuid
 import pandas as pd
 import numpy as np
 from typing import List, Dict
-from banbot.bar_driven.tainds import *
+from banbot.compute.tainds import *
 '''
 K线形态参考：
 https://github.com/SpiralDevelopment/candlestick-patterns/tree/master/candlestick/patterns

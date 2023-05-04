@@ -6,7 +6,7 @@
 
 from banbot.util import btime
 from datetime import datetime
-from banbot.bar_driven.tainds import *
+from banbot.compute.tainds import *
 from banbot.util.misc import del_dict_prefix, add_dict_prefix
 from banbot.util.num_utils import to_pytypes
 from typing import *
@@ -69,6 +69,7 @@ class Order:
     同一交易所下，symbol+order_id可唯一确定一个订单。
     '''
     def __init__(self, **kwargs):
+        from asyncio import Lock
         self.symbol: str = kwargs['symbol']
         od_type = kwargs.get('order_type')
         price = kwargs.get('price')

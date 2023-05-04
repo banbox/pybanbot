@@ -4,9 +4,9 @@
 # Author: anyongjin
 # Date  : 2023/4/19
 from cachetools import TTLCache
-from banbot.plugins.pairlist.base import *
+from banbot.symbols.pairlist.base import *
 from banbot.util.misc import parallel_jobs
-from banbot.bar_driven.tainds import hcol, lcol, ccol, vcol
+from banbot.compute.tainds import hcol, lcol, ccol, vcol
 
 SORT_VALUES = ['quoteVolume']
 

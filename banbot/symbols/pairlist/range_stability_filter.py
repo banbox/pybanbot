@@ -4,8 +4,8 @@
 # Author: anyongjin
 # Date  : 2023/4/19
 from cachetools import TTLCache
-from banbot.plugins.pairlist.base import *
-from banbot.bar_driven.tainds import hcol, lcol
+from banbot.symbols.pairlist.base import *
+from banbot.compute.tainds import hcol, lcol
 
 
 class RangeStabilityFilter(PairList):

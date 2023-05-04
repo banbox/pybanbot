@@ -5,7 +5,7 @@
 # Date  : 2023/4/12
 import numpy as np
 
-from banbot.bar_driven.tainds import *
+from banbot.compute.tainds import *
 import talib as ta
 from test.common import *
 

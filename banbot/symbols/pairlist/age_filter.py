@@ -3,7 +3,7 @@
 # File  : age_filter.py
 # Author: anyongjin
 # Date  : 2023/4/17
-from banbot.plugins.pairlist.base import *
+from banbot.symbols.pairlist.base import *
 from banbot.util.cache import *
 
 

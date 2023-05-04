@@ -3,8 +3,8 @@
 # File  : scripts.py
 # Author: anyongjin
 # Date  : 2023/4/24
-from banbot.data.models import *
-from banbot.data.models.base import BaseDbModel, sa, get_db
+from banbot.storage import *
+from banbot.storage.base import BaseDbModel, sa, get_db
 from banbot.util.common import logger
 from typing import Any, Dict, List
 

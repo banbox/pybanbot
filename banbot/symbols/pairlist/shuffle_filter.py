@@ -5,7 +5,7 @@
 # Date  : 2023/4/19
 import random
 
-from banbot.plugins.pairlist.base import *
+from banbot.symbols.pairlist.base import *
 
 
 class ShuffleFilter(PairList):

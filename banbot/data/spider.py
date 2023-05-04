@@ -41,7 +41,7 @@ async def down_pairs_by_config(config: Config):
     根据配置文件和解析的命令行参数，下载交易对数据（到数据库或文件）
     此方法由命令行调用。
     '''
-    from banbot.data.models.klines import KLine
+    from banbot.storage.klines import KLine
     await KLine.fill_holes()
     pairs = config['pairs']
     timerange = config['timerange']
@@ -103,7 +103,7 @@ class LiveMiner(Watcher):
             await asyncio.sleep(self.check_intv)
 
     def _on_bar_finish(self, pair: str, timeframe: str, bar_arr: List[Tuple]):
-        from banbot.data.models import KLine
+        from banbot.storage import KLine
         KLine.insert(self.exchange.name, pair, bar_arr)
 
     async def _try_update(self):

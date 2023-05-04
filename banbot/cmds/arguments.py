@@ -80,7 +80,7 @@ class Arguments:
 
         # DbCmd
         db_cmd = subparsers.add_parser('dbcmd', help='database cmd.', parents=[_common_parser])
-        from banbot.data.models.scripts import exec_dbcmd
+        from banbot.storage.scripts import exec_dbcmd
         db_cmd.set_defaults(func=exec_dbcmd)
         self._build_args(optionlist=ARGS_DBCMD, parser=db_cmd)
 

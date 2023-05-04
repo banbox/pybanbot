@@ -13,7 +13,7 @@ from banbot.storage.orders import *
 from banbot.util.common import logger, SingletonArg
 from banbot.main.wallets import CryptoWallet, WalletsLocal
 from banbot.strategy.base import BaseStrategy
-from banbot.data.data_provider import *
+from banbot.data.provider import *
 from banbot.util.misc import *
 
 

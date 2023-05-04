@@ -3,7 +3,7 @@
 # File  : static_pairlist.py
 # Author: anyongjin
 # Date  : 2023/4/19
-from banbot.plugins.pairlist.base import *
+from banbot.symbols.pairlist.base import *
 
 
 class StaticPairList(PairList):

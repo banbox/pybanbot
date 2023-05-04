@@ -3,8 +3,8 @@
 # File  : pair_manager.py
 # Author: anyongjin
 # Date  : 2023/4/17
-from banbot.plugins.pair_resolver import *
-from banbot.plugins.pairlist.helper import *
+from banbot.symbols.pair_resolver import *
+from banbot.symbols.pairlist.helper import *
 from banbot.exchange.crypto_exchange import CryptoExchange
 from cachetools import TTLCache, cached
 

@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/2
 
-from banbot.bar_driven.inds import *
+from banbot.compute.tainds import *
 import pandas as pd
 import os
 
@@ -38,7 +38,7 @@ def test_inds():
 
 def test_mean_rev():
     global arr
-    from banbot.bar_driven.mean_rev import MeanRev
+    from banbot.strategy.mean_rev import MeanRev
     tipper = MeanRev({debug_idx})
     result, ptn = tipper.on_bar(arr[:1])
     tipper.on_entry(result)

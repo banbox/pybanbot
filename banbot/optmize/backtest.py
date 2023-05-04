@@ -6,8 +6,8 @@
 import os.path
 
 from banbot.main.itrader import *
-from banbot.data.data_provider import *
-from banbot.plugins.pair_manager import PairManager
+from banbot.data.provider import *
+from banbot.symbols.pair_manager import PairManager
 
 
 class BackTest(Trader):

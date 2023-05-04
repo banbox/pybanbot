@@ -3,8 +3,8 @@
 # File  : precision_filter.py
 # Author: anyongjin
 # Date  : 2023/4/18
-from banbot.plugins.pairlist.base import *
-from banbot.bar_driven.tainds import ccol
+from banbot.symbols.pairlist.base import *
+from banbot.compute.tainds import ccol
 
 
 class PriceFilter(PairList):

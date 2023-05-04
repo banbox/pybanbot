@@ -250,7 +250,7 @@ async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int, check_
     '''
     timeframe = '1m'
     exg_name = exchange.name
-    from banbot.data.models import KLine
+    from banbot.storage import KLine
     if check_exist:
         old_start, old_end = KLine.query_range(exg_name, pair)
         if old_start and old_end > old_start:
@@ -317,7 +317,7 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
         tf_msecs = timeframe_to_seconds(timeframe) * 1000
         start_ms = end_ms - tf_msecs * limit
     await download_to_db(exchange, pair, start_ms, end_ms)
-    from banbot.data.models import KLine
+    from banbot.storage import KLine
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
 

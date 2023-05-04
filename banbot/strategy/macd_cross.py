@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/27
 from banbot.strategy.base import *
-from banbot.bar_driven.addons import *
+from banbot.compute.addons import *
 
 
 class MACDCross(BaseStrategy):

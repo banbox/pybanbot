@@ -5,7 +5,7 @@
 # Date  : 2023/4/24
 import six
 
-from banbot.data.models.base import *
+from banbot.storage.base import *
 from typing import Callable, Tuple, ClassVar, Dict
 from banbot.exchange.exchange_utils import timeframe_to_seconds
 from banbot.util import btime
@@ -95,7 +95,7 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
     def _get_sid(cls, exg_name: str, symbol: Union[str, int]):
         sid = symbol
         if isinstance(symbol, six.string_types):
-            from banbot.data.models.symbols import SymbolTF
+            from banbot.storage.symbols import SymbolTF
             sid = SymbolTF.get_id(exg_name, symbol)
         return sid
 
@@ -270,7 +270,7 @@ order by time'''
     @classmethod
     async def fill_holes(cls):
         from banbot.data.tools import download_to_db
-        from banbot.data.models.symbols import SymbolTF
+        from banbot.storage.symbols import SymbolTF
         from banbot.exchange.crypto_exchange import get_exchange
         logger.info('find and fill holes for kline...')
         with db_conn() as conn:

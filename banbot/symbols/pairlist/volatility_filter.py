@@ -7,8 +7,8 @@ import sys
 
 import numpy as np
 from cachetools import TTLCache
-from banbot.plugins.pairlist.base import *
-from banbot.bar_driven.tainds import ccol
+from banbot.symbols.pairlist.base import *
+from banbot.compute.tainds import ccol
 from banbot.util.misc import parallel_jobs
 
 

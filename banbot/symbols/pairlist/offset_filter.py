@@ -3,7 +3,7 @@
 # File  : offset_filter.py
 # Author: anyongjin
 # Date  : 2023/4/18
-from banbot.plugins.pairlist.base import *
+from banbot.symbols.pairlist.base import *
 
 
 class OffsetFilter(PairList):

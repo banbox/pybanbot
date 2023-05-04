@@ -1,14 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AnalysisUIOptions">
+    <option name="GROUP_BY_SEVERITY" value="true" />
+    <option name="FILTER_RESOLVED_ITEMS" value="false" />
+  </component>
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="记录K线漏洞到KHole，避免重复下载">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="策略端发现漏数据输出遗漏数量">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/addons.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/bar_driven/addons.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/addons.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/addons.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/common.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/old_big_trend_up.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/old_big_trend_up.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/readme.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/bar_driven/tainds.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/cmds/arguments.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/arguments.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/patterns.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/patterns.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/ts_tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/config/appconfig.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/data_provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/feeder.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/feeder.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/scripts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/models/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/exchange/bnb_ws.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/exchange/bnbscan.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/exchange/ws_base.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/live_trader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/live_trader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/optmize/backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pair_resolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_resolver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/age_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/age_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/helper.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/offset_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/offset_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/price_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/producer_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/producer_pairlist.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/range_stability_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/range_stability_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/shuffle_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/shuffle_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/spread_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/spread_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/static_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/static_pairlist.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/volatility_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volatility_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/plugins/pairlist/volume_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volume_pairlist.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/tainds/test_rsi.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/tainds/test_rsi.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/test_bar_drive_inds.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_bar_drive_inds.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -44,6 +93,12 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="NamedScopeManager">
+    <scope name="banbot" pattern="file[banbot]:*/" />
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
   <component name="ProjectId" id="2Oo4j26f0fDQvMtt7YDgi4ybMYj" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true">
     <ConfirmationsSetting value="1" id="Add" />
@@ -52,23 +107,27 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/trade/ban_data&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;build.tools&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "last_opened_file_path": "E:/trade/ban_data",
+    "nodejs_package_manager_path": "npm",
+    "run.code.analysis.last.selected.profile": "ppython",
+    "settings.editor.selected.configurable": "build.tools",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="E:\trade\banbot\banbot\compute" />
+      <recent name="E:\trade\banbot\banbot\storage" />
+      <recent name="E:\trade\banbot\banbot\main" />
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.ban_down">
+  <component name="RunManager" selected="Python.ban_backtest">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -190,7 +249,7 @@
       <workItem from="1683001405955" duration="676000" />
       <workItem from="1683002963114" duration="27570000" />
       <workItem from="1683084032013" duration="31317000" />
-      <workItem from="1683167323608" duration="3363000" />
+      <workItem from="1683167323608" duration="6935000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -241,7 +300,14 @@
       <option name="project" value="LOCAL" />
       <updated>1683169658784</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="策略端发现漏数据输出遗漏数量">
+      <created>1683171203660</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1683171203660</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -266,7 +332,8 @@
     <MESSAGE value="支持K线数据存储数据库，回测实盘时从数据库读取&#10;加载交易对时自动计算预热数据时间范围。&#10;机器人启动时检测数据库时区为UTC" />
     <MESSAGE value="支持K线数据漏洞检测和自动填充" />
     <MESSAGE value="记录K线漏洞到KHole，避免重复下载" />
-    <option name="LAST_COMMIT_MESSAGE" value="记录K线漏洞到KHole，避免重复下载" />
+    <MESSAGE value="策略端发现漏数据输出遗漏数量" />
+    <option name="LAST_COMMIT_MESSAGE" value="策略端发现漏数据输出遗漏数量" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -284,6 +351,6 @@
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683169410468" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1683169552152" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1683115195665" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1683170718178" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

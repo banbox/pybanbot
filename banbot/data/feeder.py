@@ -177,7 +177,7 @@ class DBDataFeeder(HistDataFeeder):
         self._set_next()
 
     def _calc_total(self):
-        from banbot.data.models import KLine
+        from banbot.storage import KLine
         start_ts, stop_ts = KLine.query_range(self.exg_name, self.pair)
         if start_ts and stop_ts:
             vstart = max(start_ts, self.timerange.startts * 1000)
@@ -192,7 +192,7 @@ class DBDataFeeder(HistDataFeeder):
             if self.row_id >= self.total_len:
                 self._next_arr = []
                 return
-            from banbot.data.models import KLine
+            from banbot.storage import KLine
             end = self.timerange.stopts * 1000
             min_tf = self.states[0].timeframe
             self._cache_arr = KLine.query(self.exg_name, self.pair, min_tf, self._offset_ts, end, self._batch_size)
@@ -211,7 +211,7 @@ class DBDataFeeder(HistDataFeeder):
         self.row_id += 1
 
     def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
-        from banbot.data.models import KLine
+        from banbot.storage import KLine
         end_ms = int(btime.time() * 1000) + 1
         start_ms = end_ms - warm_secs
         max_end_ms = 0
