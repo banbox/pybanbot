@@ -34,7 +34,7 @@ class DataFeeder(Watcher):
         if not timeframes:
             return
         # 检查是否有效并添加到states
-        tf_pairs = [(tf, timeframe_to_seconds(tf)) for tf in timeframes]
+        tf_pairs = [(tf, tf_to_secs(tf)) for tf in timeframes]
         tf_pairs = sorted(tf_pairs, key=lambda x: x[1])
         new_states = [PairTFCache(tf, tf_sec) for tf, tf_sec in tf_pairs]
         min_tf = new_states[0]
@@ -154,7 +154,7 @@ class FileDataFeeder(HistDataFeeder):
         if not ohlcv_arr:
             return
         for tf in timeframes:
-            tf_secs = timeframe_to_seconds(tf)
+            tf_secs = tf_to_secs(tf)
             if tf_secs > self.fetch_tfsecs:
                 ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, tf_secs)
             for row in ohlcv_arr:
@@ -216,7 +216,7 @@ class DBDataFeeder(HistDataFeeder):
         start_ms = end_ms - warm_secs
         max_end_ms = 0
         for tf in timeframes:
-            tf_secs = timeframe_to_seconds(tf)
+            tf_secs = tf_to_secs(tf)
             ohlcv_arr = KLine.query(self.exg_name, self.pair, tf, start_ms, end_ms, 90000)
             if not ohlcv_arr:
                 continue

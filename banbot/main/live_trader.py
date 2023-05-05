@@ -3,7 +3,6 @@
 # File  : whack_mole.py
 # Author: anyongjin
 # Date  : 2023/2/28
-import asyncio
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
 from banbot.util.misc import *
@@ -11,6 +10,7 @@ from banbot.config import *
 from banbot.util import btime
 from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
 from banbot.symbols.pair_manager import PairManager
+from banbot.storage import *
 
 
 class LiveTrader(Trader):
@@ -53,7 +53,9 @@ class LiveTrader(Trader):
         await self.wallets.init(self.pair_mgr.symbols)
         await self.exchange.init(self.pair_mgr.symbols)
         pair_tfs = self._load_strategies(self.pair_mgr.symbols)
-        self.data_mgr.sub_pairs(pair_tfs)
+        with db():
+            BotTask.init()
+            self.data_mgr.sub_pairs(pair_tfs)
         await self.rpc.startup_messages()
 
     async def run(self):
@@ -90,9 +92,10 @@ class LiveTrader(Trader):
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
-        exit_ods = self.order_mgr.exit_open_orders('force_exit', 0)
-        if exit_ods:
-            logger.info('exit %d open trades', len(exit_ods))
+        with db():
+            exit_ods = self.order_mgr.exit_open_orders('force_exit', 0)
+            if exit_ods:
+                logger.info('exit %d open trades', len(exit_ods))
         await self.order_mgr.order_q.join()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,

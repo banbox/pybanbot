@@ -121,7 +121,7 @@ def parse_data_path(data_dir: str, pair: str, tf_secs: int) -> Tuple[str, int]:
     base_s, quote_s = pair.split('/')
     try_list = []
     for tf in NATIVE_TFS:
-        cur_secs = timeframe_to_seconds(tf)
+        cur_secs = tf_to_secs(tf)
         if cur_secs > tf_secs:
             break
         if tf_secs % cur_secs != 0:
@@ -162,7 +162,7 @@ def load_pair_file_range(data_dir: str, pair: str, timeframe: str, ts_from: floa
     '''
     从给定目录下，查找交易对的指定时间维度数据，按时间段截取返回.
     '''
-    tf_secs = timeframe_to_seconds(timeframe)
+    tf_secs = tf_to_secs(timeframe)
     trange = TimeRange.parse_timerange(f'{ts_from}-{ts_to}')
     try:
         data_path, fetch_tfsecs = parse_data_path(data_dir, pair, tf_secs)
@@ -210,7 +210,7 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
     '''
     from tqdm import tqdm
     assert start_ts or limit, 'start or limit is required'
-    tf_msecs = timeframe_to_seconds(timeframe) * 1000
+    tf_msecs = tf_to_secs(timeframe) * 1000
     if not end_ts:
         end_ts = int(btime.time() * 1000)
     if not start_ts:
@@ -314,7 +314,7 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     if not end_ms:
         end_ms = int(btime.time() * 1000)
     if not start_ms:
-        tf_msecs = timeframe_to_seconds(timeframe) * 1000
+        tf_msecs = tf_to_secs(timeframe) * 1000
         start_ms = end_ms - tf_msecs * limit
     await download_to_db(exchange, pair, start_ms, end_ms)
     from banbot.storage import KLine

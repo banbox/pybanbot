@@ -27,7 +27,7 @@ class VolumePairList(PairList):
         self.backtf = handler_cfg.get('back_timeframe', '1d')
         self.backperiod = handler_cfg.get('back_period', 1)
 
-        tf_secs = timeframe_to_seconds(self.backtf)
+        tf_secs = tf_to_secs(self.backtf)
         self.tf_mins = tf_secs // 60
         self.use_range = self.tf_mins > 0 and self.backperiod > 0
 

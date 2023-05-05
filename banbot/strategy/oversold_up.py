@@ -36,7 +36,7 @@ class OverSoldUp(BaseStrategy):
             return 'up'
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
-        elp_num = bar_num.get() - od.enter_at
+        elp_num = od.elp_num_enter
         atr_val = self.atr[- elp_num - 1]
         loss_thres = [-atr_val, -0.5 * atr_val, atr_val, 2 * atr_val, 3 * atr_val]
         return trail_stop_loss(arr, od.enter.price, elp_num, odlens=[4, 8, 15, 30],

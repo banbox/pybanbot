@@ -12,7 +12,7 @@ import orjson
 from banbot.config.appconfig import AppConfig, Config
 from banbot.util.misc import parallel_jobs
 from banbot.exchange.crypto_exchange import get_exchange
-from banbot.util.redis_helper import MyRedis
+from banbot.util.redis_helper import AsyncRedis
 from banbot.data.wacther import *
 from banbot.data.tools import *
 
@@ -74,7 +74,13 @@ def run_down_pairs(args: Dict[str, Any]):
     解析命令行参数并下载交易对数据
     '''
     config = AppConfig.init_by_args(args)
-    asyncio.run(down_pairs_by_config(config))
+
+    async def run_download():
+        from banbot.storage import db
+        with db():
+            await down_pairs_by_config(config)
+
+    asyncio.run(run_download())
 
 
 class LiveMiner(Watcher):
@@ -93,10 +99,10 @@ class LiveMiner(Watcher):
         self.auto_prefire = AppConfig.get().get('prefire')
 
     async def run(self):
-        with MyRedis() as redis:
+        with AsyncRedis() as redis:
             await redis.set(self.key, self.tf_secs)
         while True:
-            with MyRedis() as redis:
+            with AsyncRedis() as redis:
                 if await redis.get(self.key) != self.tf_secs:
                     break
             await self._try_update()
@@ -126,7 +132,7 @@ class LiveMiner(Watcher):
             self._on_state_ohlcv(self.state, ohlcvs, last_finish)
             # 发布间隔数据到redis订阅方
             sre_data = orjson.dumps((ohlcvs_upd, self.tf_secs))
-            with MyRedis() as redis:
+            with AsyncRedis() as redis:
                 await redis.publish(self.key, sre_data)
         except ccxt.NetworkError:
             logger.exception(f'get live data exception: {self.pair} {self.tf_secs}')
@@ -156,7 +162,7 @@ class LiveSpider:
     历史数据下载请直接调用对应方法，效率更高。
     '''
     def __init__(self):
-        self.redis = MyRedis()  # 需要持续监听redis，单独占用一个连接
+        self.redis = AsyncRedis()  # 需要持续监听redis，单独占用一个连接
         self.conn = self.redis.pubsub()
         self.conn.subscribe(self._key)
 
@@ -169,13 +175,15 @@ class LiveSpider:
             asyncio.create_task(self._run_job(kwargs))
 
     async def _run_job(self, params: dict):
+        from banbot.storage import db
         action, args, kwargs = params['action'], params['args'], params['kwargs']
         try:
-            if hasattr(self, action):
-                await getattr(self, action)(*args, **kwargs)
-            else:
-                logger.error(f'unknown spider job: {params}')
-                return
+            with db():
+                if hasattr(self, action):
+                    await getattr(self, action)(*args, **kwargs)
+                else:
+                    logger.error(f'unknown spider job: {params}')
+                    return
         except Exception:
             logger.exception(f'run spider job error: {params}')
 
@@ -196,7 +204,7 @@ class LiveSpider:
         '''
         发送命令到爬虫。不等待执行完成；发送成功即返回。
         '''
-        redis = MyRedis()
+        redis = AsyncRedis()
         if not await redis.get(cls._key):
             async with redis.lock(cls._key + '_lock'):
                 if not await redis.get(cls._key):

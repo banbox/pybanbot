@@ -6,7 +6,7 @@
 from banbot.strategy.base import BaseStrategy
 from banbot.core.iresolver import *
 from banbot.util.common import logger
-from banbot.exchange.exchange_utils import timeframe_to_seconds
+from banbot.exchange.exchange_utils import tf_to_secs
 
 
 class PTFJob:
@@ -30,7 +30,7 @@ class PTFJob:
         if stg.warmup_num:
             if pair not in cls.pair_warms:
                 cls.pair_warms[pair] = 0
-            tf_secs = timeframe_to_seconds(timeframe)
+            tf_secs = tf_to_secs(timeframe)
             cls.pair_warms[pair] = max(cls.pair_warms[pair], tf_secs * stg.warmup_num)
         stg_set.add(stg)
 

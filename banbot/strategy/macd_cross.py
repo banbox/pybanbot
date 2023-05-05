@@ -44,7 +44,7 @@ class MACDCross(BaseStrategy):
             return 'ent'
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
-        elp_num = bar_num.get() - od.enter_at
+        elp_num = od.elp_num_enter
         atr_val = self.atr[- elp_num - 1]
         loss_thres = [-1.2 * atr_val, -0.85 * atr_val, atr_val, 2.7 * atr_val, 4 * atr_val]
         return trail_stop_loss(arr, od.enter.price, elp_num, loss_thres, odlens=[10, 10, 16, 25],

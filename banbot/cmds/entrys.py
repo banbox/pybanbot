@@ -3,6 +3,9 @@
 # File  : entrys.py
 # Author: anyongjin
 # Date  : 2023/4/1
+'''
+这里只放主要的交易入口逻辑：实盘交易、回测模拟
+'''
 import asyncio
 import signal
 from typing import *
@@ -58,8 +61,9 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     backtesting = BackTest(config)
     try:
         if args.get('cprofile'):
+            cmd_line = 'asyncio.run(backtesting.run())'
             import cProfile
-            cProfile.runctx('asyncio.run(backtesting.run())', globals(), locals(), sort='tottime')
+            cProfile.runctx(cmd_line, globals(), locals(), sort='tottime')
         else:
             asyncio.run(backtesting.run())
     except Exception as e:
@@ -68,7 +72,7 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     except (KeyboardInterrupt):
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
-        asyncio.run(backtesting.cleanup())
+        backtesting.cleanup()
     finally:
         logger.info("worker found ... calling exit")
 

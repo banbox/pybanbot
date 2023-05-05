@@ -6,6 +6,7 @@
 import ccxt
 from typing import *
 from banbot.util import btime
+_tfsecs_map = dict()
 
 
 def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> Tuple[str, int]:
@@ -16,8 +17,8 @@ def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> T
     :param force_sub: 是否强制使用更细粒度的时间帧，即使当前时间帧支持
     :return:
     '''
-    tf_secs = timeframe_to_seconds(current)
-    pairs = [(tf, timeframe_to_seconds(tf)) for tf in timeframes]
+    tf_secs = tf_to_secs(current)
+    pairs = [(tf, tf_to_secs(tf)) for tf in timeframes]
     pairs = sorted(pairs, key=lambda x: x[1])
     all_tf, all_tf_secs = list(zip(*pairs))
     rev_tf_secs = all_tf_secs[::-1]
@@ -28,13 +29,15 @@ def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> T
             return all_tf[len(all_tf_secs) - i - 1], rev_tf_secs[i]
 
 
-def timeframe_to_seconds(timeframe: str) -> int:
+def tf_to_secs(timeframe: str) -> int:
     """
     Translates the timeframe interval value written in the human readable
     form ('1m', '5m', '1h', '1d', '1w', etc.) to the number
     of seconds for one timeframe interval.
     """
-    return ccxt.Exchange.parse_timeframe(timeframe)
+    if timeframe not in _tfsecs_map:
+        _tfsecs_map[timeframe] = ccxt.Exchange.parse_timeframe(timeframe)
+    return _tfsecs_map[timeframe]
 
 
 def get_back_ts(tf_secs: int, back_period: int, in_ms: bool = True) -> Tuple[int, int]:

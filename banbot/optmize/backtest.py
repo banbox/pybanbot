@@ -5,9 +5,11 @@
 # Date  : 2023/3/17
 import os.path
 
+from banbot.util.num_utils import to_pytypes
 from banbot.main.itrader import *
 from banbot.data.provider import *
 from banbot.symbols.pair_manager import PairManager
+from banbot.storage import *
 
 
 class BackTest(Trader):
@@ -58,7 +60,10 @@ class BackTest(Trader):
         self.max_balance = self.stake_amount
         await self.pair_mgr.refresh_pairlist()
         pair_tfs = self._load_strategies(self.pair_mgr.symbols)
-        self.data_mgr.sub_pairs(pair_tfs)
+        with db():
+            BotTask.init()
+            self.data_mgr.sub_pairs(pair_tfs)
+        self.result['task_id'] = BotTask.cur_id
         for pair in self.pair_mgr.symbols:
             base_s, quote_s = pair.split('/')
             self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
@@ -69,20 +74,20 @@ class BackTest(Trader):
         from banbot.optmize.bt_analysis import BTAnalysis
         await self.init()
         # 轮训数据
-        self.data_mgr.loop_main()
-        logger.info('backtest complete')
-        # 关闭未完成订单
-        await self.cleanup()
-        self._calc_result_done()
+        with db():
+            self.data_mgr.loop_main()
+            logger.info('backtest complete')
+            # 关闭未完成订单
+            self.cleanup()
+            self._calc_result_done()
 
-        his_orders = self.order_mgr.his_orders
-        od_list = [r.to_dict() for r in his_orders.values()]
-        print_backtest(pd.DataFrame(od_list), self.result)
-        await BTAnalysis(list(his_orders.values()), **self.result).save(self.out_dir)
+            print_backtest(self.result)
+
+        await BTAnalysis(**self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
-        open_orders = self.order_mgr.open_orders
+        open_orders = InOutOrder.open_orders()
         if is_enter:
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
         elif not open_orders:
@@ -102,7 +107,7 @@ class BackTest(Trader):
         self.result['date_to'] = btime.to_datestr(self.result['date_to'])
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
-        his_orders: List[InOutOrder] = list(self.order_mgr.his_orders.values())
+        his_orders = InOutOrder.his_orders()
         self.result['orders_num'] = len(his_orders)
         fin_balance = self.wallets.get(quote_s)[0]
         start_balance = self.result['start_balance']
@@ -132,7 +137,7 @@ class BackTest(Trader):
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
-    async def cleanup(self):
+    def cleanup(self):
         self.order_mgr.exit_open_orders('force_exit', 0)
         self.order_mgr.fill_pending_orders()
 

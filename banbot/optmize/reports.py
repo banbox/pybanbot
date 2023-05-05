@@ -178,7 +178,22 @@ def text_markets(market_map: Dict[str, Any], min_num: int = 10):
     return tabulate(records, headers, 'orgtbl')
 
 
-def print_backtest(order_df: pd.DataFrame, result: dict):
+def get_order_df() -> pd.DataFrame:
+    from banbot.storage import InOutOrder
+    from banbot.util.misc import add_dict_prefix
+    his_orders = InOutOrder.his_orders()
+    data_list = []
+    for od in his_orders:
+        item = od.dict()
+        if od.enter:
+            item.update(add_dict_prefix(od.enter.dict(), 'enter_'))
+        if od.exit:
+            item.update(add_dict_prefix(od.exit.dict(), 'exit_'))
+    return pd.DataFrame(data_list)
+
+
+def print_backtest(result: dict):
+    order_df = get_order_df()
     print('')
     if len(order_df):
         table = text_day_profits(order_df)

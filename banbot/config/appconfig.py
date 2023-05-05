@@ -135,9 +135,10 @@ class AppConfig(metaclass=Singleton):
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
         if not args.get('no_db'):
             # 测试数据库连接
-            from banbot.storage.base import init_db_session, db_conn, sa
-            init_db_session()
-            with db_conn() as conn:
+            from banbot.storage.base import init_db, db, sa
+            init_db()
+            with db():
+                conn = db.session.connection()
                 db_tz = conn.execute(sa.text('show timezone;')).scalar()
                 if str(db_tz).lower() != 'utc':
                     raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'

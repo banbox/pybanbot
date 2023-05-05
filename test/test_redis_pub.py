@@ -5,7 +5,7 @@
 # Date  : 2023/5/1
 import asyncio
 from banbot.config import AppConfig
-from banbot.util.redis_helper import MyRedis, PubSub
+from banbot.util.redis_helper import AsyncRedis, PubSub
 from banbot.util.common import logger
 STOPWORD = "STOP"
 
@@ -26,7 +26,7 @@ async def handle_msgs(conn: PubSub, callback):
 
 
 async def test():
-    redis = MyRedis()
+    redis = AsyncRedis()
     conn = redis.pubsub()
     await conn.subscribe('channel1', 'channel2')
 

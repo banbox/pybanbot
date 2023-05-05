@@ -385,7 +385,7 @@ class CryptoExchange:
         if (not force_sub or timeframe == '1s') and timeframe in self.api.timeframes:
             return await self.api_async.fetch_ohlcv(pair, timeframe, since=since, limit=limit)
         sub_tf, sub_tf_secs = max_sub_timeframe(self.api.timeframes.keys(), timeframe, force_sub)
-        cur_tf_secs = timeframe_to_seconds(timeframe)
+        cur_tf_secs = tf_to_secs(timeframe)
         if not limit:
             sub_arr = await self.api_async.fetch_ohlcv(pair, sub_tf, since=since)
             ohlc_arr, last_finish = build_ohlcvc(sub_arr, cur_tf_secs)

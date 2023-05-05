@@ -4,12 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 from banbot.storage import *
-from banbot.storage.base import BaseDbModel, sa, get_db
+from banbot.storage.base import BaseDbModel, sa, init_db
 from banbot.util.common import logger
 from typing import Any, Dict, List
 
 
-all_tables = [SymbolTF, KLine, KHole]
+all_tables = [SymbolTF, KLine, KHole, BotTask, Order, InOutOrder]
 tbl_map: Dict[str, BaseDbModel] = dict()
 for tbl in all_tables:
     tbl_map[tbl.__tablename__.lower()] = tbl
@@ -20,7 +20,11 @@ def rebuild_db(tables: list = None, skip_exist=True):
     logger.info('start rebuild tables...')
     if not tables:
         tables = all_tables
-    bandb = get_db(iso_level='AUTOCOMMIT', debug=True)
+    bandb = init_db()
+    bandb.echo = True
+    conn = db.session.connection()
+    conn.commit()
+    conn.execution_options(isolation_level='AUTOCOMMIT')
     exist_tbls = [tbl for tbl in tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
     if skip_exist and exist_tbls:
         tables = list(set(tables) - set(exist_tbls))
@@ -35,7 +39,6 @@ def rebuild_db(tables: list = None, skip_exist=True):
     flag = input('input `yes` to continue:\n')
     if not flag or flag.strip() != 'yes':
         raise Exception('user cancled')
-    conn = bandb.connect()
     if not skip_exist and exist_tbls:
         left_tbls = []
         for t in exist_tbls:
@@ -70,7 +73,8 @@ def exec_dbcmd(args: Dict[str, Any]):
     from banbot.config import AppConfig
     AppConfig.init_by_args(args)
     action = args['action']
-    if action == 'rebuild':
-        rebuild_db(_parse_tbls(args), not args['force'])
-    else:
-        raise RuntimeError(f'unsupport db action: {action}')
+    with db():
+        if action == 'rebuild':
+            rebuild_db(_parse_tbls(args), not args['force'])
+        else:
+            raise RuntimeError(f'unsupport db action: {action}')

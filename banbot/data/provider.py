@@ -23,8 +23,11 @@ class DataProvider:
         self.holders: List[DataFeeder] = []
 
         def handler(*args, **kwargs):
+            from banbot.storage import db
             try:
-                callback(*args, **kwargs)
+                with db():
+                    # bar回调内部会用到数据库
+                    callback(*args, **kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler
@@ -120,8 +123,8 @@ class LiveDataProvider(DataProvider):
 
     def __init__(self, config: Config, callback: Callable):
         super(LiveDataProvider, self).__init__(config, callback)
-        from banbot.util.redis_helper import MyRedis
-        self.redis = MyRedis()
+        from banbot.util.redis_helper import AsyncRedis
+        self.redis = AsyncRedis()
         self.conn = self.redis.pubsub()
         LiveDataProvider._obj = self
 

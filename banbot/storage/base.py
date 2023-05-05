@@ -6,7 +6,7 @@
 import time
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, pool, Column
+from sqlalchemy import create_engine, pool, Column, orm
 from sqlalchemy import event as db_event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session as SqlSession
 from sqlalchemy.engine import Engine
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm.session import make_transient
-from typing import Optional, List, Union, Type
+from typing import Optional, List, Union, Type, Dict
+from contextvars import ContextVar
 from banbot.util.common import logger
 from banbot.config import AppConfig
 from banbot.util import btime
@@ -23,6 +24,7 @@ from banbot.util import btime
 _BaseDbModel = declarative_base()
 _db_engine: Optional[Engine] = None
 _DbSession: Optional[sessionmaker] = None
+_db_sess: ContextVar[Optional[SqlSession]] = ContextVar('_db_sess', default=None)
 db_slow_query_timeout = 1
 
 
@@ -38,7 +40,17 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         logger.warning(f'slow database query found, cost {total:.3f}, {statement}, {parameters}')
 
 
-def new_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
+def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
+    '''
+    初始化数据库客户端（并未连接到数据库）
+    传入的参数将针对所有连接生效。
+    如只需暂时生效：
+    db.session.connection().execution_options(isolation_level='AUTOCOMMIT')
+    或engine.echo=True
+    '''
+    global _db_engine, _DbSession
+    if _db_engine is not None:
+        return _db_engine
     db_cfg = AppConfig.get()['database']
     db_url = db_cfg['url']
     pool_size = db_cfg.get('pool_size', 30) if btime.run_mode in btime.TRADING_MODES else 3
@@ -49,40 +61,48 @@ def new_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
     if debug is not None:
         create_args['echo'] = debug
     create_args['isolation_level'] = iso_level
-    engine = create_engine(db_url, **create_args)
-    db_event.listens_for(engine, "before_cursor_execute", before_cursor_execute)
-    db_event.listens_for(engine, "after_cursor_execute", after_cursor_execute)
-    Session = sessionmaker(bind=engine)
-    return engine, Session
+    _db_engine = create_engine(db_url, **create_args)
+    db_event.listens_for(_db_engine, "before_cursor_execute", before_cursor_execute)
+    db_event.listens_for(_db_engine, "after_cursor_execute", after_cursor_execute)
+    _DbSession = sessionmaker(bind=_db_engine)
+    return _db_engine
 
 
-def get_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, cache=True):
-    global _db_engine, _DbSession
-    if _db_engine is not None and (debug is None or _db_engine.echo == debug) \
-            and (not iso_level or _db_engine.dialect.isolation_level == iso_level):
-        return _db_engine
-    engine, Session = new_db(iso_level, debug)
-    if cache:
-        _db_engine, _DbSession = engine, Session
-    return engine
+class DBSessionMeta(type):
+    # using this metaclass means that we can access db.session as a property at a class level,
+    # rather than db().session
+    @property
+    def session(self) -> SqlSession:
+        """Return an instance of Session local to the current async context."""
+        session = _db_sess.get()
+        if session is None:
+            raise RuntimeError('db sess not loaded')
+        return session
 
 
-def db_conn(iso_level: Optional[str] = None, debug: Optional[bool] = None, cache=True) -> sa.Connection:
-    return get_db(iso_level, debug, cache).connect()
+class DBSession(metaclass=DBSessionMeta):
+    def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
+        self.token = None
+        self.session_args = session_args or {}
+        self.commit_on_exit = commit_on_exit
+
+    def __enter__(self):
+        self.token = _db_sess.set(_DbSession(**self.session_args))
+        return type(self)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        sess = _db_sess.get()
+        if exc_type is not None:
+            sess.rollback()
+
+        if self.commit_on_exit:
+            sess.commit()
+
+        sess.close()
+        _db_sess.reset(self.token)
 
 
-def db_sess(iso_level: Optional[str] = None, debug: Optional[bool] = None):
-    get_db(iso_level, debug)
-    return _DbSession()
-
-
-def init_db_session():
-    '''
-    初始化数据库session
-    在使用前必须初始化，可在bot启动时。
-    :return:
-    '''
-    get_db()
+db: DBSessionMeta = DBSession
 
 
 class IntEnum(TypeDecorator):

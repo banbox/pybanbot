@@ -36,7 +36,7 @@ def now():
     return datetime.datetime.utcfromtimestamp(cur_timestamp)
 
 
-def to_datetime(timestamp: int = None):
+def to_datetime(timestamp: float = None):
     if not timestamp:
         timestamp = time()
     else:

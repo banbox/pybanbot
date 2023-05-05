@@ -43,7 +43,7 @@ class Trader:
         logger.debug('data_feed %s %s %s', pair, timeframe, row)
         row = np.array(row)
         pair_tf = f'{pair}/{timeframe}'
-        tf_secs = timeframe_to_seconds(timeframe)
+        tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = delay >= max(60., tf_secs * 0.5)
@@ -56,7 +56,7 @@ class Trader:
             pair_arr = append_new_bar(row, tf_secs)
             self.order_mgr.update_by_bar(pair_arr)
             start_time = time.monotonic()
-            ext_tags: Dict[str, str] = dict()
+            ext_tags: Dict[int, str] = dict()
             enter_list, exit_list = [], []
             for strategy in strategy_list:
                 stg_name = strategy.name

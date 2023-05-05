@@ -7,7 +7,7 @@ import six
 
 from banbot.storage.base import *
 from typing import Callable, Tuple, ClassVar, Dict
-from banbot.exchange.exchange_utils import timeframe_to_seconds
+from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.util import btime
 
 
@@ -103,35 +103,35 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
     def _query_hyper(cls, exg_name: str, symbol: Union[str, int], timeframe: str,
                      dct_sql: str, gp_sql: Union[str, Callable]):
         sid = cls._get_sid(exg_name, symbol)
-        with db_conn() as conn:
-            if timeframe in cls.tf_tbls:
-                stmt = dct_sql.format(
-                    tbl=cls.tf_tbls[timeframe],
-                    sid=sid
-                )
-                return conn.execute(sa.text(stmt))
-            else:
-                # 时间帧没有直接符合的，从最接近的子timeframe聚合
-                tf_secs = timeframe_to_seconds(timeframe)
-                sub_tf, sub_tbl = None, None
-                for stf, stbl, stf_secs in cls.tf_list[::-1]:
-                    if tf_secs % stf_secs == 0:
-                        sub_tf, sub_tbl = stf, stbl
-                        break
-                if not sub_tbl:
-                    raise RuntimeError(f'unsupport timeframe {timeframe}')
-                if callable(gp_sql):
-                    gp_sql = gp_sql()
-                stmt = gp_sql.format(
-                    tbl=sub_tbl,
-                    sid=sid,
-                )
-                return conn.execute(sa.text(stmt))
+        conn = db.session.connection()
+        if timeframe in cls.tf_tbls:
+            stmt = dct_sql.format(
+                tbl=cls.tf_tbls[timeframe],
+                sid=sid
+            )
+            return conn.execute(sa.text(stmt))
+        else:
+            # 时间帧没有直接符合的，从最接近的子timeframe聚合
+            tf_secs = tf_to_secs(timeframe)
+            sub_tf, sub_tbl = None, None
+            for stf, stbl, stf_secs in cls.tf_list[::-1]:
+                if tf_secs % stf_secs == 0:
+                    sub_tf, sub_tbl = stf, stbl
+                    break
+            if not sub_tbl:
+                raise RuntimeError(f'unsupport timeframe {timeframe}')
+            if callable(gp_sql):
+                gp_sql = gp_sql()
+            stmt = gp_sql.format(
+                tbl=sub_tbl,
+                sid=sid,
+            )
+            return conn.execute(sa.text(stmt))
 
     @classmethod
     def query(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
               limit: int = 3000):
-        tf_secs = timeframe_to_seconds(timeframe)
+        tf_secs = tf_to_secs(timeframe)
         limit_end_ms = start_ms + tf_secs * limit * 1000
         max_end_ms = end_ms or btime.time() * 1000
         end_ms = min(limit_end_ms, max_end_ms)
@@ -209,32 +209,34 @@ order by time'''
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')
-        with db_sess() as sess:
-            ins_rows = []
-            for r in rows:
-                row_ts = btime.to_datetime(r[0])
-                ins_rows.append(dict(
-                    sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
-                ))
-            sess.bulk_insert_mappings(KLine, ins_rows)
-            sess.commit()
+        sess = db.session
+        ins_rows = []
+        for r in rows:
+            row_ts = btime.to_datetime(r[0])
+            ins_rows.append(dict(
+                sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
+            ))
+        sess.bulk_insert_mappings(KLine, ins_rows)
+        sess.commit()
         # 更新区间
         cls._update_range(sid, start_ms, end_ms)
         # 刷新连续聚合
         range_ms = (end_ms - start_ms) / 1000
         start_dt = btime.to_datetime(start_ms)
-        conn = db_conn(iso_level='AUTOCOMMIT', cache=False)
+        conn = sess.connection()
+        conn.commit()
+        bak_iso_level = conn.get_isolation_level()
+        conn.execution_options(isolation_level='AUTOCOMMIT')
         for intv in cls.agg_intvs:
             tf = intv[0]
-            tf_secs = timeframe_to_seconds(tf)
+            tf_secs = tf_to_secs(tf)
             if range_ms < tf_secs * 0.3:
                 continue
             cur_end_ms = int(end_ms // tf_secs * tf_secs) + tf_secs * 1000 + 1
             cur_end_dt = btime.to_datetime(cur_end_ms)
             stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', '{start_dt}', '{cur_end_dt}');"
             conn.execute(sa.text(stmt))
-        conn.commit()
-        conn.close()
+        conn.execution_options(isolation_level=bak_iso_level)
 
     @classmethod
     def _find_sid_hole(cls, conn: sa.Connection, sid: int, since: float, until: float = 0., as_ts=True):
@@ -273,34 +275,34 @@ order by time'''
         from banbot.storage.symbols import SymbolTF
         from banbot.exchange.crypto_exchange import get_exchange
         logger.info('find and fill holes for kline...')
-        with db_conn() as conn:
-            gp_sql = 'SELECT sid, extract(epoch from min(time))::float as mtime FROM kline GROUP BY sid;'
-            sid_rows = conn.execute(sa.text(gp_sql)).fetchall()
-            if not len(sid_rows):
-                return
-            sess = db_sess()
-            for sid, start_ts in sid_rows:
-                hole_list = cls._find_sid_hole(conn, sid, start_ts)
-                if not hole_list:
+        sess = db.session
+        conn = sess.connection()
+        gp_sql = 'SELECT sid, extract(epoch from min(time))::float as mtime FROM kline GROUP BY sid;'
+        sid_rows = conn.execute(sa.text(gp_sql)).fetchall()
+        if not len(sid_rows):
+            return
+        for sid, start_ts in sid_rows:
+            hole_list = cls._find_sid_hole(conn, sid, start_ts)
+            if not hole_list:
+                continue
+            old_holes = sess.query(KHole).filter(KHole.sid == sid).all()
+            old_holes = [(btime.to_utcstamp(row.start), btime.to_utcstamp(row.stop)) for row in old_holes]
+            hole_list = [h for h in hole_list if h not in old_holes]
+            if not hole_list:
+                continue
+            stf: SymbolTF = sess.query(SymbolTF).get(sid)
+            exchange = get_exchange(stf.exchange)
+            for hole in hole_list:
+                start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
+                logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
+                await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
+                real_holes = cls._find_sid_hole(conn, sid, hole[0], hole[1] + 0.1, as_ts=False)
+                if not real_holes:
                     continue
-                old_holes = sess.query(KHole).filter(KHole.sid == sid).all()
-                old_holes = [(btime.to_utcstamp(row.start), btime.to_utcstamp(row.stop)) for row in old_holes]
-                hole_list = [h for h in hole_list if h not in old_holes]
-                if not hole_list:
-                    continue
-                stf: SymbolTF = sess.query(SymbolTF).get(sid)
-                exchange = get_exchange(stf.exchange)
-                for hole in hole_list:
-                    start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
-                    logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
-                    await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
-                    real_holes = cls._find_sid_hole(conn, sid, hole[0], hole[1] + 0.1, as_ts=False)
-                    if not real_holes:
-                        continue
-                    logger.warning(f'REAL Holes: {stf.symbol} {real_holes}')
-                    for rhole in real_holes:
-                        sess.add(KHole(sid=sid, start=rhole[0], stop=rhole[1]))
-                    sess.commit()
+                logger.warning(f'REAL Holes: {stf.symbol} {real_holes}')
+                for rhole in real_holes:
+                    sess.add(KHole(sid=sid, start=rhole[0], stop=rhole[1]))
+                sess.commit()
 
 
 class KHole(BaseDbModel):

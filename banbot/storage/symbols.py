@@ -24,18 +24,18 @@ class SymbolTF(BaseDbModel):
         if cache_val:
             return cache_val
         old_mid = max(cls._object_map.values()) if cls._object_map else 0
-        with db_sess() as sess:
-            records = sess.query(SymbolTF).filter(SymbolTF.id > old_mid).all()
-            for r in records:
-                rkey = f'{r.exchange}:{r.symbol}:{r.timeframe}'
-                cls._object_map[rkey] = r.id
-            if key in cls._object_map:
-                return cls._object_map[key]
-            from banbot.exchange.exchange_utils import timeframe_to_seconds
-            tf_secs = timeframe_to_seconds(timeframe)
-            obj = SymbolTF(exchange=exg_name, symbol=symbol, timeframe=timeframe, tf_secs=tf_secs)
-            sess.add(obj)
-            sess.flush()
-            cls._object_map[key] = obj.id
-            sess.commit()
-            return obj.id
+        sess = db.session
+        records = sess.query(SymbolTF).filter(SymbolTF.id > old_mid).all()
+        for r in records:
+            rkey = f'{r.exchange}:{r.symbol}:{r.timeframe}'
+            cls._object_map[rkey] = r.id
+        if key in cls._object_map:
+            return cls._object_map[key]
+        from banbot.exchange.exchange_utils import tf_to_secs
+        tf_secs = tf_to_secs(timeframe)
+        obj = SymbolTF(exchange=exg_name, symbol=symbol, timeframe=timeframe, tf_secs=tf_secs)
+        sess.add(obj)
+        sess.flush()
+        cls._object_map[key] = obj.id
+        sess.commit()
+        return obj.id
