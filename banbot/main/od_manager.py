@@ -47,12 +47,12 @@ class OrderManager(metaclass=SingletonArg):
         self.prices = dict()  # 所有产品对法币的价格
         self.network_cost = 3.  # 模拟网络延迟
         self.callback = callback
-        self.dump_path = os.path.join(config['data_dir'], 'live/orders.json')
         self.fatal_stop = dict()
         self.last_ts = btime.time()  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
         self._load_fatal_stop()
         self.disabled = False
         self.forbid_pairs = set()
+        self.live_mode = btime.run_mode in TRADING_MODES
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
 
     def _load_fatal_stop(self):
@@ -105,9 +105,8 @@ class OrderManager(metaclass=SingletonArg):
             for stg_name, exit_tag in exits:
                 exit_ods.extend(self.exit_open_orders(exit_tag, sell_price, stg_name, pair))
         if exit_keys:
-            sess = db.session
             for od_id, ext_tag in exit_keys.items():
-                od = sess.query(InOutOrder).get(od_id)
+                od = InOutOrder.get(od_id)
                 exit_ods.append(self.exit_order(ctx, od, ext_tag, sell_price))
         enter_ods = [od for od in enter_ods if od]
         exit_ods = [od for od in exit_ods if od]
@@ -131,9 +130,8 @@ class OrderManager(metaclass=SingletonArg):
         if btime.run_mode in NORDER_MODES:
             return
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        if lock_id := InOutOrder.is_lock(pair, strategy, tag):
+        if lock_od := InOutOrder.get_order(pair, strategy, tag):
             # 同一交易对，同一策略，同一信号，只允许一个订单
-            lock_od = db.session.query(InOutOrder).get(lock_id)
             logger.debug('order lock, enter forbid: %s', lock_od)
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
                 logger.error('lock order exit timeout: %s', lock_od)
@@ -318,7 +316,8 @@ class OrderManager(metaclass=SingletonArg):
                 self.forbid_pairs.add(od.symbol)
                 logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
         od.del_lock()
-        db.session.commit()
+        if self.live_mode:
+            db.session.commit()
 
     def update_by_bar(self, pair_arr: np.ndarray):
         op_orders = InOutOrder.open_orders()

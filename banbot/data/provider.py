@@ -23,11 +23,8 @@ class DataProvider:
         self.holders: List[DataFeeder] = []
 
         def handler(*args, **kwargs):
-            from banbot.storage import db
             try:
-                with db():
-                    # bar回调内部会用到数据库
-                    callback(*args, **kwargs)
+                callback(*args, **kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler

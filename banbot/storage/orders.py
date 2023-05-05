@@ -30,38 +30,36 @@ class InOutStatus:
 
 
 class TradeLock:
-    _locks: List['TradeLock'] = []
+    _locks: Dict[str, Any] = dict()
 
-    def __init__(self, **kwargs):
-        self.key: str = kwargs['key']
-        self.side: str = kwargs.get('side')
-        self.reason: str = kwargs.get('reason')
-        self.unlock_time: Optional[datetime] = kwargs.get('unlock_time')
+    @classmethod
+    def reset_locks(cls):
+        cls._locks = dict()
 
-    @staticmethod
-    def reset_locks():
-        TradeLock._locks = []
+    @classmethod
+    def _get_keys(cls, key: str, side: str = '*') -> Set[str]:
+        if side != '*':
+            if side not in {'buy', 'sell'}:
+                raise ValueError(f'invalid trade lock side: {side}')
+            return {f'{key}_{side}'}
+        return {key + '_buy', key + '_sell'}
 
-    @staticmethod
-    def lock(pair: str, until: datetime, side: str = '*', reason: Optional[str] = None):
-        obj = TradeLock(key=pair, side=side, unlock_time=until, reason=reason)
-        TradeLock._locks.append(obj)
-        return obj
+    @classmethod
+    def lock(cls, key: str, val: Any, side: str = '*'):
+        for lk_key in cls._get_keys(key, side):
+            cls._locks[lk_key] = val
 
-    @staticmethod
-    def get_pair_locks(key: Optional[str], side: str = '*'):
-        now = btime.now()
-        return [lock for lock in TradeLock._locks if (
-                lock.unlock_time >= now
-                and (key is None or lock.key == key)
-                and (lock.side == '*' or lock.side == side)
-        )]
+    @classmethod
+    def get_lock(cls, key: str, side: str = '*'):
+        for lk_key in cls._get_keys(key, side):
+            lk_val = cls._locks.get(lk_key)
+            if lk_val is not None:
+                return lk_val
 
-    @staticmethod
-    def unlock(key: str, side: str = '*'):
-        locks = TradeLock.get_pair_locks(key, side)
-        for l in locks:
-            TradeLock._locks.remove(l)
+    @classmethod
+    def unlock(cls, key: str, side: str = '*'):
+        for lk_key in cls._get_keys(key, side):
+            cls._locks.pop(lk_key)
 
 
 class Order(BaseDbModel):
@@ -115,6 +113,11 @@ class InOutOrder(BaseDbModel):
         sa.Index('idx_io_status', 'status'),
     )
 
+    _open_ods: ClassVar[Dict[int, 'InOutOrder']] = dict()
+    _his_ods: ClassVar[List['InOutOrder']] = []
+    _next_id: ClassVar[int] = 1
+    _live_mode: ClassVar[bool] = btime.run_mode in btime.TRADING_MODES
+
     id = Column(sa.Integer, primary_key=True)
     task_id = Column(sa.Integer)
     symbol = Column(sa.String(50))
@@ -134,11 +137,17 @@ class InOutOrder(BaseDbModel):
         # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
         self.quote_cost = kwargs.get('quote_cost')
         if self.id:
-            sess = db.session
-            rows = sess.query(Order).filter(Order.inout_id == self.id).all()
-            self.enter = next((r for r in rows if r.enter), None)
-            sess.exit = next((r for r in rows if not r.enter), None)
+            if self._live_mode:
+                sess = db.session
+                rows = sess.query(Order).filter(Order.inout_id == self.id).all()
+                self.enter = next((r for r in rows if r.enter), None)
+                sess.exit = next((r for r in rows if not r.enter), None)
+            else:
+                raise RuntimeError('InOutOrder should not be init twice in backtest mode')
         else:
+            if not self._live_mode:
+                self.id = InOutOrder._next_id
+                InOutOrder._next_id += 1
             enter_kwargs = del_dict_prefix(kwargs, 'enter_')
             self.enter: Order = Order(**enter_kwargs, enter=True)
             self.exit: Optional[Order] = None
@@ -209,10 +218,14 @@ class InOutOrder(BaseDbModel):
         self.profit_rate = arr[-1, ccol] / self.enter.price - 1
 
     def save(self):
+        if not self._live_mode:
+            TradeLock.lock(self.key, self.id)
+            return
         sess = db.session
         if not self.id:
             sess.add(self)
             sess.flush()
+        TradeLock.lock(self.key, self.id)
         if self.enter and not self.enter.id:
             if not self.enter.inout_id:
                 self.enter.inout_id = self.id
@@ -222,40 +235,48 @@ class InOutOrder(BaseDbModel):
                 self.exit.inout_id = self.id
             sess.add(self.exit)
         sess.commit()
-        with SyncRedis() as redis:
-            redis.set(self.key, self.id)
 
     @classmethod
-    def get_orders(cls, strategy: str = None, pair: str = None, filters: List = None) -> List['InOutOrder']:
-        from banbot.storage.bot_task import BotTask
-        sess = db.session
-        where_list = [InOutOrder.task_id == BotTask.cur_id]
-        if filters:
-            where_list.extend(filters)
-        if strategy:
-            where_list.append(InOutOrder.strategy == strategy)
-        if pair:
-            where_list.append(InOutOrder.symbol == pair)
-        return sess.query(InOutOrder).filter(*where_list).all()
+    def get_orders(cls, strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
+        if cls._live_mode:
+            return get_db_orders(strategy, pair, status)
+        else:
+            if status == 'his':
+                candicates = cls._his_ods
+            elif status:
+                candicates: List[InOutOrder] = list(cls._open_ods.values())
+            else:
+                candicates = cls._his_ods + list(cls._open_ods.values())
+            if not strategy and not pair:
+                return candicates
+            return [od for od in candicates if od.strategy == strategy and od.symbol == pair]
 
     @classmethod
     def open_orders(cls, strategy: str = None, pair: str = None) -> List['InOutOrder']:
-        filters = [InOutOrder.status < InOutStatus.FullExit]
-        return cls.get_orders(strategy, pair, filters)
+        return cls.get_orders(strategy, pair, 'open')
 
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:
-        return cls.get_orders(filters=[InOutOrder.status == InOutStatus.FullExit])
+        return cls.get_orders(status='his')
 
     @classmethod
-    def is_lock(cls, symbol: str, strategy: str, enter_tag: str) -> int:
+    def get_order(cls, symbol: str, strategy: str, enter_tag: str):
         key = f'{symbol}_{enter_tag}_{strategy}'
-        with SyncRedis() as redis:
-            return redis.get(key) or 0
+        lock_id = TradeLock.get_lock(key)
+        if not lock_id:
+            return
+        return cls.get(lock_id)
+
+    @classmethod
+    def get(cls, od_id: int):
+        # return db.session.query(InOutOrder).get(od_id)
+        op_od = cls._open_ods.get(od_id)
+        if op_od is not None:
+            return op_od
+        return next((od for od in cls._his_ods if od.id == od_id), None)
 
     def del_lock(self):
-        with SyncRedis() as redis:
-            return redis.delete(self.key)
+        TradeLock.unlock(self.key)
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'
@@ -266,3 +287,18 @@ class OrderJob:
         self.od_id = od_id
         self.is_enter = is_enter
 
+
+def get_db_orders(strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
+    from banbot.storage.bot_task import BotTask
+    sess = db.session
+    where_list = [InOutOrder.task_id == BotTask.cur_id]
+    if status:
+        if status == 'his':
+            where_list.append(InOutOrder.status == InOutStatus.FullExit)
+        else:
+            where_list.append(InOutOrder.status < InOutStatus.FullExit)
+    if strategy:
+        where_list.append(InOutOrder.strategy == strategy)
+    if pair:
+        where_list.append(InOutOrder.symbol == pair)
+    return sess.query(InOutOrder).filter(*where_list).all()
