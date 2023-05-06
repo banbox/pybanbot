@@ -53,7 +53,7 @@ class Trader:
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
             pair_arr = append_new_bar(row, tf_secs)
-            self.order_mgr.update_by_bar(pair_arr)
+            self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
             ext_tags: Dict[int, str] = dict()
             enter_list, exit_list = [], []
@@ -75,12 +75,7 @@ class Trader:
         calc_cost = (calc_end - start_time) * 1000
         if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
             logger.info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
-        if not is_live_mode:
-            # 模拟模式，填充未成交订单
-            self.order_mgr.fill_pending_orders(pair, timeframe, row)
-        if enter_list or exit_list or ext_tags:
-            logger.debug('bar signals: %s %s %s', enter_list, exit_list, ext_tags)
-            self.order_mgr.process_pair_orders(pair_tf, enter_list, exit_list, ext_tags)
+        self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
         return enter_list, exit_list, ext_tags
 
     async def run(self):

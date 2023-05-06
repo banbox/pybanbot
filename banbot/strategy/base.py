@@ -14,6 +14,7 @@ class BaseStrategy:
     warmup_num = 900
     skip_exit_on_enter = True
     skip_enter_on_exit = True
+    version = 1
 
     def __init__(self, config: dict):
         self.config = config

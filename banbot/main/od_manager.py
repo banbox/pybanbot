@@ -71,8 +71,8 @@ class OrderManager(metaclass=SingletonArg):
     async def try_dump(self):
         pass
 
-    def process_pair_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
-                            exits: List[Tuple[str, str]], exit_keys: Dict[int, str])\
+    def process_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
+                       exits: List[Tuple[str, str]], exit_keys: Dict[int, str])\
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -82,6 +82,10 @@ class OrderManager(metaclass=SingletonArg):
         :param exit_keys: Dict(order_key, exit_tag)
         :return:
         '''
+        if enters or exits or exit_keys:
+            logger.debug('bar signals: %s %s %s', enters, exits, exit_keys)
+        else:
+            return [], []
         ctx = get_context(pair_tf)
         pair, _, _, _ = get_cur_symbol(ctx)
         allow_enter = self.allow_pair(pair)
@@ -202,15 +206,15 @@ class OrderManager(metaclass=SingletonArg):
                 logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
         od.save()
 
-    def update_by_bar(self, pair_arr: np.ndarray):
+    def update_by_bar(self, row):
         op_orders = InOutOrder.open_orders()
         # 更新订单利润
         for od in op_orders:
-            od.update_by_bar(pair_arr)
+            od.update_by_bar(row)
         # 更新价格
         pair, base_s, quote_s, timeframe = get_cur_symbol()
         if quote_s.find('USD') >= 0:
-            self.prices[base_s] = float(pair_arr[-1, ccol])
+            self.prices[base_s] = float(row[ccol])
 
     def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, str]:
         result = dict()
@@ -293,6 +297,12 @@ class LocalOrderManager(OrderManager):
         super(LocalOrderManager, self).__init__(config, wallets, data_hd, callback)
         self.exchange = exchange
         self.network_cost = 3.  # 模拟网络延迟
+
+    def update_by_bar(self, row):
+        super(LocalOrderManager, self).update_by_bar(row)
+        if not self.live_mode:
+            pair, base_s, quote_s, timeframe = get_cur_symbol()
+            self.fill_pending_orders(pair, timeframe, row)
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
@@ -499,9 +509,9 @@ class LiveOrderManager(OrderManager):
     def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
         sub_od = od.enter if is_enter else od.exit
         cur_ts = data['timestamp']
-        if cur_ts < sub_od.last_ts:
+        if cur_ts < sub_od.update_at:
             return
-        sub_od.last_ts = cur_ts
+        sub_od.update_at = cur_ts
         order_status, fee, filled = data.get('status'), data.get('fee'), float(data.get('filled', 0))
         if filled > 0:
             filled_price = safe_value_fallback(data, 'average', 'price', sub_od.price)
@@ -575,10 +585,10 @@ class LiveOrderManager(OrderManager):
         if state == 'NEW':
             return
         cur_ts = info['E']
-        if cur_ts < od.last_ts:
+        if cur_ts < od.update_at:
             # 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
             return
-        od.last_ts = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
+        od.update_at = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
         if state in {'CANCELED', 'REJECTED', 'EXPIRED', 'EXPIRED_IN_MATCH'}:
             od.update_props(status=OrderStatus.Close)
         sess = db.session

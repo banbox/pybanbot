@@ -42,13 +42,11 @@ class Watcher:
 
     def _fire_callback(self, bar_arr, timeframe: str, tf_secs: int):
         for bar_row in bar_arr:
-            bar_end_ms = bar_row[0] + tf_secs * 1000
             if btime.run_mode not in btime.TRADING_MODES:
-                btime.cur_timestamp = bar_end_ms / 1000
+                btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
             self.callback(self.pair, timeframe, bar_row)
         if btime.run_mode in btime.TRADING_MODES:
-            bar_end_secs = bar_arr[-1][0] // 1000 + tf_secs
-            if bar_end_secs + tf_secs < btime.time():
+            bar_delay = btime.time() - bar_arr[-1][0] // 1000 + tf_secs
+            if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
-                delay = btime.time() - bar_end_secs
-                logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, delay)
+                logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, bar_delay)

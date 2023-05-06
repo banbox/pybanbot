@@ -82,7 +82,7 @@ class HistDataProvider(DataProvider):
                 bar_time = feeder.next_at
                 if bar_time >= time.time() * 1000:
                     break
-                btime.cur_timestamp = bar_time
+                btime.cur_timestamp = bar_time / 1000
                 feeder()
                 self._update_bar()
         except Exception:

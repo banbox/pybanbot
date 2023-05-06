@@ -17,6 +17,7 @@ class MACDCross(BaseStrategy):
     最近3个bar的2个是星线，或者大阳线，且处于下降趋势，则退场
     '''
     warmup_num = 600
+    version = 3
 
     def __init__(self, config: dict):
         super(MACDCross, self).__init__(config)

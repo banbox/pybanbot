@@ -7,6 +7,8 @@ from banbot.strategy.base import BaseStrategy
 from banbot.core.iresolver import *
 from banbot.util.common import logger
 from banbot.exchange.exchange_utils import tf_to_secs
+global strategy_map
+strategy_map: Optional[Dict[str, BaseStrategy]] = None
 
 
 class PTFJob:
@@ -59,15 +61,29 @@ class StrategyResolver(IResolver):
     def load_run_jobs(cls, config: dict, pairlist: List[str])\
             -> Dict[str, Tuple[int, Dict[str, Set[Type[BaseStrategy]]]]]:
         PTFJob.reset()
-        strategy_list = cls.load_object_list(config)
-        strategy_map = {item.__name__: item for item in strategy_list}
-        logger.info('found strategy: %s', list(strategy_map.keys()))
         timeframe = '1m'  # 默认周期1m，后期根据K线和策略自动计算
         for policy in config['run_policy']:
-            strategy_cls = strategy_map.get(policy['name'])
+            strategy_cls = get_strategy(policy['name'])
             if not strategy_cls:
                 raise RuntimeError(f'unknown Strategy: {policy["name"]}')
             for pair in pairlist:
                 # TODO: 这里可根据策略，自定义此交易对的交易维度
                 PTFJob.add(pair, timeframe, strategy_cls)
         return PTFJob.tojobs()
+
+
+def get_strategy(name: str) -> Optional[Type[BaseStrategy]]:
+    '''
+    根据策略名，返回策略的类对象。
+    如果未加载，则初始化加载所有可能的策略
+    '''
+    if not name:
+        return None
+    global strategy_map
+    if strategy_map is None:
+        from banbot.config import AppConfig
+        config = AppConfig.get()
+        strategy_list = StrategyResolver.load_object_list(config)
+        strategy_map = {item.__name__: item for item in strategy_list}
+        logger.info('found strategy: %s', list(strategy_map.keys()))
+    return strategy_map.get(name)

@@ -58,6 +58,8 @@ class TradeLock:
     @classmethod
     def unlock(cls, key: str, side: str = '*'):
         for lk_key in cls._get_keys(key, side):
+            if lk_key not in cls._locks:
+                continue
             cls._locks.pop(lk_key)
 
 
@@ -67,7 +69,7 @@ class Order(BaseDbModel):
     同一交易所下，symbol+order_id可唯一确定一个订单。
     '''
 
-    __tablename__ = 'order'
+    __tablename__ = 'exorder'
 
     __table_args__ = (
         sa.Index('idx_od_inout_id', 'inout_id'),
@@ -93,7 +95,8 @@ class Order(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
-        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, create_at=btime.time())
+        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0,
+                    create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
@@ -111,7 +114,7 @@ class InOutOrder(BaseDbModel):
     为避免过度复杂，不支持市价单按定价金额买入（需按基准产品数量买入）
     一个交易所的所有订单维护在一个OrderManager中
     '''
-    __tablename__ = 'inout_order'
+    __tablename__ = 'iorder'
 
     __table_args__ = (
         sa.Index('idx_io_task_id', 'task_id'),
@@ -132,12 +135,17 @@ class InOutOrder(BaseDbModel):
     enter_at = Column(sa.BIGINT)  # 13位时间戳，和bar的时间戳保持一致
     exit_at = Column(sa.BIGINT)  # 13位时间戳，和bar的时间戳保持一致
     strategy = Column(sa.String(20))
+    stg_ver = Column(sa.Integer, default=0)
     profit_rate = Column(sa.Float, default=0)
     profit = Column(sa.Float, default=0)
 
     @orm.reconstructor
     def __init__(self, **kwargs):
         data = dict(status=InOutStatus.Init, profit_rate=0, profit=0)
+        from banbot.strategy.resolver import get_strategy
+        stg = get_strategy(kwargs.get('strategy'))
+        if stg:
+            data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
         super(InOutOrder, self).__init__(**kwargs)
         self.quote_cost = kwargs.get('quote_cost')
@@ -156,10 +164,12 @@ class InOutOrder(BaseDbModel):
                 self.id = InOutOrder._next_id
                 InOutOrder._next_id += 1
             enter_kwargs = del_dict_prefix(kwargs, 'enter_')
-            self.enter: Order = Order(**enter_kwargs, enter=True, order_id=self.id)
+            enter_kwargs['inout_id'] = self.id
+            self.enter: Order = Order(**enter_kwargs, enter=True)
             self.exit: Optional[Order] = None
             if 'exit_amount' in kwargs:
                 exit_kwargs = del_dict_prefix(kwargs, 'exit_')
+                exit_kwargs['inout_id'] = self.id
                 self.exit = Order(**exit_kwargs)
             self.save()
 
@@ -213,17 +223,17 @@ class InOutOrder(BaseDbModel):
         else:
             self.exit.update_props(**kwargs)
 
-    def update_by_bar(self, arr: np.ndarray):
+    def update_by_bar(self, row):
         '''
         此方法由接口调用，策略中不应该调用此方法。
-        :param arr:
+        :param row:
         :return:
         '''
         if not self.status or self.status == InOutStatus.FullExit:
             return
         # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
-        self.profit = (arr[-1, ccol] - self.enter.price) * self.enter.amount
-        self.profit_rate = arr[-1, ccol] / self.enter.price - 1
+        self.profit = (row[ccol] - self.enter.price) * self.enter.amount
+        self.profit_rate = row[ccol] / self.enter.price - 1
 
     def _save_to_db(self):
         sess = db.session
