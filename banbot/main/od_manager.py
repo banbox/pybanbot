@@ -134,7 +134,7 @@ class OrderManager(metaclass=SingletonArg):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
-                logger.error('lock order exit timeout: %s', lock_od)
+                logger.error('lock order exit timeout: %s, exit bar: %d', lock_od, lock_od.elp_num_exit)
             return
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost, self.last_ts)
         if not quote_cost or not self.allow_pair(pair):
@@ -149,7 +149,6 @@ class OrderManager(metaclass=SingletonArg):
             enter_at=int(ctx[bar_arr][-1][0]),
             strategy=strategy
         )
-        od.save()
         if btime.run_mode in TRADING_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
         self._put_order(od, True)
@@ -304,9 +303,6 @@ class OrderManager(metaclass=SingletonArg):
         return od
 
     def _finish_order(self, od: InOutOrder):
-        od.enter.trades.clear()
-        if od.exit:
-            od.exit.trades.clear()
         fee_rate = od.enter.fee + od.exit.fee
         od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
         od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
@@ -315,9 +311,7 @@ class OrderManager(metaclass=SingletonArg):
             if limit_fee is not None and fee_rate > limit_fee * 2:
                 self.forbid_pairs.add(od.symbol)
                 logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
-        od.del_lock()
-        if self.live_mode:
-            db.session.commit()
+        od.save()
 
     def update_by_bar(self, pair_arr: np.ndarray):
         op_orders = InOutOrder.open_orders()

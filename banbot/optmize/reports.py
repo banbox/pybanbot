@@ -132,7 +132,7 @@ def text_day_profits(df: pd.DataFrame):
     from banbot.util import btime
     headers = ['Date', 'Count', 'TotProfit %', 'TotProfit', 'WinLossRate', 'Duration', 'EnterTags', 'ExitTags']
     records = []
-    df['date'] = df['enter_timestamp'].apply(lambda x: btime.to_datestr(x, fmt='%Y-%m-%d'))
+    df['date'] = df['enter_create_at'].apply(lambda x: btime.to_datestr(x, fmt='%Y-%m-%d'))
 
     def profile_record(result: pd.DataFrame, idx_val: str):
         profit_sum = result['profit'].sum()
@@ -181,20 +181,22 @@ def text_markets(market_map: Dict[str, Any], min_num: int = 10):
 def get_order_df() -> pd.DataFrame:
     from banbot.storage import InOutOrder
     from banbot.util.misc import add_dict_prefix
+    from banbot.exchange.exchange_utils import tf_to_secs
     his_orders = InOutOrder.his_orders()
     data_list = []
     for od in his_orders:
         item = od.dict()
-        if od.enter:
-            item.update(add_dict_prefix(od.enter.dict(), 'enter_'))
-        if od.exit:
-            item.update(add_dict_prefix(od.exit.dict(), 'exit_'))
+        tf_secs = tf_to_secs(od.timeframe)
+        item.update(add_dict_prefix(od.enter.dict(), 'enter_'))
+        item['enter_cost'] = od.enter.filled * od.enter.average
+        item.update(add_dict_prefix(od.exit.dict(), 'exit_'))
+        item['duration'] = round(od.exit.create_at - od.enter.create_at) // 1000 // tf_secs
+        data_list.append(item)
     return pd.DataFrame(data_list)
 
 
 def print_backtest(result: dict):
     order_df = get_order_df()
-    print('')
     if len(order_df):
         table = text_day_profits(order_df)
         if isinstance(table, str) and len(table) > 0:

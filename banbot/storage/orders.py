@@ -92,6 +92,12 @@ class Order(BaseDbModel):
     fee_type = Column(sa.String(10))
     update_at = Column(sa.BIGINT)  # 上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新
 
+    @orm.reconstructor
+    def __init__(self, **kwargs):
+        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, create_at=btime.time())
+        kwargs = {**data, **kwargs}
+        super(Order, self).__init__(**kwargs)
+
     async def lock(self):
         redis = AsyncRedis()
         return redis.lock(f'order_{self.id}', with_conn=True)
@@ -116,7 +122,6 @@ class InOutOrder(BaseDbModel):
     _open_ods: ClassVar[Dict[int, 'InOutOrder']] = dict()
     _his_ods: ClassVar[List['InOutOrder']] = []
     _next_id: ClassVar[int] = 1
-    _live_mode: ClassVar[bool] = btime.run_mode in btime.TRADING_MODES
 
     id = Column(sa.Integer, primary_key=True)
     task_id = Column(sa.Integer)
@@ -133,11 +138,14 @@ class InOutOrder(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
+        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0)
+        kwargs = {**data, **kwargs}
         super(InOutOrder, self).__init__(**kwargs)
-        # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
         self.quote_cost = kwargs.get('quote_cost')
+        # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
+        live_mode = btime.run_mode in btime.TRADING_MODES
         if self.id:
-            if self._live_mode:
+            if live_mode:
                 sess = db.session
                 rows = sess.query(Order).filter(Order.inout_id == self.id).all()
                 self.enter = next((r for r in rows if r.enter), None)
@@ -145,15 +153,16 @@ class InOutOrder(BaseDbModel):
             else:
                 raise RuntimeError('InOutOrder should not be init twice in backtest mode')
         else:
-            if not self._live_mode:
+            if not live_mode:
                 self.id = InOutOrder._next_id
                 InOutOrder._next_id += 1
             enter_kwargs = del_dict_prefix(kwargs, 'enter_')
-            self.enter: Order = Order(**enter_kwargs, enter=True)
+            self.enter: Order = Order(**enter_kwargs, enter=True, order_id=self.id)
             self.exit: Optional[Order] = None
             if 'exit_amount' in kwargs:
                 exit_kwargs = del_dict_prefix(kwargs, 'exit_')
                 self.exit = Order(**exit_kwargs)
+            self.save()
 
     @property
     def key(self):
@@ -195,7 +204,7 @@ class InOutOrder(BaseDbModel):
         if not self.exit:
             kwargs.update(dict(
                 symbol=self.enter.symbol,
-                inout_key=self.enter.inout_key,
+                inout_id=self.enter.inout_id,
                 side='sell' if self.enter.side == 'buy' else 'buy',
             ))
             if not kwargs.get('amount'):
@@ -217,28 +226,44 @@ class InOutOrder(BaseDbModel):
         self.profit = (arr[-1, ccol] - self.enter.price) * self.enter.amount
         self.profit_rate = arr[-1, ccol] / self.enter.price - 1
 
-    def save(self):
-        if not self._live_mode:
-            TradeLock.lock(self.key, self.id)
-            return
+    def _save_to_db(self):
         sess = db.session
-        if not self.id:
-            sess.add(self)
-            sess.flush()
-        TradeLock.lock(self.key, self.id)
-        if self.enter and not self.enter.id:
-            if not self.enter.inout_id:
-                self.enter.inout_id = self.id
-            sess.add(self.enter)
-        if self.exit and not self.exit.id:
-            if not self.exit.inout_id:
-                self.exit.inout_id = self.id
-            sess.add(self.exit)
+        if self.status < InOutStatus.FullExit:
+            if not self.id:
+                sess.add(self)
+                sess.flush()
+            TradeLock.lock(self.key, self.id)
+            if self.enter and not self.enter.id:
+                if not self.enter.inout_id:
+                    self.enter.inout_id = self.id
+                sess.add(self.enter)
+            if self.exit and not self.exit.id:
+                if not self.exit.inout_id:
+                    self.exit.inout_id = self.id
+                sess.add(self.exit)
+        else:
+            TradeLock.unlock(self.key)
         sess.commit()
+
+    def _save_to_mem(self):
+        if self.status < InOutStatus.FullExit:
+            TradeLock.lock(self.key, self.id)
+            self._open_ods[self.id] = self
+        else:
+            TradeLock.unlock(self.key)
+            if self.id in self._open_ods:
+                self._open_ods.pop(self.id)
+            self._his_ods.append(self)
+
+    def save(self):
+        if btime.run_mode not in btime.TRADING_MODES:
+            self._save_to_mem()
+        else:
+            self._save_to_db()
 
     @classmethod
     def get_orders(cls, strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
-        if cls._live_mode:
+        if btime.run_mode in btime.TRADING_MODES:
             return get_db_orders(strategy, pair, status)
         else:
             if status == 'his':
@@ -274,9 +299,6 @@ class InOutOrder(BaseDbModel):
         if op_od is not None:
             return op_od
         return next((od for od in cls._his_ods if od.id == od_id), None)
-
-    def del_lock(self):
-        TradeLock.unlock(self.key)
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'

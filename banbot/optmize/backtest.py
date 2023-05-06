@@ -76,6 +76,7 @@ class BackTest(Trader):
         # 轮训数据
         with db():
             self.data_mgr.loop_main()
+            print('')
             logger.info('backtest complete')
             # 关闭未完成订单
             self.cleanup()
