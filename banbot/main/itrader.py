@@ -41,7 +41,6 @@ class Trader:
 
     def on_data_feed(self, pair, timeframe, row: list):
         logger.debug('data_feed %s %s %s', pair, timeframe, row)
-        row = np.array(row)
         pair_tf = f'{pair}/{timeframe}'
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单

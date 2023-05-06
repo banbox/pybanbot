@@ -4,11 +4,10 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 
-from datetime import datetime
 from banbot.compute.tainds import *
 from banbot.util.misc import del_dict_prefix
 from banbot.storage.base import *
-from banbot.util.redis_helper import AsyncRedis, SyncRedis
+from banbot.util.redis_helper import AsyncRedis
 from banbot.exchange.exchange_utils import tf_to_secs
 from typing import *
 
@@ -294,11 +293,16 @@ class InOutOrder(BaseDbModel):
 
     @classmethod
     def get(cls, od_id: int):
-        # return db.session.query(InOutOrder).get(od_id)
+        if btime.run_mode in btime.TRADING_MODES:
+            return db.session.query(InOutOrder).get(od_id)
         op_od = cls._open_ods.get(od_id)
         if op_od is not None:
             return op_od
         return next((od for od in cls._his_ods if od.id == od_id), None)
+
+    @classmethod
+    def dump_to_db(cls):
+        insert_orders_to_db(cls._his_ods + list(cls._open_ods.values()))
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'
@@ -324,3 +328,23 @@ def get_db_orders(strategy: str = None, pair: str = None, status: str = None) ->
     if pair:
         where_list.append(InOutOrder.symbol == pair)
     return sess.query(InOutOrder).filter(*where_list).all()
+
+
+def insert_orders_to_db(orders: List[InOutOrder]):
+    from banbot.storage import BotTask
+    sess = db.session
+    for od in orders:
+        od.id = None
+        od.task_id = BotTask.cur_id
+        sess.add(od)
+    sess.flush()
+    for od in orders:
+        if od.enter:
+            od.enter.inout_id = od.id
+            sess.add(od.enter)
+        if od.exit:
+            od.exit.inout_id = od.id
+            sess.add(od.exit)
+    sess.flush()
+    sess.commit()
+

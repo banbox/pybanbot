@@ -92,11 +92,7 @@ class LiveTrader(Trader):
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
-        with db():
-            exit_ods = self.order_mgr.exit_open_orders('force_exit', 0)
-            if exit_ods:
-                logger.info('exit %d open trades', len(exit_ods))
-        await self.order_mgr.order_q.join()
+        await self.order_mgr.cleanup()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,
             status='Bot stopped'

@@ -3,8 +3,6 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
-import asyncio
-
 from collections import OrderedDict
 from asyncio import Queue
 
@@ -37,15 +35,12 @@ class OrderBook():
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider,
-                 callback: Callable):
+    def __init__(self, config: dict, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
         self.config = config
-        self.name = exchange.name
-        self.exchange = exchange
+        self.name = data_hd.exg_name
         self.wallets = wallets
         self.data_mgr = data_hd
         self.prices = dict()  # 所有产品对法币的价格
-        self.network_cost = 3.  # 模拟网络延迟
         self.callback = callback
         self.fatal_stop = dict()
         self.last_ts = btime.time()  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
@@ -156,112 +151,6 @@ class OrderManager(metaclass=SingletonArg):
 
     def _put_order(self, od: InOutOrder, is_enter: bool):
         pass
-
-    def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
-        enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        if not od.enter.amount:
-            od.enter.amount = od.quote_cost / enter_price
-        quote_amount = enter_price * od.enter.amount
-        ctx = get_context(f'{od.symbol}/{od.timeframe}')
-        _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        fees = self.exchange.calc_funding_fee(od.enter)
-        if fees['rate']:
-            od.enter.fee = fees['rate']
-            od.enter.fee_type = fees['currency']
-        base_amt = od.enter.amount * (1 - od.enter.fee)
-        self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
-        self.last_ts = btime.time()
-        od.status = InOutStatus.FullEnter
-        od.enter_at = int(ctx[bar_arr][-1][0])
-        od.enter.filled = od.enter.amount
-        od.enter.average = enter_price
-        od.enter.status = OrderStatus.Close
-        if not od.enter.price:
-            od.enter.price = enter_price
-        self._fire(od, True)
-
-    def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
-        exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        quote_amount = exit_price * od.exit.amount
-        fees = self.exchange.calc_funding_fee(od.exit)
-        if fees['rate']:
-            od.exit.fee = fees['rate']
-            od.exit.fee_type = fees['currency']
-        ctx = get_context(f'{od.symbol}/{od.timeframe}')
-        pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        quote_amt = quote_amount * (1 - od.exit.fee)
-        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
-        self.last_ts = btime.time()
-        od.status = InOutStatus.FullExit
-        od.exit_at = int(ctx[bar_arr][-1][0])
-        od.update_exit(
-            status=OrderStatus.Close,
-            price=exit_price,
-            filled=od.exit.amount,
-            average=exit_price,
-        )
-        self._finish_order(od)
-        self._fire(od, False)
-
-    def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
-        '''
-        计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
-        阳线和阴线对应不同的模拟方法。
-        阳线一般是先略微下调，再上冲到最高点，最后略微回调出现上影线。
-        阴线一般是先略微上调，再下跌到最低点，最后略微回调出现下影线。
-        :return:
-        '''
-        rate = min(1., self.network_cost / tf_to_secs(timeframe))
-        if candle is None:
-            candle = self.data_mgr.get_latest_ohlcv(pair)
-        open_p, high_p, low_p, close_p = candle[ocol: vcol]
-        if open_p <= close_p:
-            # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
-            a, b, c = open_p - low_p, high_p - low_p, high_p - close_p
-            total_len = a + b + c
-            if not total_len:
-                return close_p
-            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
-            if rate <= a_end_rate:
-                start, end, pos_rate = open_p, low_p, rate / a_end_rate
-            elif rate <= b_end_rate:
-                start, end, pos_rate = low_p, high_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
-            else:
-                start, end, pos_rate = high_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
-        else:
-            # 阴线，一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
-            a, b, c = high_p - open_p, high_p - low_p, close_p - low_p
-            total_len = a + b + c
-            if not total_len:
-                return close_p
-            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
-            if rate <= a_end_rate:
-                start, end, pos_rate = open_p, high_p, rate / a_end_rate
-            elif rate <= b_end_rate:
-                start, end, pos_rate = high_p, low_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
-            else:
-                start, end, pos_rate = low_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
-        return start * (1 - pos_rate) + end * pos_rate
-
-    def fill_pending_orders(self, symbol: str = None, timeframe: str = None, candle: Optional[np.ndarray] = None):
-        '''
-        填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
-        此方法内部会访问锁：ctx_lock，请勿在TempContext中调用此方法
-        :param symbol:
-        :param timeframe:
-        :param candle:
-        :return:
-        '''
-        if btime.run_mode == btime.RunMode.LIVE:
-            raise RuntimeError('fill_pending_orders unavaiable in LIVE mode')
-        op_orders = InOutOrder.open_orders()
-        for od in op_orders:
-            if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
-                continue
-            if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
-                self._fill_pending_exit(candle, od)
-            elif od.enter.status != OrderStatus.Close:
-                self._fill_pending_enter(candle, od)
 
     def exit_open_orders(self, exit_tag: str, price: float, strategy: str = None,
                                pair: str = None) -> List[InOutOrder]:
@@ -394,11 +283,133 @@ class OrderManager(metaclass=SingletonArg):
                 result += self._get_legal_value(key)
             return result
 
+    def cleanup(self):
+        pass
+
+
+class LocalOrderManager(OrderManager):
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider,
+                 callback: Callable):
+        super(LocalOrderManager, self).__init__(config, wallets, data_hd, callback)
+        self.exchange = exchange
+        self.network_cost = 3.  # 模拟网络延迟
+
+    def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
+        enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
+        if not od.enter.amount:
+            od.enter.amount = od.quote_cost / enter_price
+        quote_amount = enter_price * od.enter.amount
+        ctx = get_context(f'{od.symbol}/{od.timeframe}')
+        _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        fees = self.exchange.calc_funding_fee(od.enter)
+        if fees['rate']:
+            od.enter.fee = fees['rate']
+            od.enter.fee_type = fees['currency']
+        base_amt = od.enter.amount * (1 - od.enter.fee)
+        self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
+        self.last_ts = btime.time()
+        od.status = InOutStatus.FullEnter
+        od.enter_at = int(ctx[bar_arr][-1][0])
+        od.enter.filled = od.enter.amount
+        od.enter.average = enter_price
+        od.enter.status = OrderStatus.Close
+        if not od.enter.price:
+            od.enter.price = enter_price
+        self._fire(od, True)
+
+    def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
+        exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
+        quote_amount = exit_price * od.exit.amount
+        fees = self.exchange.calc_funding_fee(od.exit)
+        if fees['rate']:
+            od.exit.fee = fees['rate']
+            od.exit.fee_type = fees['currency']
+        ctx = get_context(f'{od.symbol}/{od.timeframe}')
+        pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        quote_amt = quote_amount * (1 - od.exit.fee)
+        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
+        self.last_ts = btime.time()
+        od.status = InOutStatus.FullExit
+        od.exit_at = int(ctx[bar_arr][-1][0])
+        od.update_exit(
+            status=OrderStatus.Close,
+            price=exit_price,
+            filled=od.exit.amount,
+            average=exit_price,
+        )
+        self._finish_order(od)
+        self._fire(od, False)
+
+    def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
+        '''
+        计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
+        阳线和阴线对应不同的模拟方法。
+        阳线一般是先略微下调，再上冲到最高点，最后略微回调出现上影线。
+        阴线一般是先略微上调，再下跌到最低点，最后略微回调出现下影线。
+        :return:
+        '''
+        rate = min(1., self.network_cost / tf_to_secs(timeframe))
+        if candle is None:
+            candle = self.data_mgr.get_latest_ohlcv(pair)
+        open_p, high_p, low_p, close_p = candle[ocol: vcol]
+        if open_p <= close_p:
+            # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
+            a, b, c = open_p - low_p, high_p - low_p, high_p - close_p
+            total_len = a + b + c
+            if not total_len:
+                return close_p
+            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
+            if rate <= a_end_rate:
+                start, end, pos_rate = open_p, low_p, rate / a_end_rate
+            elif rate <= b_end_rate:
+                start, end, pos_rate = low_p, high_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
+            else:
+                start, end, pos_rate = high_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
+        else:
+            # 阴线，一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
+            a, b, c = high_p - open_p, high_p - low_p, close_p - low_p
+            total_len = a + b + c
+            if not total_len:
+                return close_p
+            a_end_rate, b_end_rate = a / total_len, (a + b) / total_len
+            if rate <= a_end_rate:
+                start, end, pos_rate = open_p, high_p, rate / a_end_rate
+            elif rate <= b_end_rate:
+                start, end, pos_rate = high_p, low_p, (rate - a_end_rate) / (b_end_rate - a_end_rate)
+            else:
+                start, end, pos_rate = low_p, close_p, (rate - b_end_rate) / (1 - b_end_rate)
+        return start * (1 - pos_rate) + end * pos_rate
+
+    def fill_pending_orders(self, symbol: str = None, timeframe: str = None, candle: Optional[np.ndarray] = None):
+        '''
+        填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
+        此方法内部会访问锁：ctx_lock，请勿在TempContext中调用此方法
+        :param symbol:
+        :param timeframe:
+        :param candle:
+        :return:
+        '''
+        if btime.run_mode == btime.RunMode.LIVE:
+            raise RuntimeError('fill_pending_orders unavaiable in LIVE mode')
+        op_orders = InOutOrder.open_orders()
+        for od in op_orders:
+            if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
+                continue
+            if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
+                self._fill_pending_exit(candle, od)
+            elif od.enter.status != OrderStatus.Close:
+                self._fill_pending_enter(candle, od)
+
+    def cleanup(self):
+        self.exit_open_orders('force_exit', 0)
+        self.fill_pending_orders()
+        InOutOrder.dump_to_db()
+
 
 class LiveOrderManager(OrderManager):
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
                  callback: Callable):
-        super(LiveOrderManager, self).__init__(config, exchange, wallets, data_hd, callback)
+        super(LiveOrderManager, self).__init__(config, wallets, data_hd, callback)
         self.exchange = exchange
         self.exg_orders: Dict[str, Order] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
@@ -732,3 +743,10 @@ class LiveOrderManager(OrderManager):
                         res = await self.exchange.edit_limit_order(od.enter.order_id, od.symbol, od.enter.side,
                                                                    left_amount, buy_price)
                         await self._update_subod_by_ccxtres(od, True, res)
+
+    async def cleanup(self):
+        with db():
+            exit_ods = self.exit_open_orders('force_exit', 0)
+            if exit_ods:
+                logger.info('exit %d open trades', len(exit_ods))
+        await self.order_q.join()

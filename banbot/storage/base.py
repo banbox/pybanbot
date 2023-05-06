@@ -81,6 +81,13 @@ class DBSessionMeta(type):
 
 
 class DBSession(metaclass=DBSessionMeta):
+    _sess = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._sess:
+            cls._sess = super().__new__(cls, *args, **kwargs)
+        return cls._sess
+
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
         self.token = None
         self.session_args = session_args or {}
@@ -88,6 +95,7 @@ class DBSession(metaclass=DBSessionMeta):
 
     def __enter__(self):
         self.token = _db_sess.set(_DbSession(**self.session_args))
+        DBSession._sess = self
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -100,6 +108,7 @@ class DBSession(metaclass=DBSessionMeta):
 
         sess.close()
         _db_sess.reset(self.token)
+        DBSession._sess = None
 
 
 db: DBSessionMeta = DBSession

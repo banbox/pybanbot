@@ -8,7 +8,7 @@ from banbot.util.common import logger
 from banbot.util import btime
 
 
-def append_new_bar(row: np.ndarray, tf_secs: int) -> np.ndarray:
+def append_new_bar(row, tf_secs: int) -> np.ndarray:
     result = bar_arr.get()
     copen, chigh, clow, close = row[ocol:vcol]
     dust = min(0.00001, max(close, 0.001) * 0.0001)

@@ -19,7 +19,7 @@ class BackTest(Trader):
         self.exchange = get_exchange()
         self.data_mgr = DBDataProvider(config, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange)
-        self.order_mgr = OrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
+        self.order_mgr = LocalOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
@@ -42,7 +42,6 @@ class BackTest(Trader):
             self.result['date_from'] = btime.to_datestr(row[0])
             self.result['ts_from'] = row[0]
             self.first_data = False
-            logger.info('backtest started')
         else:
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
@@ -75,11 +74,13 @@ class BackTest(Trader):
         await self.init()
         # 轮训数据
         with db():
+            bt_start = time.monotonic()
             self.data_mgr.loop_main()
+            bt_cost = time.monotonic() - bt_start
             print('')
-            logger.info('backtest complete')
+            logger.info(f'Complete! cost: {bt_cost:.3f}s, avg: {self.bar_count / bt_cost:.1f} bar/s')
             # 关闭未完成订单
-            self.cleanup()
+            self.order_mgr.cleanup()
             self._calc_result_done()
 
             print_backtest(self.result)
@@ -138,7 +139,4 @@ class BackTest(Trader):
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
         self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
-    def cleanup(self):
-        self.order_mgr.exit_open_orders('force_exit', 0)
-        self.order_mgr.fill_pending_orders()
 
