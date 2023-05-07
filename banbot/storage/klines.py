@@ -236,6 +236,7 @@ order by time'''
             cur_end_dt = btime.to_datetime(cur_end_ms)
             stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', '{start_dt}', '{cur_end_dt}');"
             conn.execute(sa.text(stmt))
+        conn.commit()
         conn.execution_options(isolation_level=bak_iso_level)
 
     @classmethod

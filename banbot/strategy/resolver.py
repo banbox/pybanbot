@@ -7,6 +7,7 @@ from banbot.strategy.base import BaseStrategy
 from banbot.core.iresolver import *
 from banbot.util.common import logger
 from banbot.exchange.exchange_utils import tf_to_secs
+from banbot.storage.common import BotGlobal
 global strategy_map
 strategy_map: Optional[Dict[str, BaseStrategy]] = None
 
@@ -49,6 +50,24 @@ class PTFJob:
             results[pair] = cls.pair_warms[pair], tf_dic
         return results
 
+    @classmethod
+    def strategy_hash(cls):
+        '''
+        计算此次机器人涉及的所有策略及其版本的哈希值。
+        用于确保策略修改后创建一个新的任务；策略未修改则使用和上次一样的任务
+        '''
+        import hashlib
+        stg_ver = dict()
+        for pair, tf_map in cls.pairs.items():
+            for tf, stg_list in tf_map.items():
+                for stg in stg_list:
+                    stg_ver[stg.__name__] = str(stg.version)
+        items = [f'{name}:{ver}' for name, ver in stg_ver.items()]
+        stg_text = '|'.join(sorted(items))
+        md5 = hashlib.md5()
+        md5.update(stg_text.encode())
+        return str(md5.hexdigest())
+
 
 class StrategyResolver(IResolver):
 
@@ -69,6 +88,8 @@ class StrategyResolver(IResolver):
             for pair in pairlist:
                 # TODO: 这里可根据策略，自定义此交易对的交易维度
                 PTFJob.add(pair, timeframe, strategy_cls)
+        # 记录此次任务的策略哈希值。
+        BotGlobal.stg_hash = PTFJob.strategy_hash()
         return PTFJob.tojobs()
 
 

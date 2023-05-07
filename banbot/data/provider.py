@@ -4,12 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/3/28
 import six
-import time
 
 from banbot.data.feeder import *
 from banbot.config import *
 from banbot.util.common import logger
 from banbot.storage.common import *
+from banbot.storage import *
 from tqdm import tqdm
 
 
@@ -77,6 +77,8 @@ class HistDataProvider(DataProvider):
 
     def loop_main(self):
         try:
+            feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
+            BotTask.init(feeder.next_at / 1000)
             while BotGlobal.state == BotState.RUNNING:
                 feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
                 bar_time = feeder.next_at

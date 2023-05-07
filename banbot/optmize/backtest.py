@@ -60,7 +60,6 @@ class BackTest(Trader):
         await self.pair_mgr.refresh_pairlist()
         pair_tfs = self._load_strategies(self.pair_mgr.symbols)
         with db():
-            BotTask.init()
             self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id
         for pair in self.pair_mgr.symbols:

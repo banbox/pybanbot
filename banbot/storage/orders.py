@@ -72,11 +72,13 @@ class Order(BaseDbModel):
     __tablename__ = 'exorder'
 
     __table_args__ = (
+        sa.Index('idx_od_task_id', 'task_id'),
         sa.Index('idx_od_inout_id', 'inout_id'),
         sa.Index('idx_od_status', 'status'),
     )
 
     id = Column(sa.Integer, primary_key=True)
+    task_id = Column(sa.Integer)
     inout_id = Column(sa.Integer)
     symbol = Column(sa.String(50))
     enter = Column(sa.Boolean, default=False)
@@ -95,7 +97,8 @@ class Order(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
-        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0,
+        from banbot.storage import BotTask
+        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
                     create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
@@ -141,7 +144,8 @@ class InOutOrder(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
-        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0)
+        from banbot.storage import BotTask
+        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id)
         from banbot.strategy.resolver import get_strategy
         stg = get_strategy(kwargs.get('strategy'))
         if stg:
@@ -341,11 +345,9 @@ def get_db_orders(strategy: str = None, pair: str = None, status: str = None) ->
 
 
 def insert_orders_to_db(orders: List[InOutOrder]):
-    from banbot.storage import BotTask
     sess = db.session
     for od in orders:
         od.id = None
-        od.task_id = BotTask.cur_id
         sess.add(od)
     sess.flush()
     for od in orders:
