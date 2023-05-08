@@ -145,7 +145,7 @@ class OrderManager(metaclass=SingletonArg):
             quote_cost=quote_cost,
             enter_price=price,
             enter_tag=tag,
-            enter_at=int(ctx[bar_arr][-1][0]),
+            enter_at=btime.time_ms(),
             strategy=strategy
         )
         if btime.run_mode in TRADING_MODES:
@@ -177,7 +177,7 @@ class OrderManager(metaclass=SingletonArg):
         if od.exit_tag:
             return
         od.exit_tag = exit_tag
-        od.exit_at = int(ctx[bar_arr][-1][0])
+        od.exit_at = btime.time_ms()
         _, base_s, quote_s, _ = get_cur_symbol(ctx)
         candle = self.data_mgr.get_latest_ohlcv(od.symbol)
         hprice, lprice, cprice = candle[hcol: vcol]
@@ -317,9 +317,10 @@ class LocalOrderManager(OrderManager):
             od.enter.fee_type = fees['currency']
         base_amt = od.enter.amount * (1 - od.enter.fee)
         self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
-        self.last_ts = btime.time()
+        update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
+        self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
-        od.enter_at = int(ctx[bar_arr][-1][0])
+        od.enter.update_at = update_time
         od.enter.filled = od.enter.amount
         od.enter.average = enter_price
         od.enter.status = OrderStatus.Close
@@ -338,9 +339,10 @@ class LocalOrderManager(OrderManager):
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
         quote_amt = quote_amount * (1 - od.exit.fee)
         self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
-        self.last_ts = btime.time()
+        update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
+        self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
-        od.exit_at = int(ctx[bar_arr][-1][0])
+        od.exit.update_at = update_time
         od.update_exit(
             status=OrderStatus.Close,
             price=exit_price,

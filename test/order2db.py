@@ -57,11 +57,13 @@ def convert():
             update_task(item, ver)
             item['strategy'] = item['key'].split('_')[-1]
             item['stg_ver'] = ver
-            item['enter_create_at'] = item['enter_timestamp']
-            item['enter_update_at'] = item['enter_timestamp']
+            item['enter_create_at'] = item['enter_timestamp'] * 1000
+            item['enter_update_at'] = item['enter_timestamp'] * 1000
+            item['enter_at'] = item['enter_create_at']
             ext_at = item.get('exit_timestamp') or (item['enter_timestamp'] + 1)
-            item['exit_create_at'] = ext_at
-            item['exit_update_at'] = ext_at
+            item['exit_create_at'] = ext_at * 1000
+            item['exit_update_at'] = ext_at * 1000
+            item['exit_at'] = item['exit_create_at']
             od = InOutOrder(**item)
             sess.add(od)
             sess.flush()

@@ -135,8 +135,8 @@ class InOutOrder(BaseDbModel):
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
     enter_tag = Column(sa.String(30))
     exit_tag = Column(sa.String(30))
-    enter_at = Column(sa.BIGINT)  # 13位时间戳，和bar的时间戳保持一致
-    exit_at = Column(sa.BIGINT)  # 13位时间戳，和bar的时间戳保持一致
+    enter_at = Column(sa.BIGINT)  # 13位时间戳，策略决定入场时间戳
+    exit_at = Column(sa.BIGINT)  # 13位时间戳，策略决定出场时间戳
     strategy = Column(sa.String(20))
     stg_ver = Column(sa.Integer, default=0)
     profit_rate = Column(sa.Float, default=0)

@@ -65,4 +65,6 @@ AVAILABLE_CLI_OPTIONS = {
     "force": Arg('--force', help='force action', action='store_true', default=False),
     "medium": Arg('--medium', help='data medium:db,file', default='db'),
     "no_db": Arg('--no_db', help='not auto load db', action='store_true', default=False),
+    "task_hash": Arg('--task_hash', help='stg_hash for tasks'),
+    "task_id": Arg('--task_id', help='task ids', type=int, nargs='+'),
 }

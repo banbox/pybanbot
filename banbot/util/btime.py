@@ -30,6 +30,10 @@ def time():
     return cur_timestamp
 
 
+def time_ms() -> int:
+    return int(time() * 1000)
+
+
 def now():
     if run_mode in TRADING_MODES:
         return datetime.datetime.now()
