@@ -124,8 +124,8 @@ class HistDataFeeder(DataFeeder):
 
 class FileDataFeeder(HistDataFeeder):
 
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, data_dir: str, auto_prefire=False,
-                 timerange: Optional[TimeRange] = None):
+    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, data_dir: str,
+                 auto_prefire=False, timerange: Optional[TimeRange] = None):
         super(FileDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
         self.data_dir = data_dir
         self.min_tfsecs = self.states[0].tf_secs
@@ -217,7 +217,7 @@ class DBDataFeeder(HistDataFeeder):
         max_end_ms = 0
         for tf in timeframes:
             tf_secs = tf_to_secs(tf)
-            ohlcv_arr = KLine.query(self.exg_name, self.pair, tf, start_ms, end_ms, 90000)
+            ohlcv_arr = KLine.query(self.exg_name, self.pair, tf, start_ms, end_ms)
             if not ohlcv_arr:
                 continue
             for row in ohlcv_arr:

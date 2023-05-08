@@ -98,8 +98,12 @@ class Order(BaseDbModel):
     @orm.reconstructor
     def __init__(self, **kwargs):
         from banbot.storage import BotTask
-        data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
-                    create_at=btime.time(), update_at=btime.time())
+        if self.order_type:
+            # 从数据库读取映射对象。这里不用设置，否则会覆盖数据库的值
+            data = dict()
+        else:
+            data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
+                        create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
@@ -144,38 +148,34 @@ class InOutOrder(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
+        if self.id:
+            # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
+            super(InOutOrder, self).__init__(**kwargs)
+            return
+        # 仅针对新创建的订单执行下面初始化
         from banbot.storage import BotTask
-        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id)
         from banbot.strategy.resolver import get_strategy
+        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id)
         stg = get_strategy(kwargs.get('strategy'))
         if stg:
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
         super(InOutOrder, self).__init__(**kwargs)
-        self.quote_cost = kwargs.get('quote_cost')
         # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
+        self.quote_cost = kwargs.get('quote_cost')
         live_mode = btime.run_mode in btime.TRADING_MODES
-        if self.id:
-            if live_mode:
-                sess = db.session
-                rows = sess.query(Order).filter(Order.inout_id == self.id).all()
-                self.enter = next((r for r in rows if r.enter), None)
-                sess.exit = next((r for r in rows if not r.enter), None)
-            else:
-                raise RuntimeError('InOutOrder should not be init twice in backtest mode')
-        else:
-            if not live_mode:
-                self.id = InOutOrder._next_id
-                InOutOrder._next_id += 1
-            enter_kwargs = del_dict_prefix(kwargs, 'enter_')
-            enter_kwargs['inout_id'] = self.id
-            self.enter: Order = Order(**enter_kwargs, enter=True)
-            self.exit: Optional[Order] = None
-            if 'exit_amount' in kwargs:
-                exit_kwargs = del_dict_prefix(kwargs, 'exit_')
-                exit_kwargs['inout_id'] = self.id
-                self.exit = Order(**exit_kwargs)
-            self.save()
+        if not live_mode:
+            self.id = InOutOrder._next_id
+            InOutOrder._next_id += 1
+        enter_kwargs = del_dict_prefix(kwargs, 'enter_')
+        enter_kwargs['inout_id'] = self.id
+        self.enter: Order = Order(**enter_kwargs, enter=True)
+        self.exit: Optional[Order] = None
+        if 'exit_amount' in kwargs:
+            exit_kwargs = del_dict_prefix(kwargs, 'exit_')
+            exit_kwargs['inout_id'] = self.id
+            self.exit = Order(**exit_kwargs)
+        self.save()
 
     @property
     def key(self):

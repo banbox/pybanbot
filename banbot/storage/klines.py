@@ -130,11 +130,13 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
 
     @classmethod
     def query(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
-              limit: int = 3000):
+              limit: Optional[int] = None):
         tf_secs = tf_to_secs(timeframe)
-        limit_end_ms = start_ms + tf_secs * limit * 1000
-        max_end_ms = end_ms or btime.time() * 1000
-        end_ms = min(limit_end_ms, max_end_ms)
+        max_end_ms = end_ms
+        if limit:
+            limit_end_ms = start_ms + tf_secs * limit * 1000
+            max_end_ms = end_ms or btime.time() * 1000
+            end_ms = min(limit_end_ms, max_end_ms)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
 

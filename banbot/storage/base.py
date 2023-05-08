@@ -40,7 +40,7 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         logger.warning(f'slow database query found, cost {total:.3f}, {statement}, {parameters}')
 
 
-def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
+def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None):
     '''
     初始化数据库客户端（并未连接到数据库）
     传入的参数将针对所有连接生效。
@@ -51,7 +51,11 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None):
     global _db_engine, _DbSession
     if _db_engine is not None:
         return _db_engine
-    db_cfg = AppConfig.get()['database']
+    try:
+        db_cfg = AppConfig.get()['database']
+    except Exception:
+        assert db_url, '`db_url` is required if config not avaiable'
+        db_cfg = dict(url=db_url)
     db_url = db_cfg['url']
     pool_size = db_cfg.get('pool_size', 30) if btime.run_mode in btime.TRADING_MODES else 3
     max_psize = pool_size * 2

@@ -3,3 +3,5 @@
 # File  : __init__.py.py
 # Author: anyongjin
 # Date  : 2023/2/28
+
+KCols = ['date', 'open', 'high', 'low', 'close', 'volume']

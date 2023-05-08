@@ -3,6 +3,8 @@
 # File  : plot.py
 # Author: anyongjin
 # Date  : 2023/2/21
+import asyncio
+
 import numpy as np
 import pandas as pd
 import six
@@ -21,35 +23,36 @@ def _make_yrange(col):
     return get_xrange
 
 
-def _add_mark(fig, df: pd.DataFrame, mids, mtags, y_vals, marker=None, row=1):
-    x_labels = df['date']
-    # mids是来自bar_num，基于1开始的索引
-    mids = (np.array(mids) - 1).tolist()
-    m_set = set(df.index.intersection(mids))
-    m_id_p = [(i, v) for i, v in enumerate(mids) if v in m_set]
+def _add_mark(fig, ts_col: pd.Series, time_ms: List[int], mtags: List[str], y_vals, marker=None, row=1):
+    # time_ms是对应的bar的UTC时间
+    min_ts, max_ts = ts_col.min(), ts_col.max()
+    m_id_p = [(i, v) for i, v in enumerate(time_ms) if min_ts <= v <= max_ts]
+    m_loc = []
     if m_id_p:
         m_loc, m_id = list(zip(*m_id_p))
-        m_tag = [mtags[i] for i, v in enumerate(mids) if v in m_set]
-        mark_x, mark_y = x_labels.loc[list(m_id)], np.array(y_vals)[list(m_loc)]
+        m_tag = list(map(lambda x: mtags[x], m_loc))
+        mark_x, mark_y = list(m_id), np.array(y_vals)[list(m_loc)]
         ind = go.Scatter(x=mark_x, y=mark_y, mode='markers+text', text=m_tag, marker=marker)
         trade_args = dict()
         if row == 1:
             trade_args = dict(secondary_y=True)
         fig.add_trace(ind, row=row, col=1, **trade_args)
-        return m_loc, m_id_p
-    return [], m_id_p
+    return m_loc, m_id_p
 
 
 def _add_order_ind(fig, df: pd.DataFrame, ind: dict):
-    x_labels = df['date']
     # 显示订单入场和退出；当前列是入场信号列，
-    enter_id, enter_tag, enter_price = ind['enter_id'], ind['enter_tag'], ind['enter_price']
-    exit_id, exit_tag, exit_price = ind['exit_id'], ind['exit_tag'], ind['exit_price']
+    date_col = df['date']
+    assert str(date_col.dtype.name).find('datetime') >= 0, '`date` col must be type: datetime'
+    enter_at, enter_tag, enter_price = ind['enter_at'], ind['enter_tag'], ind['enter_price']
+    exit_at, exit_tag, exit_price = ind['exit_at'], ind['exit_tag'], ind['exit_price']
     enter_price = np.array(enter_price)
     exit_price = np.array(exit_price)
 
-    in_loc, in_id_p = _add_mark(fig, df, enter_id, enter_tag, enter_price, dict(color='green'))
-    out_loc, out_id_p = _add_mark(fig, df, exit_id, exit_tag, exit_price, dict(color='blue'))
+    ent_color = ind.get('enter_color') or 'green'
+    exit_color = ind.get('exit_color') or 'blue'
+    in_loc, in_id_p = _add_mark(fig, date_col, enter_at, enter_tag, enter_price, dict(color=ent_color))
+    out_loc, out_id_p = _add_mark(fig, date_col, exit_at, exit_tag, exit_price, dict(color=exit_color))
 
     # 计算可绘制的线段
     line_ids = set(in_loc).intersection(out_loc)
@@ -59,11 +62,12 @@ def _add_order_ind(fig, df: pd.DataFrame, ind: dict):
         # line_loc在in_id_p和out_id_p中应该完全相同
         line_loc, lin_id = list(zip(*lin_id_p))
         line_loc, lin_id = list(line_loc), list(lin_id)
-        start_x, start_y = x_labels.loc[lin_id], enter_price[line_loc]
-        end_x, end_y = x_labels.loc[lout_id], exit_price[line_loc]
-        line_args = dict(mode='lines', name='order', line=dict(color='blue', width=2))
+        start_x, start_y = lin_id, enter_price[line_loc]
+        end_x, end_y = lout_id, exit_price[line_loc]
+        line_color = ind.get('line_color') or 'blue'
+        line_args = dict(mode='lines', name='order', line=dict(color=line_color, width=2))
         for i in range(len(lin_id)):
-            fig.add_trace(go.Scatter(x=[start_x.iloc[i], end_x.iloc[i]], y=[start_y[i], end_y[i]],
+            fig.add_trace(go.Scatter(x=[start_x[i], end_x[i]], y=[start_y[i], end_y[i]],
                                      **line_args), row=1, col=1, secondary_y=True)
 
 
@@ -273,3 +277,20 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
         return figure, range_val
 
     app.run_server(mode=show_mode, height=height + 50)
+
+
+async def run_test():
+    from banbot.storage.base import init_db, db
+    from banbot.optmize.bt_analysis import BTAnalysis, order_plot_ind
+    init_db(db_url='postgresql://postgres:123@[127.0.0.1]:5432/bantd')
+    with db():
+        backtest_dir = r'E:\trade\ban_data\backtest'
+        btres = await BTAnalysis.load(backtest_dir)
+        df = btres.load_df(start_ms=1681689600000, stop_ms=1681776000000)
+        df['date'] = pd.to_datetime(df['date'], utc=True, unit='ms')
+        od_ind = order_plot_ind(10)
+    plot_fin(df, [od_ind], view_width=200)
+
+
+if __name__ == '__main__':
+    asyncio.run(run_test())
