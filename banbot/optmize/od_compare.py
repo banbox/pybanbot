@@ -97,7 +97,7 @@ def compare_orders(task_ids: List[int], task_hash: str):
         logger.error('no Backtest Task found for ' + filter_text)
         return
     logger.info(f'found Backtest Task: {bt_task.id}')
-    live_wheres = where_list + [BotTask.mode == RunMode.LIVE.value]
+    live_wheres = where_list + [BotTask.mode == RunMode.PROD.value]
     live_tasks: List[BotTask] = sess.query(BotTask).filter(*live_wheres).order_by(BotTask.id).all()
     if not live_tasks:
         logger.error('no live tasks found for ' + filter_text)

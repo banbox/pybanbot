@@ -201,7 +201,7 @@ class CryptoExchange:
             return
         self.markets_at = time.monotonic()
         restore_ts, markets = 0, []
-        if btime.run_mode not in TRADING_MODES:
+        if btime.run_mode not in LIVE_MODES:
             restore_ts = _restore_markets(self.api_async, self.market_dir)
             markets = self.api_async.markets or []
         if time.time() - restore_ts > 604800:
@@ -230,7 +230,7 @@ class CryptoExchange:
         cache = self.pair_fees.get(f'{od.symbol}_{taker_maker}')
         if cache:
             return dict(rate=cache[1], currency=od.symbol.split('/')[0])
-        if self.pair_fee_limits and btime.run_mode != RunMode.LIVE:
+        if self.pair_fee_limits and btime.run_mode != RunMode.PROD:
             fee_rate = self.pair_fee_limits.get(od.symbol)
             if fee_rate is not None:
                 return dict(rate=fee_rate, currency=od.symbol.split('/')[0])
@@ -411,7 +411,7 @@ class CryptoExchange:
         return ohlc_arr
 
     async def update_quote_price(self):
-        if btime.run_mode not in TRADING_MODES:
+        if btime.run_mode not in LIVE_MODES:
             return
         for symbol in self.quote_symbols:
             if symbol.find('USD') >= 0:
@@ -427,7 +427,7 @@ class CryptoExchange:
         return await self.api_async.cancel_order(id, symbol, params)
 
     async def create_limit_order(self, symbol, side, amount, price, params={}):
-        if btime.run_mode != btime.RunMode.LIVE:
+        if btime.run_mode != btime.RunMode.PROD:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         if self.name == 'binance':
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'

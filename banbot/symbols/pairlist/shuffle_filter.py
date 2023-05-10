@@ -13,7 +13,7 @@ class ShuffleFilter(PairList):
                  config: Config, handler_cfg: Dict[str, Any]):
         super(ShuffleFilter, self).__init__(manager, exchange, config, handler_cfg)
 
-        if btime.run_mode in TRADING_MODES:
+        if btime.run_mode in LIVE_MODES:
             self.seed = None
             logger.info('live mode detected, not applying seed')
         else:

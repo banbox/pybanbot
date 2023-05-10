@@ -162,7 +162,7 @@ class NotifyHandler(logging.Handler):
         from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
         from banbot.util import btime
         try:
-            if not RPCManager.instance or btime.run_mode not in btime.TRADING_MODES:
+            if not RPCManager.instance or btime.run_mode not in btime.LIVE_MODES:
                 return
             try:
                 if self.loop is None:

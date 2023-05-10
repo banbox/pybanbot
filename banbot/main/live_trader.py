@@ -15,7 +15,7 @@ from banbot.storage import *
 
 class LiveTrader(Trader):
     '''
-    实盘交易、实时模拟。模式:DRY_RUN LIVE
+    实盘交易、实时模拟。模式:DRY_RUN PROD
     '''
 
     def __init__(self, config: Config):

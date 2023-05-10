@@ -28,7 +28,7 @@ class BotTask(BaseDbModel):
         rmode = btime.run_mode.value
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]
         task = sess.query(BotTask).filter(*where_list).order_by(BotTask.create_at.desc()).first()
-        live_mode = btime.run_mode in btime.TRADING_MODES
+        live_mode = btime.run_mode in btime.LIVE_MODES
         if not task or not live_mode:
             # 非实盘模式下，不可重复使用一个任务，否则可能同一时刻多个完全相同的订单
             ctime = btime.to_datetime(time.time())

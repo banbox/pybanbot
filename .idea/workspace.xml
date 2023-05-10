@@ -8,34 +8,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/arguments.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/arguments.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/ctx.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/ctx.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/feeder.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/feeder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/tools.py" afterDir="false" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="解决实盘若干bug">
+      <change beforePath="$PROJECT_DIR$/banbot/config/consts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/consts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/data/wacther.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/wacther.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/live_trader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/live_trader.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/backtest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/optmize/od_compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/od_compare.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/bot_task.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/bot_task.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/horz_break.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/horz_break.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/oversold_up.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/oversold_up.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/shuffle_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/shuffle_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/spread_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/spread_filter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/util/btime.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/btime.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/redis_helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/redis_helper.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -352,7 +339,7 @@
       <workItem from="1683433746581" duration="23836000" />
       <workItem from="1683511582670" duration="23163000" />
       <workItem from="1683615471446" duration="24367000" />
-      <workItem from="1683682785113" duration="17232000" />
+      <workItem from="1683682785113" duration="17613000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -473,7 +460,14 @@
       <option name="project" value="LOCAL" />
       <updated>1683543677606</updated>
     </task>
-    <option name="localTasksCounter" value="18" />
+    <task id="LOCAL-00018" summary="解决实盘若干bug">
+      <created>1683703250530</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1683703250530</updated>
+    </task>
+    <option name="localTasksCounter" value="19" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -507,7 +501,8 @@
     <MESSAGE value="关联订单的任务ID，实盘模式策略没有变化时沿用上次的任务" />
     <MESSAGE value="优化命令入口&#10;订单时间戳规则修改&#10;支持简单回测实盘订单对比" />
     <MESSAGE value="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比" />
-    <option name="LAST_COMMIT_MESSAGE" value="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比" />
+    <MESSAGE value="解决实盘若干bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="解决实盘若干bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

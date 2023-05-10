@@ -30,7 +30,7 @@ class PriceFilter(PairList):
         self.stoploss = 0.95
 
     def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
-        if btime.run_mode in TRADING_MODES:
+        if btime.run_mode in LIVE_MODES:
             if not ticker or not ticker.get('last'):
                 return False
             price = ticker['last']

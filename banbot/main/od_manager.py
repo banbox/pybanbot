@@ -145,7 +145,7 @@ class OrderManager(metaclass=SingletonArg):
             init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
             strategy=strategy
         )
-        if btime.run_mode in TRADING_MODES:
+        if btime.run_mode in LIVE_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
         self._put_order(od, True)
         return od
@@ -181,7 +181,7 @@ class OrderManager(metaclass=SingletonArg):
         if 0 < ava_amt < exit_amount or abs(ava_amt - exit_amount) / exit_amount <= 0.03:
             exit_amount = ava_amt
         od.update_exit(price=price, amount=exit_amount)
-        if btime.run_mode in TRADING_MODES:
+        if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od.symbol, od.exit_tag)
         self._put_order(od, False)
         return od
@@ -446,7 +446,7 @@ class LiveOrderManager(OrderManager):
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
         od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
         fees = self.exchange.calc_funding_fee(od)
-        if fees['rate'] > self.max_market_rate and btime.run_mode in TRADING_MODES:
+        if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
             # 取过去5m数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
             his_ohlcvs = await auto_fetch_ohlcv(self.exchange, pair, '1m', limit=5)

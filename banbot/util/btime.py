@@ -21,7 +21,7 @@ cur_timestamp = 0
 
 def time():
     global cur_timestamp
-    if run_mode in TRADING_MODES:
+    if run_mode in LIVE_MODES:
         import time
         return time.time()
     elif not cur_timestamp:
@@ -35,7 +35,7 @@ def time_ms() -> int:
 
 
 def now():
-    if run_mode in TRADING_MODES:
+    if run_mode in LIVE_MODES:
         return datetime.datetime.now()
     return datetime.datetime.utcfromtimestamp(cur_timestamp)
 
@@ -66,7 +66,7 @@ def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
 def allow_order_enter(ctx=None) -> bool:
     if run_mode in NORDER_MODES:
         return False
-    if run_mode not in TRADING_MODES:
+    if run_mode not in LIVE_MODES:
         return True
     from banbot.compute.ctx import bar_time
     bar_start, bar_end = bar_time.get() if not ctx else ctx[bar_time]
@@ -76,4 +76,4 @@ def allow_order_enter(ctx=None) -> bool:
 
 
 def prod_mode():
-    return run_mode == RunMode.LIVE
+    return run_mode == RunMode.PROD

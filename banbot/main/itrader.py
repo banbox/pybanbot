@@ -46,7 +46,7 @@ class Trader:
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = delay >= max(60., tf_secs * 0.5)
-        is_live_mode = btime.run_mode == RunMode.LIVE
+        is_live_mode = btime.run_mode == RunMode.PROD
         if bar_expired and is_live_mode:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         with TempContext(pair_tf):
@@ -72,7 +72,7 @@ class Trader:
                         exit_list.append((stg_name, exit_tag))
                     ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_cost = (time.monotonic() - start_time) * 1000
-            if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
+            if calc_cost >= 10 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
@@ -109,7 +109,7 @@ class Trader:
             job[2] += cur_time
         # 轮询执行任务
         while BotGlobal.state == BotState.RUNNING:
-            live_mode = btime.run_mode in TRADING_MODES
+            live_mode = btime.run_mode in LIVE_MODES
             wait_list = sorted(biz_list, key=lambda x: x[2])
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()

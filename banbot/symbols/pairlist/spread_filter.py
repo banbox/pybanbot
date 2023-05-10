@@ -21,7 +21,7 @@ class SpreadFilter(PairList):
         self.max_ratio = handler_cfg.get('max_ratio', 0.005)
         self.enable = self.enable and self.max_ratio > 0
 
-        if btime.run_mode not in TRADING_MODES:
+        if btime.run_mode not in LIVE_MODES:
             self.enable = False
             logger.warning('SpreadFilter not avaiable in backtest, skipping ...')
             return

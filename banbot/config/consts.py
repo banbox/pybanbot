@@ -18,7 +18,7 @@ class RunMode(Enum):
     Bot running mode (backtest, hyperopt, ...)
     can be "live", "dry-run", "backtest", "edge", "hyperopt".
     """
-    LIVE = "live"
+    PROD = "prod"
     DRY_RUN = "dry_run"
     BACKTEST = "backtest"
     HYPEROPT = "hyperopt"
@@ -27,7 +27,7 @@ class RunMode(Enum):
     OTHER = "other"
 
 
-TRADING_MODES = [RunMode.LIVE, RunMode.DRY_RUN]
+LIVE_MODES = [RunMode.PROD, RunMode.DRY_RUN]
 OPTIMIZE_MODES = [RunMode.BACKTEST, RunMode.HYPEROPT]
 NORDER_MODES = [RunMode.PLOT, RunMode.WEBSERVER, RunMode.OTHER]
 

@@ -166,7 +166,7 @@ class InOutOrder(BaseDbModel):
         super(InOutOrder, self).__init__(**kwargs)
         # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
         self.quote_cost = kwargs.get('quote_cost')
-        live_mode = btime.run_mode in btime.TRADING_MODES
+        live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:
             self.id = InOutOrder._next_id
             InOutOrder._next_id += 1
@@ -271,14 +271,14 @@ class InOutOrder(BaseDbModel):
             self._his_ods.append(self)
 
     def save(self):
-        if btime.run_mode not in btime.TRADING_MODES:
+        if btime.run_mode not in btime.LIVE_MODES:
             self._save_to_mem()
         else:
             self._save_to_db()
 
     @classmethod
     def get_orders(cls, strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
-        if btime.run_mode in btime.TRADING_MODES:
+        if btime.run_mode in btime.LIVE_MODES:
             return get_db_orders(strategy, pair, status)
         else:
             if status == 'his':
@@ -309,7 +309,7 @@ class InOutOrder(BaseDbModel):
 
     @classmethod
     def get(cls, od_id: int):
-        if btime.run_mode in btime.TRADING_MODES:
+        if btime.run_mode in btime.LIVE_MODES:
             return db.session.query(InOutOrder).get(od_id)
         op_od = cls._open_ods.get(od_id)
         if op_od is not None:
