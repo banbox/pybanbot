@@ -192,7 +192,7 @@ order by time'''
                 cls._sid_range_map[sid] = start_ms, end_ms
 
     @classmethod
-    def insert(cls, exg_name: str, pair: str, rows: List[Tuple]):
+    def insert(cls, exg_name: str, pair: str, rows: List[Tuple], check_old=True):
         if not rows:
             return
         rows = sorted(rows, key=lambda x: x[0])
@@ -211,65 +211,77 @@ order by time'''
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')
-        sess = db.session
-        ins_rows = []
+        ins_rows, insert_old = [], False
         for r in rows:
+            if old_stop and r[0] < old_stop:
+                if check_old:
+                    continue
+                insert_old = True
             row_ts = btime.to_datetime(r[0])
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
+        if not ins_rows:
+            return
+        sess = db.session
         sess.bulk_insert_mappings(KLine, ins_rows)
         sess.commit()
         # 更新区间
         cls._update_range(sid, start_ms, end_ms)
         # 刷新连续聚合
-        range_ms = (end_ms - start_ms) / 1000
-        start_dt = btime.to_datetime(start_ms)
-        conn = sess.connection()
-        conn.commit()
-        bak_iso_level = conn.get_isolation_level()
-        conn.execution_options(isolation_level='AUTOCOMMIT')
-        for intv in cls.agg_intvs:
-            tf = intv[0]
-            tf_secs = tf_to_secs(tf)
-            if range_ms < tf_secs * 0.3:
-                continue
-            cur_end_ms = int(end_ms // tf_secs * tf_secs) + tf_secs * 1000 + 1
-            cur_end_dt = btime.to_datetime(cur_end_ms)
-            stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', '{start_dt}', '{cur_end_dt}');"
-            conn.execute(sa.text(stmt))
-        conn.commit()
-        conn.execution_options(isolation_level=bak_iso_level)
+        if len(ins_rows) == 1:
+            return
+        range_secs = (end_ms - start_ms) / 1000
+        from banbot.storage.base import init_db
+        with init_db().connect() as conn:
+            # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
+            bak_iso_level = conn.get_isolation_level()
+            conn.execution_options(isolation_level='AUTOCOMMIT')
+            win_start = 'NULL' if not insert_old else f"'{btime.to_datetime(start_ms)}'"
+            for intv in cls.agg_intvs:
+                tf = intv[0]
+                tf_secs = tf_to_secs(tf)
+                if range_secs < tf_secs * 0.3:
+                    continue
+                cur_end_ms = int(end_ms // tf_secs * tf_secs) + tf_secs * 1000 + 1
+                cur_end_dt = btime.to_datetime(cur_end_ms)
+                stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', {win_start}, '{cur_end_dt}');"
+                try:
+                    conn.execute(sa.text(stmt))
+                except Exception:
+                    pass
+            conn.commit()
+            conn.execution_options(isolation_level=bak_iso_level)
 
     @classmethod
-    def _find_sid_hole(cls, conn: sa.Connection, sid: int, since: float, until: float = 0., as_ts=True):
+    def _find_sid_hole(cls, sess: SqlSession, sid: int, since: float, until: float = 0., as_ts=True):
         batch_size, true_intv = 1000, cls.interval / 1000
-        last_date = None
+        prev_date = None
         res_holes = []
         while True:
             hole_sql = f"SELECT time FROM kline where sid={sid} and time >= to_timestamp({since}) "
             if until:
                 hole_sql += f'and time < to_timestamp({until}) '
             hole_sql += f"ORDER BY time limit {batch_size};"
-            rows = conn.execute(sa.text(hole_sql)).fetchall()
+            rows = sess.execute(sa.text(hole_sql)).fetchall()
             if not len(rows):
                 break
             off_idx = 0
-            if last_date is None:
-                last_date = rows[0][0]
+            if prev_date is None:
+                prev_date = rows[0][0]
                 off_idx = 1
             for row in rows[off_idx:]:
-                cur_intv = (row[0] - last_date).total_seconds()
+                cur_intv = (row[0] - prev_date).total_seconds()
                 if cur_intv > true_intv:
                     if as_ts:
-                        hole_start, hold_end = btime.to_utcstamp(last_date), btime.to_utcstamp(row[0])
+                        hole_start, hold_end = btime.to_utcstamp(prev_date), btime.to_utcstamp(row[0])
                     else:
-                        hole_start, hold_end = last_date, row[0]
+                        hole_start, hold_end = prev_date, row[0]
                     res_holes.append((hole_start, hold_end))
                 elif cur_intv < true_intv:
                     logger.warning(f'invalid kline interval: {cur_intv:.3f}, sid: {sid}')
-                last_date = row[0]
-            since = btime.to_utcstamp(last_date) + 0.1
+                prev_date = row[0]
+            since = btime.to_utcstamp(prev_date) + 0.1
         return res_holes
 
     @classmethod
@@ -279,13 +291,12 @@ order by time'''
         from banbot.exchange.crypto_exchange import get_exchange
         logger.info('find and fill holes for kline...')
         sess = db.session
-        conn = sess.connection()
         gp_sql = 'SELECT sid, extract(epoch from min(time))::float as mtime FROM kline GROUP BY sid;'
-        sid_rows = conn.execute(sa.text(gp_sql)).fetchall()
+        sid_rows = sess.execute(sa.text(gp_sql)).fetchall()
         if not len(sid_rows):
             return
         for sid, start_ts in sid_rows:
-            hole_list = cls._find_sid_hole(conn, sid, start_ts)
+            hole_list = cls._find_sid_hole(sess, sid, start_ts)
             if not hole_list:
                 continue
             old_holes = sess.query(KHole).filter(KHole.sid == sid).all()
@@ -299,7 +310,7 @@ order by time'''
                 start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
                 logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
                 await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
-                real_holes = cls._find_sid_hole(conn, sid, hole[0], hole[1] + 0.1, as_ts=False)
+                real_holes = cls._find_sid_hole(sess, sid, hole[0], hole[1] + 0.1, as_ts=False)
                 if not real_holes:
                     continue
                 logger.warning(f'REAL Holes: {stf.symbol} {real_holes}')
@@ -315,5 +326,5 @@ class KHole(BaseDbModel):
     __tablename__ = 'khole'
 
     sid = Column(sa.Integer, primary_key=True)
-    start = Column(sa.DateTime)
+    start = Column(sa.DateTime, primary_key=True)
     stop = Column(sa.DateTime)

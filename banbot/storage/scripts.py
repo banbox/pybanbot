@@ -61,7 +61,7 @@ def _parse_tbls(args: Dict[str, Any]) -> List[BaseDbModel]:
     tbl_names = args.get('tables')
     if not tbl_names:
         return tables
-    for tname in tbl_names.split(','):
+    for tname in tbl_names:
         tbl = tbl_map.get(tname)
         if not tbl:
             raise RuntimeError(f'unknown table: {tname}')

@@ -217,7 +217,7 @@ class CryptoExchange:
         if not self.markets:
             # 首次加载，输出统计的交易对信息
             from banbot.optmize.reports import text_markets
-            print(text_markets(self.api_async.markets))
+            print(text_markets(self.api_async.markets, 30))
         self.markets = self.api_async.markets
 
     def calc_funding_fee(self, od: Order):
@@ -434,6 +434,17 @@ class CryptoExchange:
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
 
     async def cancel_open_orders(self, symbols: List[str]):
+        # 查询数据库的订单，删除未创建成功的入场订单
+        from banbot.storage import InOutOrder, db, InOutStatus
+        op_ods = InOutOrder.open_orders()
+        if op_ods:
+            sess = db.session
+            for od in op_ods:
+                if od.status == InOutStatus.Init and (not od.enter or not od.enter.order_id):
+                    sess.delete(od)
+                    if od.enter:
+                        sess.delete(od.enter)
+            sess.commit()
         symbols, success_cnt = set(symbols), 0
         for symbol in symbols:
             orders = await self.api_async.fetch_open_orders(symbol)

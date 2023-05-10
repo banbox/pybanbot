@@ -65,6 +65,6 @@ class HorzBreak(BaseStrategy):
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
         elp_num = od.elp_num_enter
-        max_loss, max_up, back_rate = trail_info(arr, elp_num, od.enter.price)
+        max_loss, max_up, back_rate = trail_info(arr, elp_num, od.init_price)
         return trail_stop_loss_core(elp_num, max_up, max_loss, back_rate, odlens=[2, 4, 8, 16],
                                     loss_thres=[-0.7, 0., 1.5, 2., 3.6], back_rates=[0.44, 0.28, 0.13])

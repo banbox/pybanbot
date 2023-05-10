@@ -18,6 +18,8 @@ def append_new_bar(row, tf_secs: int) -> np.ndarray:
     hline_rate = (chigh - max(close, copen)) / max_chg
     lline_rate = (min(close, copen) - clow) / max_chg
     bar_num.set(bar_num.get() + 1)
+    bar_start_time = int(row[0])
+    bar_time.set((bar_start_time, bar_start_time + tf_secs * 1000))
     crow = np.concatenate([row, [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
     exp_crow = np.expand_dims(crow, axis=0)
     if not len(result):

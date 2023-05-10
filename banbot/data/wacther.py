@@ -26,7 +26,7 @@ class Watcher:
         self.pair = pair
         self.callback = callback
 
-    def _on_state_ohlcv(self, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool):
+    def _on_state_ohlcv(self, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
         finish_bars = []
         for i in range(len(ohlcvs)):
             new_bar = ohlcvs[i]
@@ -36,9 +36,9 @@ class Watcher:
         if last_finish:
             finish_bars.append(state.wait_bar)
             state.wait_bar = None
-        if finish_bars:
+        if finish_bars and do_fire:
             self._fire_callback(finish_bars, state.timeframe, state.tf_secs)
-        return bool(finish_bars)
+        return finish_bars
 
     def _fire_callback(self, bar_arr, timeframe: str, tf_secs: int):
         for bar_row in bar_arr:
@@ -46,7 +46,7 @@ class Watcher:
                 btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
             self.callback(self.pair, timeframe, bar_row)
         if btime.run_mode in btime.TRADING_MODES:
-            bar_delay = btime.time() - bar_arr[-1][0] // 1000 + tf_secs
+            bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
                 logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, bar_delay)

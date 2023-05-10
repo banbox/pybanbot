@@ -62,3 +62,18 @@ def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
     dt = to_datetime(timestamp)
     return dt.strftime(fmt)
 
+
+def allow_order_enter(ctx=None) -> bool:
+    if run_mode in NORDER_MODES:
+        return False
+    if run_mode not in TRADING_MODES:
+        return True
+    from banbot.compute.ctx import bar_time
+    bar_start, bar_end = bar_time.get() if not ctx else ctx[bar_time]
+    import time as stime
+    delay_fac = (stime.time() * 1000 - bar_end) / (bar_end - bar_start)
+    return delay_fac <= 0.8
+
+
+def prod_mode():
+    return run_mode == RunMode.LIVE

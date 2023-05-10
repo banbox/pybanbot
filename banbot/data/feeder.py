@@ -49,7 +49,7 @@ class DataFeeder(Watcher):
         self.states = sorted(self.states, key=lambda x: x.tf_secs)
         return timeframes
 
-    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
+    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
         '''
         预热周期数据。当动态添加周期到已有的HistDataFeeder时，应调用此方法预热数据。
         LiveFeeder在初始化时也应当调用此函数
@@ -85,7 +85,7 @@ class DataFeeder(Watcher):
                 prefire = 0.05 if self.auto_prefire else 0
                 cur_ohlcvs, last_finish = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
                 self._on_state_ohlcv(state, cur_ohlcvs, last_finish)
-        return min_finished
+        return bool(min_finished)
 
 
 class HistDataFeeder(DataFeeder):
@@ -97,10 +97,12 @@ class HistDataFeeder(DataFeeder):
     def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
         super(HistDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire)
-        if timerange and self.warm_secs:
-            timerange = TimeRange(timerange.startts - self.warm_secs, timerange.stopts)
-        if not timerange.stopts:
+        if not timerange:
+            timerange = TimeRange(btime.time(), btime.time())
+        elif not timerange.stopts:
             timerange.stopts = btime.time()
+        if self.warm_secs:
+            timerange = TimeRange(timerange.startts - self.warm_secs, timerange.stopts)
         self.timerange = timerange
         self.total_len = 0
         self.row_id = 0
@@ -147,7 +149,7 @@ class FileDataFeeder(HistDataFeeder):
             self.row_id += back_len
         self._next_arr = ret_arr
 
-    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
+    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
         tr = TimeRange(btime.time() - warm_secs, btime.time() + 0.1)
         ohlcv_arr: List[Tuple] = load_file_range(self.data_path, tr).values.tolist()
         max_end_ms = 0
@@ -157,8 +159,7 @@ class FileDataFeeder(HistDataFeeder):
             tf_secs = tf_to_secs(tf)
             if tf_secs > self.fetch_tfsecs:
                 ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, tf_secs)
-            for row in ohlcv_arr:
-                self._fire_callback(row, tf, tf_secs)
+            self._fire_callback(ohlcv_arr, tf, tf_secs)
             max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
         return max_end_ms
 
@@ -210,18 +211,18 @@ class DBDataFeeder(HistDataFeeder):
         self._row_id += 1
         self.row_id += 1
 
-    def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
-        from banbot.storage import KLine
+    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
         end_ms = int(btime.time() * 1000) + 1
-        start_ms = end_ms - warm_secs
+        start_ms = end_ms - warm_secs * 1000
         max_end_ms = 0
+        exchange = get_exchange(self.exg_name)
         for tf in timeframes:
             tf_secs = tf_to_secs(tf)
-            ohlcv_arr = KLine.query(self.exg_name, self.pair, tf, start_ms, end_ms)
+            ohlcv_arr = await auto_fetch_ohlcv(exchange, self.pair, tf, start_ms, end_ms)
             if not ohlcv_arr:
+                logger.warning(f"warm {self.pair} {tf} fail, no data...")
                 continue
-            for row in ohlcv_arr:
-                self._fire_callback(row, tf, tf_secs)
+            self._fire_callback(ohlcv_arr, tf, tf_secs)
             max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
         return max_end_ms
 

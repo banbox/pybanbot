@@ -29,7 +29,7 @@ class DataProvider:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler
 
-    def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
+    async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
         old_map = {h.pair: h for h in self.holders}
         new_pairs = []
         for (pair, warm_secs), tf in pairs.items():
@@ -40,7 +40,7 @@ class DataProvider:
                 continue
             new_tfs = hold.sub_tflist(*tf_list)
             if new_tfs:
-                hold.warm_tfs(warm_secs, *new_tfs)
+                await hold.warm_tfs(warm_secs, *new_tfs)
         new_holds = [self.feed_cls(p, warm_secs, tf_list, self._callback, **self._init_args)
                      for p, warm_secs, tf_list in new_pairs]
         self.holders.extend(new_holds)
@@ -127,23 +127,24 @@ class LiveDataProvider(DataProvider):
         self.conn = self.redis.pubsub()
         LiveDataProvider._obj = self
 
-    def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
-        new_holds = super(LiveDataProvider, self).sub_pairs(pairs)
+    async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
+        new_holds = await super(LiveDataProvider, self).sub_pairs(pairs)
         if not new_holds:
             return
         from banbot.data.spider import LiveSpider, SpiderJob
         job_list = []
         for hold in new_holds:
             tfs = [st.timeframe for st in hold.states]
-            since_ms = hold.warm_tfs(hold.warm_secs, *tfs)
+            since_ms = await hold.warm_tfs(hold.warm_secs, *tfs)
             job_list.append(SpiderJob('watch_ohlcv', self.exg_name, hold.pair, since_ms))
-            self.conn.subscribe(hold.pair)
+            await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
         # 发送消息给爬虫，实时抓取数据
-        LiveSpider.send(*job_list)
+        await LiveSpider.send(*job_list)
 
     @classmethod
     def _on_ohlcv_msg(cls, msg: dict):
-        exg_name, pair = msg['channel'].split('_')
+        exg_name, pair = msg['channel'].decode().split('_')
+        logger.debug('get ohlcv msg: %s', msg)
         if exg_name != cls._obj.exg_name:
             logger.error(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
             return
@@ -165,3 +166,6 @@ class LiveDataProvider(DataProvider):
             except Exception:
                 logger.exception(f'handle live ohlcv listen error: {msg}')
 
+    async def cleanup(self):
+        from banbot.data.spider import LiveSpider
+        await LiveSpider.cleanup()

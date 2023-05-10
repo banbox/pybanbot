@@ -57,7 +57,7 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
                 prow[count] += row[count]
     last_finish = False
     if len(raw_ts) >= 2:
-        # 至少有2个，判断最后一个bar是否结束
+        # 至少有2个，判断最后一个bar是否结束：假定details中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
         ts_interval = raw_ts[-1] - raw_ts[-2]
         finish_ts = (raw_ts[-1] + ts_interval + off_ms) // ms * ms
         last_finish = finish_ts > ohlcvs[-1][0]
@@ -270,7 +270,7 @@ async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int, check_
                 # 要下载的数据全部存在，直接退出
                 return
     newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
-    KLine.insert(exg_name, pair, newdata)
+    KLine.insert(exg_name, pair, newdata, check_exist)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):

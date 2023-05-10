@@ -24,6 +24,7 @@ bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
 bar_arr = ContextVar('bar_arr')
 fea_col_start = ContextVar('fea_col_start')
+bar_time = ContextVar('bar_time', default=(0, 0))
 _symbol_ctx: Dict[str, Context] = dict()
 symbol_tf.set('')
 # 几个常用列的索引

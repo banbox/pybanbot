@@ -1,11 +1,11 @@
 {
   "name": "ayj",
   "env": "prod",
-  "run_mode": "live",
+  "run_mode": "dry_run",
   "trade_mode": "spot",
   "prefire": true,
   "quote_base": "USDT",
-  "stake_amount": 1000,
+  "stake_amount": 100,
   "stake_currency": ["USDT", "TUSD"],
   "max_market_rate": 0.0001,
   "odbook_ttl": 1000,

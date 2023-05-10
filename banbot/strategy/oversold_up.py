@@ -39,6 +39,6 @@ class OverSoldUp(BaseStrategy):
         elp_num = od.elp_num_enter
         atr_val = self.atr[- elp_num - 1]
         loss_thres = [-atr_val, -0.5 * atr_val, atr_val, 2 * atr_val, 3 * atr_val]
-        return trail_stop_loss(arr, od.enter.price, elp_num, odlens=[4, 8, 15, 30],
+        return trail_stop_loss(arr, od.init_price, elp_num, odlens=[4, 8, 15, 30],
                                loss_thres=loss_thres, back_rates=[0.44, 0.28, 0.13])
 

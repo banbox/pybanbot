@@ -16,7 +16,7 @@ class Trader:
         BotGlobal.state = BotState.RUNNING
         self.config = config
         self.name = config.get('name', 'noname')
-        if btime.run_mode in TRADING_MODES:
+        if btime.prod_mode():
             logger.info('started bot:   >>>  %s  <<<', self.name)
         self.wallets: WalletsLocal = None
         self.order_mgr: OrderManager = None
@@ -71,10 +71,10 @@ class Trader:
                     if exit_tag:
                         exit_list.append((stg_name, exit_tag))
                     ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
-            calc_end = time.monotonic()
-        calc_cost = (calc_end - start_time) * 1000
-        if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
-            logger.info('calc with {0} strategies, cost: {1:.1f} ms', len(strategy_list), calc_cost)
+            calc_cost = (time.monotonic() - start_time) * 1000
+            if calc_cost >= 10 and btime.run_mode in TRADING_MODES:
+                logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
+                            len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
         return enter_list, exit_list, ext_tags
 

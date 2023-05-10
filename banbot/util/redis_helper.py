@@ -317,6 +317,26 @@ class AsyncRedis:
             return None
         return safe_key[:max_len]
 
+    async def sadd(self, key: str, *args):
+        key = await self.get_key(key)
+        vals = [self.serializer(v) for v in args]
+        await self.redis.sadd(key, *vals)
+
+    async def scard(self, key: str):
+        '''
+        返回集合的数量
+        '''
+        key = await self.get_key(key)
+        return await self.redis.scard(key)
+
+    async def smembers(self, key: str):
+        key = await self.get_key(key)
+        items = await self.redis.smembers(key)
+        if not items:
+            return []
+        items = [self.deserializer(v) for v in items]
+        return [v for v in items if v]
+
     async def set(self, key, val='1', expire_time=None):
         '''
         设置redis的键值，过期时间可选

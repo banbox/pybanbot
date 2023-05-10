@@ -51,11 +51,11 @@ class LiveTrader(Trader):
         await self.exchange.load_markets()
         await self.pair_mgr.refresh_pairlist()
         await self.wallets.init(self.pair_mgr.symbols)
-        await self.exchange.init(self.pair_mgr.symbols)
-        pair_tfs = self._load_strategies(self.pair_mgr.symbols)
         with db():
             BotTask.init()
-            self.data_mgr.sub_pairs(pair_tfs)
+            await self.exchange.init(self.pair_mgr.symbols)
+            pair_tfs = self._load_strategies(self.pair_mgr.symbols)
+            await self.data_mgr.sub_pairs(pair_tfs)
         await self.rpc.startup_messages()
 
     async def run(self):
@@ -77,7 +77,7 @@ class LiveTrader(Trader):
     async def _start_tasks(self):
         # 监听实时数据推送
         self._run_tasks.append(asyncio.create_task(LiveDataProvider.watch_ohlcvs()))
-        if btime.run_mode == RunMode.LIVE:
+        if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
                 # 监听钱包更新
@@ -92,6 +92,7 @@ class LiveTrader(Trader):
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
+        await self.data_mgr.cleanup()
         await self.order_mgr.cleanup()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,

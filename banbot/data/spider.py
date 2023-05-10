@@ -84,6 +84,7 @@ def run_down_pairs(args: Dict[str, Any]):
 
 
 class LiveMiner(Watcher):
+    _list_key = 'miner_symbols'
     '''
     交易对实时数据更新，仅用于实盘。
     '''
@@ -93,49 +94,75 @@ class LiveMiner(Watcher):
         timeframe, tf_secs = '1m', 60  # 固定1m间隔更新数据
         self.tf_secs = tf_secs
         self.state = PairTFCache(timeframe, tf_secs)
+        self.state_sec = PairTFCache('1s', 1)  # 用于从交易归集
         self.check_intv = get_check_interval(tf_secs)  # 3s更新一次
         self.key = f'{exg_name}_{pair}'  # 取消标志，启动时设置为tf_secs，删除时表示取消任务
-        self.next_since = since if since else None
+        self.next_since = int(since) if since else None
         self.auto_prefire = AppConfig.get().get('prefire')
 
     async def run(self):
-        with AsyncRedis() as redis:
+        async with AsyncRedis() as redis:
+            await redis.sadd(self._list_key, self.key)
             await redis.set(self.key, self.tf_secs)
         while True:
-            with AsyncRedis() as redis:
-                if await redis.get(self.key) != self.tf_secs:
-                    break
-            await self._try_update()
-            await asyncio.sleep(self.check_intv)
+            try:
+                async with AsyncRedis() as redis:
+                    if await redis.get(self.key) != self.tf_secs:
+                        break
+                await self._try_update()
+                await asyncio.sleep(self.check_intv)
+            except Exception:
+                logger.exception(f'miner watch pair error {self.pair} tf_secs: {self.tf_secs}')
 
-    def _on_bar_finish(self, pair: str, timeframe: str, bar_arr: List[Tuple]):
+    def _on_bar_finish(self, pair: str, timeframe: str, bar_row: Tuple):
+        from banbot.storage import db
         from banbot.storage import KLine
-        KLine.insert(self.exchange.name, pair, bar_arr)
+        with db():
+            KLine.insert(self.exchange.name, pair, [bar_row])
 
     async def _try_update(self):
         import ccxt
         try:
+            is_from_ohlcv = True
             if self.check_intv > 2:
                 # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
-                details = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
-                self.next_since = details[-1][0] + 1
+                ohlcvs_sec = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
+                if not ohlcvs_sec:
+                    return
+                self.next_since = ohlcvs_sec[-1][0] + 1
+                finish_bars = ohlcvs_sec  # 从交易所1s抓取的都是已完成的
             else:
                 details = await self.exchange.watch_trades(self.pair)
                 details = trades_to_ohlcv(details)
-            # 合并得到数据库周期维度1m的数据
-            prefire = 0.06 if self.auto_prefire else 0
-            ohlcvs_upd, _ = build_ohlcvc(details, self.tf_secs, prefire)
-            ohlcvs = [self.state.wait_bar] if self.state.wait_bar else []
-            # 和旧的bar_row合并更新，判断是否有完成的bar
-            ohlcvs, last_finish = build_ohlcvc(ohlcvs_upd, self.tf_secs, ohlcvs=ohlcvs)
-            # 检查是否有完成的bar。写入到数据库
-            self._on_state_ohlcv(self.state, ohlcvs, last_finish)
-            # 发布间隔数据到redis订阅方
-            sre_data = orjson.dumps((ohlcvs_upd, self.tf_secs))
-            with AsyncRedis() as redis:
-                await redis.publish(self.key, sre_data)
+                # 交易按1s维度归集和通知
+                ohlcvs_sec = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
+                ohlcvs_sec, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sec)
+                do_fire = self.state.tf_secs <= self.state_sec.tf_secs
+                finish_bars = self._on_state_ohlcv(self.state_sec, ohlcvs_sec, False, do_fire)
+                is_from_ohlcv = False
+            if self.state.tf_secs > self.state_sec.tf_secs:
+                # 合并得到数据库周期维度1m的数据
+                ohlcvs = [self.state.wait_bar] if self.state.wait_bar else []
+                # 和旧的bar_row合并更新，判断是否有完成的bar
+                ohlcvs, last_finish = build_ohlcvc(ohlcvs_sec, self.tf_secs, ohlcvs=ohlcvs)
+                last_finish = last_finish and is_from_ohlcv
+                # 检查是否有完成的bar。写入到数据库
+                self._on_state_ohlcv(self.state, ohlcvs, last_finish)
+            if finish_bars:
+                # 发布1s间隔数据到redis订阅方
+                sre_data = orjson.dumps((finish_bars, 1))
+                async with AsyncRedis() as redis:
+                    await redis.publish(self.key, sre_data)
         except ccxt.NetworkError:
             logger.exception(f'get live data exception: {self.pair} {self.tf_secs}')
+
+    @classmethod
+    async def cleanup(cls):
+        async with AsyncRedis() as redis:
+            old_keys = await redis.smembers(cls._list_key)
+            old_keys.append(cls._list_key)
+            del_num = await redis.delete(*old_keys)
+            logger.info(f'stop {del_num} live miners')
 
 
 class SpiderJob:
@@ -149,13 +176,16 @@ class SpiderJob:
         return orjson.dumps(data)
 
 
-def start_spider():
+async def start_spider():
+    await LiveMiner.cleanup()
     spider = LiveSpider()
-    asyncio.run(spider.run_listeners())
+    logger.info('run data spider...')
+    await spider.run_listeners()
 
 
 class LiveSpider:
     _key = 'spider'
+    _ready = False
 
     '''
     实时数据爬虫；仅用于实盘。负责：实时K线、订单簿等公共数据监听
@@ -164,26 +194,26 @@ class LiveSpider:
     def __init__(self):
         self.redis = AsyncRedis()  # 需要持续监听redis，单独占用一个连接
         self.conn = self.redis.pubsub()
-        self.conn.subscribe(self._key)
 
     async def run_listeners(self):
+        await self.conn.subscribe(self._key)
         asyncio.create_task(self._heartbeat())
+        LiveSpider._ready = True
         async for msg in self.conn.listen():
             if msg['type'] != 'message':
                 continue
+            logger.debug('spider receive msg: %s', msg)
             kwargs = orjson.loads(msg['data'])
             asyncio.create_task(self._run_job(kwargs))
 
     async def _run_job(self, params: dict):
-        from banbot.storage import db
         action, args, kwargs = params['action'], params['args'], params['kwargs']
         try:
-            with db():
-                if hasattr(self, action):
-                    await getattr(self, action)(*args, **kwargs)
-                else:
-                    logger.error(f'unknown spider job: {params}')
-                    return
+            if hasattr(self, action):
+                await getattr(self, action)(*args, **kwargs)
+            else:
+                logger.error(f'unknown spider job: {params}')
+                return
         except Exception:
             logger.exception(f'run spider job error: {params}')
 
@@ -195,6 +225,7 @@ class LiveSpider:
     async def watch_ohlcv(self, exg_name: str, pair: str, since: Optional[int] = None):
         key = f'{exg_name}_{pair}'
         if await self.redis.get(key):
+            logger.warning(f'ohlcv {key} is already watching')
             return
         miner = LiveMiner(exg_name, pair, since)
         await miner.run()
@@ -208,8 +239,12 @@ class LiveSpider:
         if not await redis.get(cls._key):
             async with redis.lock(cls._key + '_lock'):
                 if not await redis.get(cls._key):
-                    from threading import Thread
-                    td = Thread(target=start_spider, daemon=True)
-                    td.start()
+                    asyncio.create_task(start_spider())
+                    while not cls._ready:
+                        await asyncio.sleep(0.01)
         for job in job_list:
             await redis.publish(cls._key, job.dumps())
+
+    @classmethod
+    async def cleanup(cls):
+        await LiveMiner.cleanup()

@@ -138,6 +138,7 @@ class InOutOrder(BaseDbModel):
     timeframe = Column(sa.String(5))
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
     enter_tag = Column(sa.String(30))
+    init_price = Column(sa.Float)  # 发出信号时入场价格，仅用于策略后续计算
     exit_tag = Column(sa.String(30))
     enter_at = Column(sa.BIGINT)  # 13位时间戳，策略决定入场时间戳
     exit_at = Column(sa.BIGINT)  # 13位时间戳，策略决定出场时间戳
@@ -148,6 +149,8 @@ class InOutOrder(BaseDbModel):
 
     @orm.reconstructor
     def __init__(self, **kwargs):
+        self.enter: Optional[Order] = None
+        self.exit: Optional[Order] = None
         if self.id:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
             super(InOutOrder, self).__init__(**kwargs)
@@ -170,7 +173,6 @@ class InOutOrder(BaseDbModel):
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
         enter_kwargs['inout_id'] = self.id
         self.enter: Order = Order(**enter_kwargs, enter=True)
-        self.exit: Optional[Order] = None
         if 'exit_amount' in kwargs:
             exit_kwargs = del_dict_prefix(kwargs, 'exit_')
             exit_kwargs['inout_id'] = self.id
@@ -329,6 +331,9 @@ class OrderJob:
 
 
 def get_db_orders(strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
+    '''
+    此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
+    '''
     from banbot.storage.bot_task import BotTask
     sess = db.session
     where_list = [InOutOrder.task_id == BotTask.cur_id]
@@ -341,7 +346,15 @@ def get_db_orders(strategy: str = None, pair: str = None, status: str = None) ->
         where_list.append(InOutOrder.strategy == strategy)
     if pair:
         where_list.append(InOutOrder.symbol == pair)
-    return sess.query(InOutOrder).filter(*where_list).all()
+    io_rows = sess.query(InOutOrder).filter(*where_list).all()
+    io_ids = {row.id for row in io_rows}
+    ex_ods = sess.query(Order).filter(Order.inout_id.in_(io_ids)).order_by(Order.inout_id).all()
+    ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
+    ex_exits = {od.inout_id: od for od in ex_ods if not od.enter}
+    for row in io_rows:
+        row.enter = ex_enters.get(row.id)
+        row.exit = ex_exits.get(row.id)
+    return io_rows
 
 
 def insert_orders_to_db(orders: List[InOutOrder]):

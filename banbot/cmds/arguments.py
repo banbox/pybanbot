@@ -61,7 +61,8 @@ def _reg_sub(subparsers, name: str, opts: List[str], run_fn: Callable, **kwargs)
 
 def _reg_trade(subparsers, **kwargs):
     from banbot.cmds.entrys import start_trading
-    _reg_sub(subparsers, 'trade', ["fee"], start_trading, help='Live Trade', **kwargs)
+    opts = ["stake_amount", "fee", "pairs"]
+    _reg_sub(subparsers, 'trade', opts, start_trading, help='Live Trade', **kwargs)
 
 
 def _reg_backtest(subparsers, **kwargs):
