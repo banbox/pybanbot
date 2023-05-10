@@ -144,7 +144,7 @@ class LiveDataProvider(DataProvider):
     @classmethod
     def _on_ohlcv_msg(cls, msg: dict):
         exg_name, pair = msg['channel'].decode().split('_')
-        logger.debug('get ohlcv msg: %s', msg)
+        # logger.debug('get ohlcv msg: %s', msg)
         if exg_name != cls._obj.exg_name:
             logger.error(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
             return

@@ -3,8 +3,11 @@
 # File  : tools.py
 # Author: anyongjin
 # Date  : 2023/2/28
+import asyncio
 import datetime
 import os
+
+import ccxt
 import pandas as pd
 from banbot.util.common import logger
 from banbot.config.timerange import TimeRange
@@ -215,12 +218,17 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
         end_ts = int(btime.time() * 1000)
     if not start_ts:
         start_ts = end_ts - tf_msecs * limit
-    if show_info:
-        start_text, end_text = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
-        logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
+    else:
+        assert start_ts > 1000000000000, '`start_ts` must be milli seconds'
     batch_size = 1000
     if limit and limit < batch_size:
         batch_size = limit
+    req_times = (end_ts - start_ts) // tf_msecs / batch_size
+    if show_info:
+        start_text, end_text = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
+        logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
+        if req_times < 3:
+            show_info = False
     since, total_tr = start_ts, end_ts - start_ts
     result = []
     pbar = tqdm() if show_info else None
@@ -243,34 +251,36 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
     return result[:end_pos + 1]
 
 
-async def download_to_db(exchange, pair: str, start_ms: int, end_ms: int, check_exist=True):
+async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, check_exist=True):
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
     '''
-    timeframe = '1m'
     exg_name = exchange.name
     from banbot.storage import KLine
     if check_exist:
-        old_start, old_end = KLine.query_range(exg_name, pair)
+        old_start, old_end = KLine.query_range(exg_name, pair, timeframe)
         if old_start and old_end > old_start:
             if start_ms < old_start:
                 # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
                 cur_end = round(old_start)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
-                KLine.insert(exg_name, pair, predata)
+                KLine.insert(exg_name, pair, timeframe, predata)
+                KLine.refresh_conti_agg(exg_name, pair, start_ms, cur_end, timeframe)
                 start_ms = old_end + 1
             elif end_ms > old_end:
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 cur_start = round(old_end + 1)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, cur_start, end_ms)
-                KLine.insert(exg_name, pair, predata)
+                KLine.insert(exg_name, pair, timeframe, predata)
+                KLine.refresh_conti_agg(exg_name, pair, cur_start, end_ms, timeframe)
                 return
             else:
                 # 要下载的数据全部存在，直接退出
                 return
     newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
-    KLine.insert(exg_name, pair, newdata, check_exist)
+    KLine.insert(exg_name, pair, timeframe, newdata, check_exist)
+    KLine.refresh_conti_agg(exg_name, pair, start_ms, end_ms, timeframe)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
@@ -311,12 +321,13 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     :param limit:
     :return:
     '''
+    tf_msecs = tf_to_secs(timeframe) * 1000
     if not end_ms:
         end_ms = int(btime.time() * 1000)
+    end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
-        tf_msecs = tf_to_secs(timeframe) * 1000
         start_ms = end_ms - tf_msecs * limit
-    await download_to_db(exchange, pair, start_ms, end_ms)
+    await download_to_db(exchange, pair, timeframe, start_ms, end_ms)
     from banbot.storage import KLine
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 

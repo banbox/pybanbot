@@ -13,7 +13,7 @@ from banbot.util import btime
 
 class KLine(BaseDbModel):
     __tablename__ = 'kline'
-    _sid_range_map: ClassVar[Dict[int, Tuple[int, int]]] = dict()
+    _sid_range_map: ClassVar[Dict[Tuple[int, str], Tuple[int, int]]] = dict()
     interval: ClassVar[int] = 60000  # 每行是1m维度
 
     sid = Column(sa.Integer, primary_key=True)
@@ -163,60 +163,61 @@ order by time'''
         return rows
 
     @classmethod
-    def query_range(cls, exg_name: str, symbol: Union[str, int]) -> Tuple[Optional[int], Optional[int]]:
+    def query_range(cls, exg_name: str, symbol: Union[str, int], timeframe: str = '1m') -> Tuple[Optional[int], Optional[int]]:
         sid = cls._get_sid(exg_name, symbol)
-        cache_val = cls._sid_range_map.get(sid)
+        cache_key = sid, timeframe
+        cache_val = cls._sid_range_map.get(cache_key)
         if not cache_val:
             dct_sql = 'select (extract(epoch from min(time)) * 1000)::float, ' \
                       '(extract(epoch from max(time)) * 1000)::float from {tbl} where sid={sid}'
-            min_time, max_time = cls._query_hyper(exg_name, sid, '1m', dct_sql, '').fetchone()
-            cls._sid_range_map[sid] = min_time, max_time
+            min_time, max_time = cls._query_hyper(exg_name, sid, timeframe, dct_sql, '').fetchone()
+            cls._sid_range_map[cache_key] = min_time, max_time
         else:
             min_time, max_time = cache_val
         return min_time, max_time
 
     @classmethod
-    def _update_range(cls, sid: int, start_ms: int, end_ms: int):
-        if sid not in cls._sid_range_map:
-            cls._sid_range_map[sid] = start_ms, end_ms
+    def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int):
+        cache_key = sid, timeframe
+        if cache_key not in cls._sid_range_map:
+            cls._sid_range_map[cache_key] = start_ms, end_ms
         else:
-            old_start, old_stop = cls._sid_range_map[sid]
+            old_start, old_stop = cls._sid_range_map[cache_key]
             if old_start and old_stop:
                 old_start -= cls.interval
                 old_stop += cls.interval
                 if old_stop < start_ms or end_ms < old_start:
-                    raise ValueError(f'incontinus range, sid: {sid}, old range: [{old_start}, {old_stop}], '
+                    raise ValueError(f'incontinus range: {cache_key}, old range: [{old_start}, {old_stop}], '
                                      f'new: [{start_ms}, {end_ms}]')
-                cls._sid_range_map[sid] = min(start_ms, old_start), max(end_ms, old_stop)
+                cls._sid_range_map[cache_key] = min(start_ms, old_start), max(end_ms, old_stop)
             else:
-                cls._sid_range_map[sid] = start_ms, end_ms
+                cls._sid_range_map[cache_key] = start_ms, end_ms
 
     @classmethod
-    def insert(cls, exg_name: str, pair: str, rows: List[Tuple], check_old=True):
+    def insert(cls, exg_name: str, pair: str, timeframe: str, rows: List[Tuple], check_old=True):
         if not rows:
             return
+        intv_secs = tf_to_secs(timeframe)
         rows = sorted(rows, key=lambda x: x[0])
         if len(rows) > 1:
-            # 检查是否是1分钟间隔
-            row_interval = rows[1][0] - rows[0][0]
-            if row_interval != cls.interval:
-                raise ValueError(f'insert kline must be 1m interval, current: {row_interval/1000:.1f}s')
+            # 检查间隔是否正确
+            row_intv = (rows[1][0] - rows[0][0]) // 1000
+            if row_intv != intv_secs:
+                raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
         sid = cls._get_sid(exg_name, pair)
         start_ms, end_ms = rows[0][0], rows[-1][0]
-        old_start, old_stop = cls.query_range(exg_name, sid)
+        old_start, old_stop = cls.query_range(exg_name, sid, timeframe)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
-            old_start -= cls.interval
-            old_stop += cls.interval
+            old_start -= intv_secs * 1000
+            old_stop += intv_secs * 1000
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')
-        ins_rows, insert_old = [], False
+        ins_rows = []
         for r in rows:
-            if old_stop and r[0] < old_stop:
-                if check_old:
-                    continue
-                insert_old = True
+            if check_old and old_start and old_stop and old_start < r[0] < old_stop:
+                continue
             row_ts = btime.to_datetime(r[0])
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
@@ -224,28 +225,36 @@ order by time'''
         if not ins_rows:
             return
         sess = db.session
-        sess.bulk_insert_mappings(KLine, ins_rows)
+        ins_cols = "sid, time, open, high, low, close, volume"
+        places = ":sid, :time, :open, :high, :low, :close, :volume"
+        insert_sql = f"insert into {cls.tf_tbls[timeframe]} ({ins_cols}) values ({places})"
+        sess.execute(sa.text(insert_sql), ins_rows)
         sess.commit()
         # 更新区间
-        cls._update_range(sid, start_ms, end_ms)
-        # 刷新连续聚合
-        if len(ins_rows) == 1:
-            return
+        cls._update_range(sid, timeframe, start_ms, end_ms)
+
+    @classmethod
+    def refresh_conti_agg(cls, exg_name: str, pair: str, start_ms: int, end_ms: int, from_level: str = '1m'):
+        sid = cls._get_sid(exg_name, pair)
         range_secs = (end_ms - start_ms) / 1000
+        from_secs = tf_to_secs(from_level)
         from banbot.storage.base import init_db
         with init_db().connect() as conn:
             # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
             bak_iso_level = conn.get_isolation_level()
             conn.execution_options(isolation_level='AUTOCOMMIT')
-            win_start = 'NULL' if not insert_old else f"'{btime.to_datetime(start_ms)}'"
+            win_start = 'NULL' if not start_ms else f"'{btime.to_datetime(start_ms)}'"
+            where_ft = f"'{{\"where\": \"sid={sid}\"}}'"
             for intv in cls.agg_intvs:
                 tf = intv[0]
                 tf_secs = tf_to_secs(tf)
+                if tf_secs <= from_secs:
+                    continue
                 if range_secs < tf_secs * 0.3:
                     continue
                 cur_end_ms = int(end_ms // tf_secs * tf_secs) + tf_secs * 1000 + 1
                 cur_end_dt = btime.to_datetime(cur_end_ms)
-                stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', {win_start}, '{cur_end_dt}');"
+                stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', {win_start}, '{cur_end_dt}', {where_ft});"
                 try:
                     conn.execute(sa.text(stmt))
                 except Exception:
@@ -309,7 +318,7 @@ order by time'''
             for hole in hole_list:
                 start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
                 logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
-                await download_to_db(exchange, stf.symbol, start_ms, end_ms, check_exist=False)
+                await download_to_db(exchange, stf.symbol, '1m', start_ms, end_ms, check_exist=False)
                 real_holes = cls._find_sid_hole(sess, sid, hole[0], hole[1] + 0.1, as_ts=False)
                 if not real_holes:
                     continue

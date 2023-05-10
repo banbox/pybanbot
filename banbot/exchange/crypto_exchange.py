@@ -144,6 +144,27 @@ def _save_markets(exg, cache_dir: str):
         fout.write(orjson.dumps(result, option=orjson.OPT_INDENT_2))
 
 
+def net_retry(func):
+    import random
+    retry_num: int = 2
+
+    async def wrapper(self, *args, **kwargs):
+        if self.conti_error > retry_num and random.random() < 0.7:
+            # 当不可用时，30%的概率重试，70%概率直接错误
+            raise ccxt.ExchangeNotAvailable(self.name)
+        while True:
+            try:
+                ret_val = await func(self, *args, **kwargs)
+                self.conti_error = 0
+                return ret_val
+            except ccxt.ExchangeNotAvailable:
+                self.conti_error += 1
+                if self.conti_error > retry_num:
+                    raise
+                await asyncio.sleep(0.03)
+    return wrapper
+
+
 class CryptoExchange:
 
     _ft_has: Dict = {
@@ -188,6 +209,7 @@ class CryptoExchange:
         self.markets_at = time.monotonic() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
         self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits')
+        self.conti_error = 0
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
 
@@ -196,6 +218,7 @@ class CryptoExchange:
         await self.update_quote_price()
         await self.cancel_open_orders(pairs)
 
+    @net_retry
     async def load_markets(self):
         if time.monotonic() - self.markets_at < 1800:
             return
@@ -319,12 +342,15 @@ class CryptoExchange:
         '''
         return endpoint in self.api_async.has and self.api_async.has[endpoint]
 
+    @net_retry
     async def fetch_ticker(self, symbol, params={}):
         return await self.api_async.fetch_ticker(symbol, params)
 
+    @net_retry
     async def fetch_tickers(self, symbols=None, params={}):
         return await self.api_async.fetch_tickers(symbols, params)
 
+    @net_retry
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:
             params = {}
@@ -333,9 +359,11 @@ class CryptoExchange:
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
         return await self.api_ws.watch_trades(symbol, since, limit, params)
 
+    @net_retry
     async def fetch_balance(self, params={}):
         return await self.api_async.fetch_balance(params)
 
+    @net_retry
     async def fetch_order_book(self, symbol, limit=None, params={}):
         return await self.api_async.fetch_order_book(symbol, limit, params)
 

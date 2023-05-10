@@ -49,10 +49,10 @@ class LiveTrader(Trader):
 
     async def init(self):
         await self.exchange.load_markets()
-        await self.pair_mgr.refresh_pairlist()
-        await self.wallets.init(self.pair_mgr.symbols)
         with db():
             BotTask.init()
+            await self.pair_mgr.refresh_pairlist()
+            await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
             pair_tfs = self._load_strategies(self.pair_mgr.symbols)
             await self.data_mgr.sub_pairs(pair_tfs)

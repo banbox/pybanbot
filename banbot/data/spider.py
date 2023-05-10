@@ -50,22 +50,24 @@ async def down_pairs_by_config(config: Config):
     cur_ms = round(time.time() * 1000)
     end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
     exchange = get_exchange()
+    timeframes = config['timeframes']
+    tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
     if config['medium'] == 'db':
-        tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
-        args_list = [(exchange, pair, start_ms, end_ms) for pair in pairs]
-        for job in parallel_jobs(download_to_db, args_list):
-            pair = (await job)['args'][0]
-            logger.warning(f'{pair} down {tr_text} complete')
+        tf = timeframes[0]
+        if len(timeframes) > 1:
+            logger.error('only one timeframe should be given to download into db')
+            return
+        for pair in pairs:
+            pair = await download_to_db(exchange, pair, tf, start_ms, end_ms)
+            logger.warning(f'{pair}/{tf} down {tr_text} complete')
     else:
         data_dir = config['data_dir']
-        timeframes = config['timeframes']
         if not os.path.isdir(data_dir):
             os.mkdir(data_dir)
-        tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
-        args_list = [(exchange, pair, tf, start_ms, end_ms, data_dir) for pair in pairs for tf in timeframes]
-        for job in parallel_jobs(download_to_file, args_list):
-            pair, tf = (await job)['args'][:2]
-            logger.warning(f'{pair}/{tf} down {tr_text} complete')
+        for pair in pairs:
+            for tf in timeframes:
+                await download_to_file(exchange, pair, tf, start_ms, end_ms, data_dir)
+                logger.warning(f'{pair}/{tf} down {tr_text} complete')
     await exchange.close()
 
 
@@ -118,7 +120,7 @@ class LiveMiner(Watcher):
         from banbot.storage import db
         from banbot.storage import KLine
         with db():
-            KLine.insert(self.exchange.name, pair, [bar_row])
+            KLine.insert(self.exchange.name, pair, timeframe, [bar_row])
 
     async def _try_update(self):
         import ccxt

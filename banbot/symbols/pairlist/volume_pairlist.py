@@ -7,6 +7,7 @@ from cachetools import TTLCache
 from banbot.symbols.pairlist.base import *
 from banbot.util.misc import parallel_jobs
 from banbot.compute.tainds import hcol, lcol, ccol, vcol
+import numpy as np
 
 SORT_VALUES = ['quoteVolume']
 
@@ -25,6 +26,8 @@ class VolumePairList(PairList):
         self.refresh_period = handler_cfg.get('refresh_period', 1800)  # in secs
         self.pair_cache = TTLCache(maxsize=1, ttl=self.refresh_period)
         self.backtf = handler_cfg.get('back_timeframe', '1d')
+        if self.backtf not in KLine.tf_tbls:
+            raise RuntimeError(f'`back_timeframe` must in {KLine.tf_tbls.keys()}')
         self.backperiod = handler_cfg.get('back_period', 1)
 
         tf_secs = tf_to_secs(self.backtf)
@@ -65,16 +68,13 @@ class VolumePairList(PairList):
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         if self.use_range:
             tf_secs = self.tf_mins * 60
-            since_ts, to_ts = get_back_ts(tf_secs, self.backperiod, in_ms=False)
+            since_ts, to_ts = get_back_ts(tf_secs, self.backperiod)
 
-            arg_list = [(self.exchange.name, p, self.backtf, since_ts) for p in pairlist]
-            res_list = parallel_jobs(auto_fetch_ohlcv, arg_list)
-            for job in res_list:
-                item = await job
-                data, args, kwargs = item['data'], item['args'], item['kwargs']
-                symbol = args[0]
-                item['symbol'] = symbol
-                contract_size = self.exchange.markets[symbol].get('contractSize', 1.0) or 1.0
+            res_list = []
+            for pair in pairlist:
+                data = await auto_fetch_ohlcv(self.exchange, pair, self.backtf, since_ts)
+                item = dict(symbol=pair)
+                contract_size = self.exchange.markets[pair].get('contractSize', 1.0) or 1.0
                 if not data:
                     item['quoteVolume'] = 0
                 else:
@@ -85,6 +85,7 @@ class VolumePairList(PairList):
                     else:
                         quote_vol = arr[:, vcol]
                     item['quoteVolume'] = np.sum(quote_vol[-self.backperiod:])
+                res_list.append(item)
         else:
             # Tickers mode - filter based on incoming pairlist.
             res_list = [dict(symbol=k, quoteVolume=0) for k, v in tickers.items() if k in pairlist]

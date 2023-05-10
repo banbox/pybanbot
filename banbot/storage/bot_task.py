@@ -24,6 +24,9 @@ class BotTask(BaseDbModel):
     def init(cls, start_at: Optional[float] = None):
         if cls.obj is not None:
             return
+        if not BotGlobal.stg_hash:
+            from banbot.strategy.resolver import StrategyResolver
+            StrategyResolver.load_run_jobs(AppConfig.get(), ['BTC/USDT'])
         sess = db.session
         rmode = btime.run_mode.value
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]

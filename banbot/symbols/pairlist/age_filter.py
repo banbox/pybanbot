@@ -37,9 +37,8 @@ class AgeFilter(PairList):
         if not self.enable:
             return pairlist
         since_days = (self.max_days if self.max_days else self.min_days) + 1
-        since = int(btime.time() - since_days * 86_400)
         for pair in new_pairs:
-            candles = await auto_fetch_ohlcv(self.exchange.name, pair, '1d', since)
+            candles = await auto_fetch_ohlcv(self.exchange, pair, '1d', limit=since_days)
             knum = len(candles)
             cur_ms = btime.time() * 1000
             if knum >= self.min_days and (not self.max_days or knum <= self.max_days):

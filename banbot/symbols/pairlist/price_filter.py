@@ -35,9 +35,8 @@ class PriceFilter(PairList):
                 return False
             price = ticker['last']
         else:
-            since_ts, to_ts = get_back_ts(300, 1, in_ms=False)
-            loop = asyncio.get_running_loop()
-            candles = loop.run_until_complete(auto_fetch_ohlcv(self.exchange.name, pair, '5m', since_ts))
+            since_ms = get_back_ts(60, 1)[0]
+            candles = KLine.query(self.exchange.name, pair, '1m', since_ms, limit=1)
             price = candles[-1][ccol]
 
         if self.precision > 0:
