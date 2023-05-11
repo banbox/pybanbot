@@ -26,8 +26,8 @@ class VolumePairList(PairList):
         self.refresh_period = handler_cfg.get('refresh_period', 1800)  # in secs
         self.pair_cache = TTLCache(maxsize=1, ttl=self.refresh_period)
         self.backtf = handler_cfg.get('back_timeframe', '1d')
-        if self.backtf not in KLine.tf_tbls:
-            raise RuntimeError(f'`back_timeframe` must in {KLine.tf_tbls.keys()}')
+        if self.backtf not in KLine.agg_map:
+            raise RuntimeError(f'`back_timeframe` must in {KLine.agg_map.keys()}')
         self.backperiod = handler_cfg.get('back_period', 1)
 
         tf_secs = tf_to_secs(self.backtf)

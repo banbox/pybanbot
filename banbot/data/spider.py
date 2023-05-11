@@ -57,6 +57,9 @@ async def down_pairs_by_config(config: Config):
         if len(timeframes) > 1:
             logger.error('only one timeframe should be given to download into db')
             return
+        if tf not in {'1m', '1h'}:
+            logger.error(f'can only download kline: 1m or 1h, current: {tf}')
+            return
         for pair in pairs:
             pair = await download_to_db(exchange, pair, tf, start_ms, end_ms)
             logger.warning(f'{pair}/{tf} down {tr_text} complete')

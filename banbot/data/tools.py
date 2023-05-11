@@ -256,6 +256,8 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
     '''
+    if timeframe not in {'1m', '1h'}:
+        raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
     exg_name = exchange.name
     from banbot.storage import KLine
     if check_exist:
@@ -266,21 +268,18 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
                 cur_end = round(old_start)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
                 KLine.insert(exg_name, pair, timeframe, predata)
-                KLine.refresh_conti_agg(exg_name, pair, start_ms, cur_end, timeframe)
                 start_ms = old_end + 1
             elif end_ms > old_end:
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 cur_start = round(old_end + 1)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, cur_start, end_ms)
                 KLine.insert(exg_name, pair, timeframe, predata)
-                KLine.refresh_conti_agg(exg_name, pair, cur_start, end_ms, timeframe)
                 return
             else:
                 # 要下载的数据全部存在，直接退出
                 return
     newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
     KLine.insert(exg_name, pair, timeframe, newdata, check_exist)
-    KLine.refresh_conti_agg(exg_name, pair, start_ms, end_ms, timeframe)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
@@ -321,14 +320,15 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     :param limit:
     :return:
     '''
-    tf_msecs = tf_to_secs(timeframe) * 1000
+    from banbot.storage import KLine
+    down_tf = KLine.get_down_tf(timeframe)
+    tf_msecs = tf_to_secs(down_tf) * 1000
     if not end_ms:
         end_ms = int(btime.time() * 1000)
     end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
         start_ms = end_ms - tf_msecs * limit
-    await download_to_db(exchange, pair, timeframe, start_ms, end_ms)
-    from banbot.storage import KLine
+    await download_to_db(exchange, pair, down_tf, start_ms, end_ms)
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
 

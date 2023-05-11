@@ -5,11 +5,12 @@
 # Date  : 2023/4/24
 from banbot.storage import *
 from banbot.storage.base import BaseDbModel, sa, init_db
+from banbot.storage.klines import KLine1H
 from banbot.util.common import logger
 from typing import Any, Dict, List
 
 
-all_tables = [SymbolTF, KLine, KHole, BotTask, Order, InOutOrder]
+all_tables = [SymbolTF, KLine, KLine1H, KHole, BotTask, Order, InOutOrder]
 tbl_map: Dict[str, BaseDbModel] = dict()
 for tbl in all_tables:
     tbl_map[tbl.__tablename__.lower()] = tbl

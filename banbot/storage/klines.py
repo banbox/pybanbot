@@ -11,10 +11,8 @@ from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.util import btime
 
 
-class KLine(BaseDbModel):
-    __tablename__ = 'kline'
-    _sid_range_map: ClassVar[Dict[Tuple[int, str], Tuple[int, int]]] = dict()
-    interval: ClassVar[int] = 60000  # 每行是1m维度
+class KLine1H(BaseDbModel):
+    __tablename__ = 'kline_1h'
 
     sid = Column(sa.Integer, primary_key=True)
     time = Column(sa.DateTime, primary_key=True)
@@ -24,45 +22,52 @@ class KLine(BaseDbModel):
     close = Column(sa.FLOAT)
     volume = Column(sa.FLOAT)
 
-    agg_intvs = [
-        ('5m', '20m', '1m', '1m', 'kline'),
-        ('15m', '1h', '5m', '5m', 'kline_5m'),
-        ('1d', '3d', '15m', '15m', 'kline_15m')]
 
-    tf_tbls = {'1m': 'kline', '5m': 'kline_5m', '15m': 'kline_15m', '1d': 'kline_1d'}
+class BarAgg:
+    def __init__(self, tf: str, tbl: str, agg_from: Optional[str], agg_start: Optional[str],
+                 agg_end: Optional[str], agg_every: Optional[str], comp_before: str = None,
+                 retention: str = 'all'):
+        self.tf = tf
+        self.secs = tf_to_secs(tf)
+        self.tbl = tbl
+        self.agg_from = agg_from
+        self.agg_start = agg_start
+        self.agg_end = agg_end
+        self.agg_every = agg_every
+        self.comp_before = comp_before
+        self.retention = retention
+        self.is_view = comp_before is None  # 超表可压缩，故传入压缩参数的认为是超表
 
-    tf_list = [
-        ('1m', 'kline', 60),
-        ('5m', 'kline_5m', 300),
-        ('15m', 'kline_15m', 900),
-        ('1d', 'kline_1d', 1440),
+
+class KLine(BaseDbModel):
+    '''
+    K线数据超表，存储1m维度数据
+    还有一个超表kline_1h存储1h维度数据
+    '''
+    __tablename__ = 'kline'
+    _sid_range_map: ClassVar[Dict[Tuple[int, str], Tuple[int, int]]] = dict()
+
+    sid = Column(sa.Integer, primary_key=True)
+    time = Column(sa.DateTime, primary_key=True)
+    open = Column(sa.FLOAT)
+    high = Column(sa.FLOAT)
+    low = Column(sa.FLOAT)
+    close = Column(sa.FLOAT)
+    volume = Column(sa.FLOAT)
+
+    agg_list = [
+        BarAgg('1m', 'kline', None, None, None, None, '3 days', '60 days'),
+        BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m'),
+        BarAgg('15m', 'kline_15m', '5m', '1h', '5m', '5m'),
+        BarAgg('1h', 'kline_1h', '15m', '3h', '15m', '15m', '60 days', '2 years'),
+        BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h'),
     ]
 
+    agg_map: Dict[str, BarAgg] = {v.tf: v for v in agg_list}
+
     @classmethod
-    def init_tbl(cls, conn: sa.Connection):
-        statements = [
-            "SELECT create_hypertable('kline','time');",
-            '''ALTER TABLE kline SET (
-              timescaledb.compress,
-              timescaledb.compress_orderby = 'time DESC',
-              timescaledb.compress_segmentby = 'sid'
-            );''',
-            "SELECT add_compression_policy('kline', INTERVAL '3 days');",
-        ]
-        for stat in statements:
-            conn.execute(sa.text(stat))
-            conn.commit()
-        # 设置数据丢弃
-        db_retention = AppConfig.get()['database'].get('retention')
-        if db_retention and db_retention != 'all':
-            conn.execute(sa.text(f"SELECT add_retention_policy('kline', INTERVAL '{db_retention}');"))
-            conn.commit()
-        # 创建连续聚合及更新策略
-        for item in cls.agg_intvs:
-            intv, start, end, every, base_tbl = item
-            stat_create = f'''
-CREATE MATERIALIZED VIEW kline_{intv} 
-WITH (timescaledb.continuous) AS 
+    def _agg_sql(cls, intv: str, base_tbl: str, where_str: str = ''):
+        return f'''
 SELECT 
   sid,
   time_bucket(INTERVAL '{intv}', time) AS time,
@@ -71,14 +76,51 @@ SELECT
   min(low) AS low, 
   last(close, time) AS close,
   sum(volume) AS volume
-FROM {base_tbl} 
+FROM {base_tbl} {where_str}
 GROUP BY sid, 2 
 ORDER BY sid, 2'''
+
+    @classmethod
+    def _init_hypertbl(cls, conn: sa.Connection, tbl: BarAgg):
+        statements = [
+            f"SELECT create_hypertable('{tbl.tbl}','time');",
+            '''ALTER TABLE {tbl.tbl} SET (
+              timescaledb.compress,
+              timescaledb.compress_orderby = 'time DESC',
+              timescaledb.compress_segmentby = 'sid'
+            );''',
+            f"SELECT add_compression_policy('{tbl.tbl}', INTERVAL '{tbl.comp_before}');",
+        ]
+        for stat in statements:
+            conn.execute(sa.text(stat))
+            conn.commit()
+        # 设置数据丢弃
+        db_retention = AppConfig.get()['database'].get('retention')
+        if db_retention and db_retention != 'all':
+            conn.execute(sa.text(f"SELECT add_retention_policy('{tbl.tbl}', INTERVAL '{tbl.retention}');"))
+            conn.commit()
+
+    @classmethod
+    def init_tbl(cls, conn: sa.Connection):
+        cls._init_hypertbl(conn, cls.agg_list[0])
+        # 创建连续聚合及更新策略
+        for item in cls.agg_list[1:]:
+            if not item.is_view:
+                create_sql = f'CREATE TABLE {item.tbl} (LIKE kline INCLUDING ALL);'
+                conn.execute(sa.text(create_sql))
+                conn.commit()
+                # 初始化超表
+                cls._init_hypertbl(conn, item)
+                continue
+            stat_create = f'''
+CREATE MATERIALIZED VIEW kline_{item.tf} 
+WITH (timescaledb.continuous) AS 
+{cls._agg_sql(item.tf, item.agg_from)}'''
             stat_policy = f'''
-SELECT add_continuous_aggregate_policy('kline_{intv}',
-  start_offset => INTERVAL '{start}',
-  end_offset => INTERVAL '{end}',
-  schedule_interval => INTERVAL '{every}');'''
+SELECT add_continuous_aggregate_policy('kline_{item.tf}',
+  start_offset => INTERVAL '{item.agg_start}',
+  end_offset => INTERVAL '{item.agg_end}',
+  schedule_interval => INTERVAL '{item.agg_every}');'''
             conn.execute(sa.text(stat_create))
             conn.commit()
             conn.execute(sa.text(stat_policy))
@@ -86,10 +128,14 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
 
     @classmethod
     def drop_tbl(cls, conn: sa.Connection):
-        intv, start, end, every, base_tbl = cls.agg_intvs[0]
-        vname = f'kline_{intv}'
-        conn.execute(sa.text(f"drop MATERIALIZED view if exists {vname} CASCADE"))
-        conn.execute(sa.text(f"drop table if exists kline"))
+        '''
+        删除所有的K线数据表；超表+连续聚合
+        '''
+        for tbl in cls.agg_list[::-1]:
+            if tbl.is_view:
+                conn.execute(sa.text(f"drop MATERIALIZED view if exists {tbl.tbl} CASCADE"))
+            else:
+                conn.execute(sa.text(f"drop table if exists {tbl.tbl}"))
 
     @classmethod
     def _get_sid(cls, exg_name: str, symbol: Union[str, int]):
@@ -104,9 +150,9 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
                      dct_sql: str, gp_sql: Union[str, Callable]):
         sid = cls._get_sid(exg_name, symbol)
         conn = db.session.connection()
-        if timeframe in cls.tf_tbls:
+        if timeframe in cls.agg_map:
             stmt = dct_sql.format(
-                tbl=cls.tf_tbls[timeframe],
+                tbl=cls.agg_map[timeframe].tbl,
                 sid=sid
             )
             return conn.execute(sa.text(stmt))
@@ -114,9 +160,9 @@ SELECT add_continuous_aggregate_policy('kline_{intv}',
             # 时间帧没有直接符合的，从最接近的子timeframe聚合
             tf_secs = tf_to_secs(timeframe)
             sub_tf, sub_tbl = None, None
-            for stf, stbl, stf_secs in cls.tf_list[::-1]:
-                if tf_secs % stf_secs == 0:
-                    sub_tf, sub_tbl = stf, stbl
+            for item in cls.agg_list[::-1]:
+                if tf_secs % item.secs == 0:
+                    sub_tf, sub_tbl = item.tf, item.tbl
                     break
             if not sub_tbl:
                 raise RuntimeError(f'unsupport timeframe {timeframe}')
@@ -184,8 +230,9 @@ order by time'''
         else:
             old_start, old_stop = cls._sid_range_map[cache_key]
             if old_start and old_stop:
-                old_start -= cls.interval
-                old_stop += cls.interval
+                tf_msecs = tf_to_secs(timeframe) * 1000
+                old_start -= tf_msecs
+                old_stop += tf_msecs
                 if old_stop < start_ms or end_ms < old_start:
                     raise ValueError(f'incontinus range: {cache_key}, old range: [{old_start}, {old_stop}], '
                                      f'new: [{start_ms}, {end_ms}]')
@@ -194,9 +241,27 @@ order by time'''
                 cls._sid_range_map[cache_key] = start_ms, end_ms
 
     @classmethod
-    def insert(cls, exg_name: str, pair: str, timeframe: str, rows: List[Tuple], check_old=True):
+    def get_down_tf(cls, tf: str):
+        '''
+        获取指定周期对应的下载的时间周期。
+        只有1m和1h允许下载并写入超表。其他维度都是由这两个维度聚合得到。
+        '''
+        tf_secs = tf_to_secs(tf)
+        m1_secs, h1_secs = 60, 3600
+        if tf_secs >= h1_secs:
+            if tf_secs % h1_secs > 0:
+                raise RuntimeError(f'unsupport timeframe: {tf}')
+            return '1h'
+        if tf_secs < m1_secs or tf_secs % m1_secs > 0:
+            raise RuntimeError(f'unsupport timeframe: {tf}')
+        return '1m'
+
+    @classmethod
+    def insert(cls, exg_name: str, pair: str, timeframe: str, rows: List[Tuple], skip_in_range=True):
         if not rows:
             return
+        if timeframe not in {'1m', '1h'}:
+            raise RuntimeError(f'can only insert kline: 1m or 1h, current: {timeframe}')
         intv_secs = tf_to_secs(timeframe)
         rows = sorted(rows, key=lambda x: x[0])
         if len(rows) > 1:
@@ -214,57 +279,87 @@ order by time'''
             if old_stop < start_ms or end_ms < old_start:
                 raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
                                  f'insert: [{start_ms}, {end_ms}]')
+            if skip_in_range:
+                rows = [r for r in rows if not (old_start < r[0] < old_stop)]
         ins_rows = []
         for r in rows:
-            if check_old and old_start and old_stop and old_start < r[0] < old_stop:
-                continue
             row_ts = btime.to_datetime(r[0])
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
-        if not ins_rows:
-            return
         sess = db.session
         ins_cols = "sid, time, open, high, low, close, volume"
         places = ":sid, :time, :open, :high, :low, :close, :volume"
-        insert_sql = f"insert into {cls.tf_tbls[timeframe]} ({ins_cols}) values ({places})"
+        insert_sql = f"insert into {cls.agg_map[timeframe].tbl} ({ins_cols}) values ({places})"
         sess.execute(sa.text(insert_sql), ins_rows)
         sess.commit()
         # 更新区间
         cls._update_range(sid, timeframe, start_ms, end_ms)
+        # 刷新相关的连续聚合
+        cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
 
     @classmethod
-    def refresh_conti_agg(cls, exg_name: str, pair: str, start_ms: int, end_ms: int, from_level: str = '1m'):
-        sid = cls._get_sid(exg_name, pair)
-        range_secs = (end_ms - start_ms) / 1000
+    def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
+        agg_keys = {'1m'}
         from_secs = tf_to_secs(from_level)
+        for item in cls.agg_list:
+            if item.secs <= from_secs or item.agg_from not in agg_keys:
+                # 跳过过小维度；跳过无关的连续聚合
+                continue
+            start_align = start_ms // 1000 // item.secs * item.secs
+            end_align = end_ms // 1000 // item.secs * item.secs
+            next_align = (end_ms // 1000 + from_secs) // item.secs * item.secs
+            if start_align == end_align == next_align < start_ms:
+                # 没有出现新的bar数据，无需更新
+                # 前三个相等，说明：插入的数据所属bar尚未完成。
+                # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
+                continue
+            agg_keys.add(item.tf)
+        agg_keys.remove('1m')
+        if not agg_keys:
+            return
         from banbot.storage.base import init_db
         with init_db().connect() as conn:
             # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
             bak_iso_level = conn.get_isolation_level()
             conn.execution_options(isolation_level='AUTOCOMMIT')
-            win_start = 'NULL' if not start_ms else f"'{btime.to_datetime(start_ms)}'"
-            where_ft = f"'{{\"where\": \"sid={sid}\"}}'"
-            for intv in cls.agg_intvs:
-                tf = intv[0]
-                tf_secs = tf_to_secs(tf)
-                if tf_secs <= from_secs:
-                    continue
-                if range_secs < tf_secs * 0.3:
-                    continue
-                cur_end_ms = int(end_ms // tf_secs * tf_secs) + tf_secs * 1000 + 1
-                cur_end_dt = btime.to_datetime(cur_end_ms)
-                stmt = f"CALL refresh_continuous_aggregate('kline_{tf}', {win_start}, '{cur_end_dt}', {where_ft});"
-                try:
-                    conn.execute(sa.text(stmt))
-                except Exception:
-                    pass
+            for tf in agg_keys:
+                cls._refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
             conn.commit()
             conn.execution_options(isolation_level=bak_iso_level)
 
     @classmethod
+    def _refresh_agg(cls, conn: sa.Connection, tbl: BarAgg, sid: int, start_ms: int, end_ms: int):
+        tf_msecs = tbl.secs * 1000
+        win_start = f"'{btime.to_datetime((start_ms // tf_msecs - 1) * tf_msecs)}'"
+        win_end = f"'{btime.to_datetime((end_ms // tf_msecs + 1) * tf_msecs)}'"
+        if tbl.is_view:
+            # 刷新连续聚合
+            where_ft = f"'{{\"where\": \"sid={sid}\"}}'"
+            stmt = f"CALL refresh_continuous_aggregate('{tbl.tbl}', {win_start}, {win_end}, {where_ft});"
+        else:
+            # 聚合数据到超表中
+            where_str = f'where sid={sid} and time >= {win_start} and time < {win_end}'
+            select_sql = cls._agg_sql(tbl.tf, tbl.agg_from, where_str)
+            ins_cols = "sid, time, open, high, low, close, volume"
+            stmt = f'''
+INSERT INTO {tbl.tbl} ({ins_cols})
+{select_sql}
+ON CONFLICT (sid, time)
+DO UPDATE SET 
+open = EXCLUDED.open,
+high = EXCLUDED.high,
+low = EXCLUDED.low,
+close = EXCLUDED.close,
+volume = EXCLUDED.volume;'''
+        try:
+            conn.execute(sa.text(stmt))
+        except Exception as e:
+            logger.error(f'refresh conti agg error: {e}, {tbl.tf}')
+
+    @classmethod
     def _find_sid_hole(cls, sess: SqlSession, sid: int, since: float, until: float = 0., as_ts=True):
-        batch_size, true_intv = 1000, cls.interval / 1000
+        batch_size, true_intv = 1000, 60.
         prev_date = None
         res_holes = []
         while True:
@@ -335,5 +430,6 @@ class KHole(BaseDbModel):
     __tablename__ = 'khole'
 
     sid = Column(sa.Integer, primary_key=True)
+    timeframe = Column(sa.String(5), primary_key=True)
     start = Column(sa.DateTime, primary_key=True)
     stop = Column(sa.DateTime)
