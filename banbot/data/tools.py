@@ -229,10 +229,10 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
         logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
         if req_times < 3:
             show_info = False
-    since, total_tr = start_ts, end_ts - start_ts
+    since, total_tr = round(start_ts), end_ts - start_ts
     result = []
     pbar = tqdm() if show_info else None
-    while since + tf_msecs < end_ts:
+    while since + tf_msecs <= end_ts:
         data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
         if not len(data):
             break
@@ -268,11 +268,10 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
                 cur_end = round(old_start)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
                 KLine.insert(exg_name, pair, timeframe, predata)
-                start_ms = old_end + 1
+                start_ms = old_end
             elif end_ms > old_end:
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-                cur_start = round(old_end + 1)
-                predata = await fetch_api_ohlcv(exchange, pair, timeframe, cur_start, end_ms)
+                predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end, end_ms)
                 KLine.insert(exg_name, pair, timeframe, predata)
                 return
             else:
@@ -327,6 +326,7 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
         end_ms = int(btime.time() * 1000)
     end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
+        tf_msecs = tf_to_secs(timeframe) * 1000
         start_ms = end_ms - tf_msecs * limit
     await download_to_db(exchange, pair, down_tf, start_ms, end_ms)
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)

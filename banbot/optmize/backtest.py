@@ -57,6 +57,7 @@ class BackTest(Trader):
         await self.exchange.load_markets()
         self.min_balance = self.stake_amount
         self.max_balance = self.stake_amount
+        KLine.sync_timeframes()
         await self.pair_mgr.refresh_pairlist()
         pair_tfs = self._load_strategies(self.pair_mgr.symbols)
         with db():

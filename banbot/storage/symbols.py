@@ -35,3 +35,7 @@ class SymbolTF(BaseDbModel):
         cls._object_map[key] = obj.id
         sess.commit()
         return obj.id
+
+    @classmethod
+    def all_sid(cls) -> List[int]:
+        return list(cls._object_map.values())

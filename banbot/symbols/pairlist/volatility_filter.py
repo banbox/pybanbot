@@ -41,7 +41,7 @@ class VolatilityFilter(PairList):
 
     def _validate_pair_loc(self, pair: str, candles: List):
         if not candles:
-            logger.info('remove %s in RangeStabilityFilter, no candles found', pair)
+            logger.info('remove %s in VolatilityFilter, no candles found', pair)
             return False
         close_arr = np.array(candles)[:, ccol]
         close_s1 = np.roll(close_arr, -1)

@@ -51,6 +51,7 @@ class LiveTrader(Trader):
         await self.exchange.load_markets()
         with db():
             BotTask.init()
+            KLine.sync_timeframes()
             await self.pair_mgr.refresh_pairlist()
             await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
