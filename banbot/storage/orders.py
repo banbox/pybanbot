@@ -348,7 +348,8 @@ def get_db_orders(strategy: str = None, pair: str = None, status: str = None) ->
         where_list.append(InOutOrder.symbol == pair)
     io_rows = sess.query(InOutOrder).filter(*where_list).all()
     io_ids = {row.id for row in io_rows}
-    ex_ods = sess.query(Order).filter(Order.inout_id.in_(io_ids)).order_by(Order.inout_id).all()
+    ex_filters = [Order.task_id == BotTask.cur_id, Order.inout_id.in_(io_ids)]
+    ex_ods = sess.query(Order).filter(*ex_filters).order_by(Order.inout_id).all()
     ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
     ex_exits = {od.inout_id: od for od in ex_ods if not od.enter}
     for row in io_rows:

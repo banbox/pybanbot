@@ -72,7 +72,7 @@ class Trader:
                         exit_list.append((stg_name, exit_tag))
                     ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_cost = (time.monotonic() - start_time) * 1000
-            if calc_cost >= 10 and btime.run_mode in LIVE_MODES:
+            if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)

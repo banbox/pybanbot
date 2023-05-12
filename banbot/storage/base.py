@@ -28,18 +28,6 @@ _db_sess: ContextVar[Optional[SqlSession]] = ContextVar('_db_sess', default=None
 db_slow_query_timeout = 1
 
 
-def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    conn.info.setdefault('query_start_time', []).append(time.monotonic())
-
-
-def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    total = time.monotonic() - conn.info['query_start_time'].pop(-1)
-    if total > 1:
-        logger.error(f'very slow database query found, cost {total:.3f}, {statement}, {parameters}')
-    elif total > 0.3:
-        logger.warning(f'slow database query found, cost {total:.3f}, {statement}, {parameters}')
-
-
 def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None):
     '''
     初始化数据库客户端（并未连接到数据库）
@@ -66,8 +54,6 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
         create_args['echo'] = debug
     create_args['isolation_level'] = iso_level
     _db_engine = create_engine(db_url, **create_args)
-    db_event.listens_for(_db_engine, "before_cursor_execute", before_cursor_execute)
-    db_event.listens_for(_db_engine, "after_cursor_execute", after_cursor_execute)
     _DbSession = sessionmaker(bind=_db_engine)
     return _db_engine
 

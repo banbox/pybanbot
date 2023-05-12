@@ -361,7 +361,8 @@ group by 1'''
         if not agg_from:
             agg_from = 'kline_' + tbl.agg_from
         tf_msecs = tbl.secs * 1000
-        win_start = f"'{btime.to_datetime(start_ms // tf_msecs * tf_msecs)}'"
+        # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
+        win_start = f"'{btime.to_datetime((start_ms // tf_msecs - 1) * tf_msecs)}'"
         win_end = f"'{btime.to_datetime(end_ms // tf_msecs * tf_msecs)}'"
         if tbl.is_view:
             # 刷新连续聚合（连续聚合不支持按sid筛选刷新，性能批量插入历史数据时性能较差）

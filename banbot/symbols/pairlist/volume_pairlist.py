@@ -32,10 +32,11 @@ class VolumePairList(PairList):
 
         tf_secs = tf_to_secs(self.backtf)
         self.tf_mins = tf_secs // 60
-        self.use_range = self.tf_mins > 0 and self.backperiod > 0
+        back_mins = self.tf_mins * self.backperiod
+        self.use_ohlcvs = back_mins > 0 and back_mins != 1440
 
-        if not self.use_range and not (self.exchange.has_api('fetchTickers') and
-                                       self.exchange.get_option('tickers_have_quoteVolume')):
+        if not self.use_ohlcvs and not (self.exchange.has_api('fetchTickers') and
+                                        self.exchange.get_option('tickers_have_quoteVolume')):
             raise RuntimeError(f'exchange {self.exchange.name} not support tickers required by VolumePairList')
 
         if self.sort_key not in SORT_VALUES:
@@ -46,7 +47,7 @@ class VolumePairList(PairList):
 
     @property
     def need_tickers(self):
-        return self.use_range
+        return not self.use_ohlcvs
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:
         pairlist = self.pair_cache.get('pairlist')
@@ -55,9 +56,9 @@ class VolumePairList(PairList):
         ava_markets = self.exchange.get_markets(quote_currencies=list(self.stake_currency), active_only=True)
         _pairlist = list(ava_markets.keys())
         _pairlist = self.manager.verify_blacklist(_pairlist)
-        if not self.use_range:
+        if not self.use_ohlcvs:
             pairlist = [v['symbol'] for k, v in tickers.items()
-                        if v.get(self.sort_key) is not None and v['symbol'] in _pairlist]
+                        if v.get(self.sort_key) and v['symbol'] in _pairlist]
         else:
             pairlist = _pairlist
 
@@ -66,7 +67,7 @@ class VolumePairList(PairList):
         return pairlist
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
-        if self.use_range:
+        if self.use_ohlcvs:
             tf_secs = self.tf_mins * 60
             since_ts, to_ts = get_back_ts(tf_secs, self.backperiod)
 
@@ -88,7 +89,8 @@ class VolumePairList(PairList):
                 res_list.append(item)
         else:
             # Tickers mode - filter based on incoming pairlist.
-            res_list = [dict(symbol=k, quoteVolume=0) for k, v in tickers.items() if k in pairlist]
+            res_list = [dict(symbol=k, quoteVolume=v.get('quoteVolume', 0))
+                        for k, v in tickers.items() if k in pairlist]
 
         if self.min_value:
             res_list = [v for v in res_list if v[self.sort_key] > self.min_value]

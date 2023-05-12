@@ -15,7 +15,6 @@ class ShuffleFilter(PairList):
 
         if btime.run_mode in LIVE_MODES:
             self.seed = None
-            logger.info('live mode detected, not applying seed')
         else:
             self.seed = handler_cfg.get('seed')
             logger.info('apply seed for pairlist: %s', self.seed)

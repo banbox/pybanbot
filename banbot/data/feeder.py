@@ -68,9 +68,7 @@ class DataFeeder(Watcher):
             ohlcvs, last_finish = details, True
         else:
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
-        if len(ohlcvs) > 2:
-            raise RuntimeError(f'{self.pair} {state.timeframe} ohlc num err: {len(ohlcvs)}')
-        # 子序列周期维度<=当前维度。最多涉及2个当前维度bar
+        # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
         min_finished = self._on_state_ohlcv(state, ohlcvs, last_finish)
         if len(self.states) > 1:
             # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新

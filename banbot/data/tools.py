@@ -327,7 +327,8 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
         tf_msecs = tf_to_secs(timeframe) * 1000
-        start_ms = end_ms - tf_msecs * limit
+        ret_end_ms = end_ms // tf_msecs * tf_msecs
+        start_ms = ret_end_ms - tf_msecs * limit
     await download_to_db(exchange, pair, down_tf, start_ms, end_ms)
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 

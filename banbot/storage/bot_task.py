@@ -45,6 +45,7 @@ class BotTask(BaseDbModel):
             sess.add(task)
             sess.flush()
         cls.cur_id = task.id
+        logger.info(f"init task ok, id: {task.id} hash: {task.stg_hash}")
         cls.obj = task
         sess.commit()
 

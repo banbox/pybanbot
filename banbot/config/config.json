@@ -3,7 +3,7 @@
   "env": "prod",
   "run_mode": "dry_run",
   "trade_mode": "spot",
-  "prefire": true,
+  "prefire": false,
   "quote_base": "USDT",
   "stake_amount": 100,
   "stake_currency": ["USDT", "TUSD"],
@@ -20,7 +20,7 @@
     {"name": "PriceFilter", "precision": 0.001, "max_unit_value": 100},
     {"name": "RangeStabilityFilter", "back_days": 5, "min_chg_rate": 0.03},
     {"name": "SpreadFilter", "max_ratio": 0.005},
-    {"name": "VolatilityFilter", "max": 1, "min": 0.01},
+    {"name": "VolatilityFilter", "max": 1, "min": 0.05},
     {"name": "AgeFilter", "min": 5, "enable": false},
     {"name": "OffsetFilter", "limit": 30},
     {"name": "ShuffleFilter"}

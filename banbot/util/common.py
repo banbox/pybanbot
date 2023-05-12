@@ -125,6 +125,11 @@ class MeasureTime:
                 break
             print(f'{item[0]:<{max_name_len}}{item[1]:.5f}')
 
+    def total_secs(self):
+        if not self.history:
+            return 0
+        return self.history[-1][1] - self.history[0][1]
+
 
 class StrFormatLogRecord(logging.LogRecord):
     def getMessage(self) -> str:
@@ -208,4 +213,4 @@ def get_logger(level=logging.INFO):
 
 
 logging.setLogRecordFactory(StrFormatLogRecord)
-logger = get_logger(logging.DEBUG)
+logger = get_logger()
