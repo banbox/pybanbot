@@ -5,6 +5,9 @@
 # Date  : 2023/3/29
 import asyncio
 import random
+import time
+
+import six
 
 import ccxt
 from ccxt import TICK_SIZE
@@ -276,10 +279,8 @@ class CryptoExchange:
             market.get('linear', False) is True
         )
 
-    def get_markets(self, base_currencies: List[str] = [], quote_currencies: List[str] = [],
-                    spot_only: bool = False, margin_only: bool = False, futures_only: bool = False,
-                    tradable_only: bool = True,
-                    active_only: bool = False) -> Dict[str, Any]:
+    def get_markets(self, quote_currs=None, base_currs=None, trade_modes: Union[str, Set[str], List[str]] = None,
+                    tradable_only: bool = True, active_only: bool = True) -> Dict[str, Any]:
         """
         Return exchange ccxt markets, filtered out by base currency and quote currency
         if this was requested in parameters.
@@ -288,21 +289,34 @@ class CryptoExchange:
         if not markets:
             raise RuntimeError("Markets were not loaded.")
 
-        if base_currencies:
-            markets = {k: v for k, v in markets.items() if v['base'] in base_currencies}
-        if quote_currencies:
-            markets = {k: v for k, v in markets.items() if v['quote'] in quote_currencies}
-        if tradable_only:
-            markets = {k: v for k, v in markets.items() if self.market_tradable(v)}
-        if spot_only:
-            markets = {k: v for k, v in markets.items() if v.get('spot')}
-        if margin_only:
-            markets = {k: v for k, v in markets.items() if v.get('margin')}
-        if futures_only:
-            markets = {k: v for k, v in markets.items() if self.market_is_future(v)}
-        if active_only:
-            markets = {k: v for k, v in markets.items() if v.get('active', True)}
-        return markets
+        spot_only, margin_only, futures_only = False, False, False
+        if trade_modes:
+            if isinstance(trade_modes, six.string_types):
+                trade_modes = {trade_modes}
+            else:
+                trade_modes = set(trade_modes)
+            spot_only = 'spot' in trade_modes
+            margin_only = 'margin' in trade_modes
+            futures_only = 'future' in trade_modes
+
+        def ia_valid(v: dict):
+            if base_currs and v['base'] not in base_currs:
+                return False
+            if quote_currs and v['quote'] not in quote_currs:
+                return False
+            if tradable_only and not self.market_tradable(v):
+                return False
+            if active_only and not v.get('active', True):
+                return False
+            if spot_only and not v.get('spot'):
+                return False
+            if margin_only and not v.get('margin'):
+                return False
+            if futures_only and not self.market_is_future(v):
+                return False
+            return True
+
+        return {k: v for k, v in markets.items() if ia_valid(v)}
 
     @property
     def precisionMode(self) -> int:

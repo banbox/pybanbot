@@ -43,7 +43,9 @@ class ProducerPairList(PairList):
         pairs = self._filter_pairlist(None)
         logger.debug('received pairs: %s', pairs)
         result = self.manager.verify_whitelist(pairs)
-        return self._filter_unactive(result)
+        ava_symbols = self.manager.avaiable_symbols
+        result = [p for p in result if p in ava_symbols]
+        return result
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         return self._filter_pairlist(pairlist)

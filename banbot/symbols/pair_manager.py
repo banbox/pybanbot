@@ -3,6 +3,8 @@
 # File  : pair_manager.py
 # Author: anyongjin
 # Date  : 2023/4/17
+import time
+
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
 from banbot.exchange.crypto_exchange import CryptoExchange
@@ -17,10 +19,12 @@ class PairManager:
     def __init__(self, config: Config, exchange: CryptoExchange):
         self.exchange = exchange
         self.config = config
-        self.handlers = PairResolver.load_handlers(exchange, self, config)
+        self.trade_mode = config.get('trade_mode') or 'spot'
+        self.stake_currency: Set[str] = set(config.get('stake_currency') or [])
         exg_cfg = AppConfig.get_exchange(config)
         self._whitelist = exg_cfg.get('pair_whitelist')
         self._blacklist = exg_cfg.get('pair_blacklist', [])
+        self.handlers = PairResolver.load_handlers(exchange, self, config)
         if not self.handlers:
             raise RuntimeError('no pairlist defined')
         ticker_names = [h.name for h in self.handlers if h.need_tickers]
@@ -28,6 +32,8 @@ class PairManager:
         if not exchange.has_api('fetchTickers') and ticker_names:
             raise ValueError(f'exchange not support fetchTickers, affect: {ticker_names}')
         self.ticker_cache = TTLCache(maxsize=1, ttl=1800)
+        self._ava_at = 0
+        self._ava_symbols = None
 
     @property
     def symbols(self):
@@ -40,15 +46,25 @@ class PairManager:
             return
         tickers = self.ticker_cache.get('tickers')
         if not tickers and self.need_tickers:
-            tickers = await self.exchange.fetch_tickers()
+            ava_symbols = list(self.avaiable_symbols)
+            tickers = await self.exchange.fetch_tickers(ava_symbols)
             self.ticker_cache['tickers'] = tickers
 
         pairlist = await self.handlers[0].gen_pairlist(tickers)
         for handler in self.handlers[1:]:
             pairlist = await handler.filter_pairlist(pairlist, tickers)
 
-        pairlist = self.verify_blacklist(pairlist)
         self._whitelist = pairlist
+
+    @property
+    def avaiable_symbols(self) -> Set[str]:
+        if self._ava_symbols and time.time() - self._ava_at < 300:
+            return self._ava_symbols
+        ava_markets = self.exchange.get_markets(quote_currs=self.stake_currency, trade_modes=[self.trade_mode])
+        all_symbols = list(ava_markets.keys())
+        self._ava_symbols = set(self.verify_blacklist(all_symbols))
+        self._ava_at = time.time()
+        return self._ava_symbols
 
     def verify_whitelist(self, pairlist: List[str], keep_invalid: bool = False) -> List[str]:
         try:

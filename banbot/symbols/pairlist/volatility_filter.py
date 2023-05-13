@@ -9,7 +9,6 @@ import numpy as np
 from cachetools import TTLCache
 from banbot.symbols.pairlist.base import *
 from banbot.compute.tainds import ccol
-from banbot.util.misc import parallel_jobs
 
 
 class VolatilityFilter(PairList):

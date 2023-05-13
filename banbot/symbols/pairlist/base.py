@@ -18,7 +18,6 @@ class PairList:
         self.manager = manager
         self.config = config
         self.handler_cfg = handler_cfg
-        self.stake_currency: Set[str] = set(config.get('stake_currency', []))
         self.enable = bool(handler_cfg.get('enable', True))
 
     @property
@@ -37,42 +36,4 @@ class PairList:
                 if not self._validate_pair(p, tickers.get(p)):
                     pairlist.remove(p)
         return pairlist
-
-    def _filter_unactive(self, pairlist: List[str]) -> List[str]:
-        markets = self.exchange.markets
-        if not markets:
-            raise RuntimeError('markets not loaded')
-
-        result = OrderedDict()
-        not_founds, not_tradables, not_currency, not_active = [], [], [], []
-        for pair in pairlist:
-            if pair not in markets:
-                not_founds.append(pair)
-                continue
-            market = markets[pair]
-
-            if not self.exchange.market_tradable(market):
-                not_tradables.append(pair)
-                continue
-
-            if market.get('quote') not in self.stake_currency:
-                not_currency.append(pair)
-                continue
-
-            if not market.get('active', True):
-                not_active.append(pair)
-                continue
-            result[pair] = 1
-
-        exg_name = self.exchange.name
-        if not_founds:
-            logger.warning('%d not found in %s, removing %s', len(not_founds), exg_name, not_founds)
-        if not_tradables:
-            logger.warning('%d not tradable in %s, removing %s', len(not_tradables), exg_name, not_tradables)
-        if not_currency:
-            logger.warning('%d not currency in %s, removing %s', len(not_currency), exg_name, not_currency)
-        if not_active:
-            logger.warning('%d not active in %s, removing %s', len(not_active), exg_name, not_active)
-
-        return list(result.keys())
 

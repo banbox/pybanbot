@@ -5,7 +5,6 @@
 # Date  : 2023/4/19
 from cachetools import TTLCache
 from banbot.symbols.pairlist.base import *
-from banbot.util.misc import parallel_jobs
 from banbot.compute.tainds import hcol, lcol, ccol, vcol
 import numpy as np
 
@@ -21,7 +20,7 @@ class VolumePairList(PairList):
         super(VolumePairList, self).__init__(manager, exchange, config, handler_cfg)
 
         self.limit = handler_cfg.get('limit', sys.maxsize)
-        self.sort_key: str = handler_cfg.get('sort_key', 'quoteVolume')
+        self.sort_key: str = handler_cfg.get('sort_key') or 'quoteVolume'
         self.min_value = handler_cfg.get('min_value', 0)
         self.refresh_period = handler_cfg.get('refresh_period', 1800)  # in secs
         self.pair_cache = TTLCache(maxsize=1, ttl=self.refresh_period)
@@ -30,10 +29,9 @@ class VolumePairList(PairList):
             raise RuntimeError(f'`back_timeframe` must in {KLine.agg_map.keys()}')
         self.backperiod = handler_cfg.get('back_period', 1)
 
-        tf_secs = tf_to_secs(self.backtf)
-        self.tf_mins = tf_secs // 60
-        back_mins = self.tf_mins * self.backperiod
-        self.use_ohlcvs = back_mins > 0 and back_mins != 1440
+        self.tf_secs = tf_to_secs(self.backtf)
+        back_secs = self.tf_secs * self.backperiod
+        self.use_ohlcvs = back_secs > 0 and back_secs != 86400
 
         if not self.use_ohlcvs and not (self.exchange.has_api('fetchTickers') and
                                         self.exchange.get_option('tickers_have_quoteVolume')):
@@ -53,14 +51,11 @@ class VolumePairList(PairList):
         pairlist = self.pair_cache.get('pairlist')
         if pairlist:
             return pairlist.copy()
-        ava_markets = self.exchange.get_markets(quote_currencies=list(self.stake_currency), active_only=True)
-        _pairlist = list(ava_markets.keys())
-        _pairlist = self.manager.verify_blacklist(_pairlist)
-        if not self.use_ohlcvs:
-            pairlist = [v['symbol'] for k, v in tickers.items()
-                        if v.get(self.sort_key) and v['symbol'] in _pairlist]
+
+        if not self.use_ohlcvs and tickers:
+            pairlist = [v['symbol'] for k, v in tickers.items() if v.get(self.sort_key)]
         else:
-            pairlist = _pairlist
+            pairlist = list(self.manager.avaiable_symbols)
 
         pairlist = await self.filter_pairlist(pairlist, tickers)
         self.pair_cache['pairlist'] = pairlist
@@ -68,8 +63,7 @@ class VolumePairList(PairList):
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         if self.use_ohlcvs:
-            tf_secs = self.tf_mins * 60
-            since_ts, to_ts = get_back_ts(tf_secs, self.backperiod)
+            since_ts, to_ts = get_back_ts(self.tf_secs, self.backperiod)
 
             res_list = []
             for pair in pairlist:
@@ -98,8 +92,8 @@ class VolumePairList(PairList):
         res_list = sorted(res_list, key=lambda x: x[self.sort_key], reverse=True)
         res_pairs = [p['symbol'] for p in res_list]
 
-        res_pairs = self._filter_unactive(res_pairs)
-        res_pairs = self.manager.verify_blacklist(res_pairs)
+        ava_symbols = self.manager.avaiable_symbols
+        res_pairs = [p for p in res_pairs if p in ava_symbols]
         res_pairs = res_pairs[:self.limit]
 
         return res_pairs

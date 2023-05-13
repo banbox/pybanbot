@@ -15,7 +15,9 @@ class StaticPairList(PairList):
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:
         result = self.manager.verify_whitelist(self.exg_pairs)
-        return self._filter_unactive(result)
+        ava_symbols = self.manager.avaiable_symbols
+        result = [p for p in result if p in ava_symbols]
+        return result
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         old_dic = OrderedDict.fromkeys(pairlist)

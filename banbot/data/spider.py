@@ -9,8 +9,7 @@ import time
 
 import orjson
 
-from banbot.config.appconfig import AppConfig, Config
-from banbot.util.misc import parallel_jobs
+from banbot.config.appconfig import AppConfig
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.util.redis_helper import AsyncRedis
 from banbot.data.wacther import *
