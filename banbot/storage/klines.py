@@ -328,7 +328,7 @@ group by 1'''
 
     @classmethod
     def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
-        agg_keys = {'1m'}
+        agg_keys = {from_level}
         from_secs = tf_to_secs(from_level)
         for item in cls.agg_list:
             if item.secs <= from_secs or item.agg_from not in agg_keys:
@@ -342,7 +342,7 @@ group by 1'''
                 # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
                 continue
             agg_keys.add(item.tf)
-        agg_keys.remove('1m')
+        agg_keys.remove(from_level)
         if not agg_keys:
             return
         from banbot.storage.base import init_db
@@ -440,7 +440,7 @@ ORDER BY sid, 2'''
             for hole in hole_list:
                 start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
                 logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
-                await download_to_db(exchange, stf.symbol, '1m', start_ms, end_ms, check_exist=False)
+                await download_to_db(exchange, stf.symbol, timeframe, start_ms, end_ms, check_exist=False)
                 real_holes = cls._find_sid_hole(sess, timeframe, sid, hole[0], hole[1] + 0.1, as_ts=False)
                 if not real_holes:
                     continue

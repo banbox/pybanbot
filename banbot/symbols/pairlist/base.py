@@ -24,16 +24,17 @@ class PairList:
     def name(self) -> str:
         return self.__class__.__name__
 
-    def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
+    async def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
         raise NotImplementedError()
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:
         raise RuntimeError('This Pairlist should not be used as first')
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
-        if self.enable:
-            for p in deepcopy(pairlist):
-                if not self._validate_pair(p, tickers.get(p)):
-                    pairlist.remove(p)
+        if not self.enable:
+            return pairlist
+        for p in deepcopy(pairlist):
+            if not await self._validate_pair(p, tickers.get(p)):
+                pairlist.remove(p)
         return pairlist
 

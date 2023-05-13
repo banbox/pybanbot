@@ -77,8 +77,6 @@ class HistDataProvider(DataProvider):
 
     def loop_main(self):
         try:
-            feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
-            BotTask.init(feeder.next_at / 1000)
             while BotGlobal.state == BotState.RUNNING:
                 feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
                 bar_time = feeder.next_at

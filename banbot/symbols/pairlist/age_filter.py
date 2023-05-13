@@ -12,7 +12,6 @@ class AgeFilter(PairList):
                  config: Config, handler_cfg: Dict[str, Any]):
         super(AgeFilter, self).__init__(manager, exchange, config, handler_cfg)
 
-        # Checked symbols cache (dictionary of ticker symbol => timestamp)
         self._checked: Dict[str, int] = {}
         self._failed = PunctualCache(maxsize=1000, ttl=86_400)
 

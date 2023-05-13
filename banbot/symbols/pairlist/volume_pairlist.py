@@ -29,12 +29,14 @@ class VolumePairList(PairList):
             raise RuntimeError(f'`back_timeframe` must in {KLine.agg_map.keys()}')
         self.backperiod = handler_cfg.get('back_period', 1)
 
-        self.tf_secs = tf_to_secs(self.backtf)
-        back_secs = self.tf_secs * self.backperiod
-        self.use_ohlcvs = back_secs > 0 and back_secs != 86400
+        back_secs = tf_to_secs(self.backtf) * self.backperiod
+        self.use_tickers = back_secs <= 0 or back_secs == 86400
+        if self.use_tickers and btime.run_mode not in LIVE_MODES:
+            self.use_tickers = False
+            self.backperiod = self.backperiod or 1
 
-        if not self.use_ohlcvs and not (self.exchange.has_api('fetchTickers') and
-                                        self.exchange.get_option('tickers_have_quoteVolume')):
+        if self.use_tickers and not (self.exchange.has_api('fetchTickers') and
+                                     self.exchange.get_option('tickers_have_quoteVolume')):
             raise RuntimeError(f'exchange {self.exchange.name} not support tickers required by VolumePairList')
 
         if self.sort_key not in SORT_VALUES:
@@ -45,14 +47,14 @@ class VolumePairList(PairList):
 
     @property
     def need_tickers(self):
-        return not self.use_ohlcvs
+        return self.use_tickers
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:
         pairlist = self.pair_cache.get('pairlist')
         if pairlist:
             return pairlist.copy()
 
-        if not self.use_ohlcvs and tickers:
+        if self.use_tickers and tickers:
             pairlist = [v['symbol'] for k, v in tickers.items() if v.get(self.sort_key)]
         else:
             pairlist = list(self.manager.avaiable_symbols)
@@ -62,12 +64,10 @@ class VolumePairList(PairList):
         return pairlist
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
-        if self.use_ohlcvs:
-            since_ts, to_ts = get_back_ts(self.tf_secs, self.backperiod)
-
+        if not self.use_tickers:
             res_list = []
             for pair in pairlist:
-                data = await auto_fetch_ohlcv(self.exchange, pair, self.backtf, since_ts)
+                data = await auto_fetch_ohlcv(self.exchange, pair, self.backtf, limit=self.backperiod)
                 item = dict(symbol=pair)
                 contract_size = self.exchange.markets[pair].get('contractSize', 1.0) or 1.0
                 if not data:

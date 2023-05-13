@@ -3,6 +3,8 @@
 # File  : bot_task.py
 # Author: anyongjin
 # Date  : 2023/5/5
+import time
+
 from banbot.strategy.base import *
 from banbot.storage.common import BotGlobal
 
@@ -24,14 +26,18 @@ class BotTask(BaseDbModel):
     def init(cls, start_at: Optional[float] = None):
         if cls.obj is not None:
             return
-        if not BotGlobal.stg_hash:
-            from banbot.strategy.resolver import StrategyResolver
-            StrategyResolver.load_run_jobs(AppConfig.get(), ['BTC/USDT'])
+        live_mode = btime.run_mode in btime.LIVE_MODES
+        from banbot.strategy.resolver import StrategyResolver
+        run_jobs = StrategyResolver.load_run_jobs(AppConfig.get(), ['BTC/USDT'])
+        if not live_mode:
+            # 非实时模式，需要设置初始模拟时钟
+            warm_secs = max([warm_secs for pair, (warm_secs, tf_dic) in run_jobs.items()])
+            start_at = AppConfig.get().get('timerange').startts - warm_secs
+            btime.cur_timestamp = start_at
         sess = db.session
         rmode = btime.run_mode.value
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]
         task = sess.query(BotTask).filter(*where_list).order_by(BotTask.create_at.desc()).first()
-        live_mode = btime.run_mode in btime.LIVE_MODES
         if not task or not live_mode:
             # 非实盘模式下，不可重复使用一个任务，否则可能同一时刻多个完全相同的订单
             ctime = btime.to_datetime(time.time())

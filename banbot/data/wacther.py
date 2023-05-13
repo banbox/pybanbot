@@ -49,4 +49,4 @@ class Watcher:
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
-                logger.error('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, bar_delay)
+                logger.warning('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, bar_delay)

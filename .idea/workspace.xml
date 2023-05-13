@@ -8,13 +8,19 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="优化交易对生成，过滤无效的">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/wacther.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/wacther.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/optmize/backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/bot_task.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/bot_task.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/age_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/age_filter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/volatility_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volatility_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/spread_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/spread_filter.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/volume_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volume_pairlist.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -85,7 +91,7 @@
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.ban_trade">
+  <component name="RunManager" selected="Python.ban_backtest">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -100,7 +106,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="backtest --timerange=20230322- --pairs=BTC/TUSD -c E:\trade\banbot\banbot\config\config.json" />
+      <option name="PARAMETERS" value="backtest --timerange=20230322- -c E:\trade\banbot\banbot\config\config.json" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -335,7 +341,7 @@
       <workItem from="1683682785113" duration="38129000" />
       <workItem from="1683771180619" duration="29624000" />
       <workItem from="1683856630378" duration="33876000" />
-      <workItem from="1683943435433" duration="6543000" />
+      <workItem from="1683943435433" duration="16725000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -498,7 +504,14 @@
       <option name="project" value="LOCAL" />
       <updated>1683903560682</updated>
     </task>
-    <option name="localTasksCounter" value="24" />
+    <task id="LOCAL-00024" summary="优化交易对生成，过滤无效的">
+      <created>1683961549353</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1683961549353</updated>
+    </task>
+    <option name="localTasksCounter" value="25" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -538,7 +551,8 @@
     <MESSAGE value="超表存储1m和1h，其他维度聚合得到" />
     <MESSAGE value="直接使用多个超表存储不同维度，手动聚合更新。" />
     <MESSAGE value="fix bugs" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bugs" />
+    <MESSAGE value="优化交易对生成，过滤无效的" />
+    <option name="LAST_COMMIT_MESSAGE" value="优化交易对生成，过滤无效的" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -558,11 +572,6 @@
           <line>40</line>
           <option name="timeStamp" value="74" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/banbot/symbols/pair_manager.py</url>
-          <line>47</line>
-          <option name="timeStamp" value="75" />
-        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
@@ -573,9 +582,9 @@
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1683642969544" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
-    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1683958065775" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1683961117674" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1683635353913" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1683970537038" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

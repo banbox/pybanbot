@@ -13,7 +13,7 @@ from cachetools import TTLCache, cached
 
 class PairManager:
     '''
-    暂时不建议在回测中使用：VolumePairlist, SpreadFilter, PriceFilter
+    暂时不建议在回测中使用：SpreadFilter
     '''
 
     def __init__(self, config: Config, exchange: CryptoExchange):
@@ -44,8 +44,8 @@ class PairManager:
             # 回测模式传入pairs
             self._whitelist = self.config['pairs']
             return
-        tickers = self.ticker_cache.get('tickers')
-        if not tickers and self.need_tickers:
+        tickers = self.ticker_cache.get('tickers') or dict()
+        if not tickers and self.need_tickers and btime.run_mode in LIVE_MODES:
             ava_symbols = list(self.avaiable_symbols)
             tickers = await self.exchange.fetch_tickers(ava_symbols)
             self.ticker_cache['tickers'] = tickers

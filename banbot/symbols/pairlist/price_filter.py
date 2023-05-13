@@ -29,14 +29,15 @@ class PriceFilter(PairList):
                                        or self.max_price > 0 or self.max_unit_value > 0)
         self.stoploss = 0.95
 
-    def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
+    async def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
         if btime.run_mode in LIVE_MODES:
             if not ticker or not ticker.get('last'):
                 return False
             price = ticker['last']
         else:
-            since_ms = get_back_ts(60, 1)[0]
-            candles = KLine.query(self.exchange.name, pair, '1m', since_ms, limit=1)
+            candles = await auto_fetch_ohlcv(self.exchange, pair, '1h', limit=1)
+            if not len(candles):
+                return False
             price = candles[-1][ccol]
 
         if self.precision > 0:

@@ -320,15 +320,14 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     :return:
     '''
     from banbot.storage import KLine
-    down_tf = KLine.get_down_tf(timeframe)
-    tf_msecs = tf_to_secs(down_tf) * 1000
+    tf_msecs = tf_to_secs(timeframe) * 1000
     if not end_ms:
         end_ms = int(btime.time() * 1000)
     end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
-        tf_msecs = tf_to_secs(timeframe) * 1000
-        ret_end_ms = end_ms // tf_msecs * tf_msecs
-        start_ms = ret_end_ms - tf_msecs * limit
+        start_ms = end_ms - tf_msecs * limit
+    start_ms = start_ms // tf_msecs * tf_msecs
+    down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, pair, down_tf, start_ms, end_ms)
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
