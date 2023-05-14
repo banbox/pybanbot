@@ -21,9 +21,9 @@ class TimeRange:
     if *type is None, don't use corresponding startvalue.
     """
 
-    def __init__(self, startts: int = 0, stopts: int = 0):
-        self.startts: int = startts
-        self.stopts: int = stopts
+    def __init__(self, startts: float = 0, stopts: float = 0):
+        self.startts = startts
+        self.stopts = stopts
 
     @property
     def startdt(self) -> Optional[datetime]:
@@ -50,26 +50,6 @@ class TimeRange:
         if stopdt := self.stopdt:
             stop = stopdt.strftime('%Y%m%d')
         return f"{start}-{stop}"
-
-    @property
-    def start_fmt(self) -> str:
-        """
-        Returns a string representation of the start date
-        """
-        val = 'unbounded'
-        if (startdt := self.startdt) is not None:
-            val = startdt.strftime(DATETIME_PRINT_FORMAT)
-        return val
-
-    @property
-    def stop_fmt(self) -> str:
-        """
-        Returns a string representation of the stop date
-        """
-        val = 'unbounded'
-        if (stopdt := self.stopdt) is not None:
-            val = stopdt.strftime(DATETIME_PRINT_FORMAT)
-        return val
 
     def __str__(self):
         return f'{self.startts}-{self.stopts}'

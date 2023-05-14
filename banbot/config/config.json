@@ -21,9 +21,8 @@
     {"name": "RangeStabilityFilter", "back_days": 5, "min_chg_rate": 0.03},
     {"name": "SpreadFilter", "max_ratio": 0.005},
     {"name": "VolatilityFilter", "max": 1, "min": 0.05},
-    {"name": "AgeFilter", "min": 5, "enable": false},
-    {"name": "OffsetFilter", "limit": 30},
-    {"name": "ShuffleFilter"}
+    {"name": "AgeFilter", "min": 5},
+    {"name": "OffsetFilter", "limit": 90}
   ],
   "run_policy": [
     {"name": "MACDCross"}

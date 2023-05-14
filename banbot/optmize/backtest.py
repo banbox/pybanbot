@@ -76,10 +76,10 @@ class BackTest(Trader):
         await self.init()
         # 轮训数据
         with db():
+            await self.data_mgr.down_data()
             bt_start = time.monotonic()
             self.data_mgr.loop_main()
             bt_cost = time.monotonic() - bt_start
-            print('')
             logger.info(f'Complete! cost: {bt_cost:.3f}s, avg: {self.bar_count / bt_cost:.1f} bar/s')
             # 关闭未完成订单
             self.order_mgr.cleanup()

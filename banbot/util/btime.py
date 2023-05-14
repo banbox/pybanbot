@@ -19,7 +19,7 @@ run_mode = RunMode.DRY_RUN
 cur_timestamp = 0
 
 
-def time():
+def time() -> float:
     global cur_timestamp
     if run_mode in LIVE_MODES:
         import time

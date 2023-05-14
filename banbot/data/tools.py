@@ -222,7 +222,7 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, en
             show_info = False
     since, total_tr = round(start_ms), end_ms - start_ms
     result = []
-    pbar = tqdm() if show_info else None
+    pbar = tqdm(total=100, unit='%') if show_info else None
     while since + tf_msecs <= end_ms:
         data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
         if not len(data):
@@ -230,8 +230,11 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, en
         result.extend(data)
         cur_end = round(data[-1][0])
         if show_info:
-            pbar.update(round((cur_end - since) * 100 / total_tr, 2))
+            pbar.update(round((cur_end - since) * 100 / total_tr))
         since = cur_end + 1
+    if show_info:
+        pbar.close()
+        print('')
     end_pos = len(result) - 1
     while end_pos >= 0 and result[end_pos][0] >= end_ms:
         end_pos -= 1

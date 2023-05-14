@@ -3,6 +3,7 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/3/28
+import time
 
 from banbot.exchange.crypto_exchange import *
 from banbot.data.tools import *
@@ -95,19 +96,23 @@ class HistDataFeeder(DataFeeder):
     def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
         super(HistDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire)
+        # 回测取历史数据，如时间段未指定时，应使用真实的时间
+        creal_time = time.time()
         if not timerange:
-            timerange = TimeRange(btime.time(), btime.time())
+            timerange = TimeRange(creal_time, creal_time)
         elif not timerange.stopts:
-            timerange.stopts = btime.time()
+            timerange.stopts = creal_time
         if self.warm_secs:
             timerange = TimeRange(timerange.startts - self.warm_secs, timerange.stopts)
         self.timerange = timerange
         self.total_len = 0
         self.row_id = 0
-        self._next_arr = []  # 下个bar的数据
+        self._next_arr: List[Tuple] = None  # 下个bar的数据
 
     @property
     def next_at(self):
+        if self._next_arr is None:
+            self._set_next()
         if not self._next_arr:
             return sys.maxsize
         return self._next_arr[-1][0]
@@ -120,6 +125,9 @@ class HistDataFeeder(DataFeeder):
         self.on_new_data(ret_arr, self.states[0].tf_secs)
         self._set_next()
         return ret_arr
+
+    async def down_if_need(self):
+        pass
 
 
 class FileDataFeeder(HistDataFeeder):
@@ -167,22 +175,29 @@ class DBDataFeeder(HistDataFeeder):
     def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
         super(DBDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
-        self._offset_ts = self.timerange.startts * 1000
+        self._offset_ts = int(self.timerange.startts * 1000)
         self.exg_name = AppConfig.get()['exchange']['name']
         self._batch_size = 300
         self._row_id = 0
         self._cache_arr = []
         self._calc_total()
-        self._set_next()
+
+    async def down_if_need(self):
+        exg = get_exchange(self.exg_name)
+        down_tf = self.states[0].timeframe
+        start_ms = int(self.timerange.startts * 1000)
+        end = int(self.timerange.stopts * 1000)
+        await download_to_db(exg, self.pair, down_tf, start_ms, end)
 
     def _calc_total(self):
         from banbot.storage import KLine
-        start_ts, stop_ts = KLine.query_range(self.exg_name, self.pair)
+        state = self.states[0]
+        start_ts, stop_ts = KLine.query_range(self.exg_name, self.pair, state.timeframe)
         if start_ts and stop_ts:
-            vstart = max(start_ts, self.timerange.startts * 1000)
-            vend = min(stop_ts, self.timerange.stopts * 1000)
+            vstart = max(start_ts, int(self.timerange.startts * 1000))
+            vend = min(stop_ts, int(self.timerange.stopts * 1000))
             if vstart < vend:
-                div_m = self.states[0].tf_secs * 1000
+                div_m = state.tf_secs * 1000
                 self.total_len = (vend - vstart) // div_m + 1
 
     def _set_next(self):
@@ -192,7 +207,7 @@ class DBDataFeeder(HistDataFeeder):
                 self._next_arr = []
                 return
             from banbot.storage import KLine
-            end = self.timerange.stopts * 1000
+            end = int(self.timerange.stopts * 1000)
             min_tf = self.states[0].timeframe
             self._cache_arr = KLine.query(self.exg_name, self.pair, min_tf, self._offset_ts, end, self._batch_size)
             self._row_id = 0

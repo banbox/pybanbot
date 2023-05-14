@@ -75,6 +75,13 @@ class HistDataProvider(DataProvider):
             self.ptime = time.monotonic()
             self.plast = pg_num
 
+    async def down_data(self):
+        timeframes = {s.timeframe for hold in self.holders for s in hold.states}
+        jobs = KLine.pause_compress(list(timeframes))
+        for hold in self.holders:
+            await hold.down_if_need()
+        KLine.restore_compress(jobs)
+
     def loop_main(self):
         try:
             while BotGlobal.state == BotState.RUNNING:
@@ -85,6 +92,8 @@ class HistDataProvider(DataProvider):
                 btime.cur_timestamp = bar_time / 1000
                 feeder()
                 self._update_bar()
+            self.pbar.close()
+            print("")
         except Exception:
             logger.exception('loop data main fail')
 

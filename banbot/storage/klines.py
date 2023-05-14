@@ -243,7 +243,7 @@ group by 1'''
         return min_time, max_time
 
     @classmethod
-    def query_range(cls, exg_name: str, symbol: Union[str, int], timeframe: str = '1m')\
+    def query_range(cls, exg_name: str, symbol: Union[str, int], timeframe: str)\
             -> Tuple[Optional[int], Optional[int]]:
         sid = cls._get_sid(exg_name, symbol)
         cache_key = sid, timeframe
@@ -326,11 +326,7 @@ group by 1'''
             sess.execute(sa.text(insert_sql), ins_rows)
         except Exception as e:
             if str(e).find('not supported on compressed chunks') >= 0:
-                logger.info(f"err: insert into compressed, {ins_tbl} {exg_name} {pair} {start_ms}-{end_ms}")
-                # def do_insert():
-                #     insert_sql = f"insert into {ins_tbl} ({ins_cols}) values ({places})"
-                #     sess.execute(sa.text(insert_sql), ins_rows)
-                # cls._exec_no_compress(sess, ins_tbl, start_ms, end_ms, do_insert)
+                logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} {exg_name} {pair} {start_ms}-{end_ms}")
             else:
                 raise
         sess.commit()
@@ -340,28 +336,35 @@ group by 1'''
         cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
 
     @classmethod
-    def _exec_no_compress(cls, sess: SqlSession, ins_tbl: str, start_ms: int, end_ms: int, callback):
+    def pause_compress(cls, tbl_list: List[str]) -> List[int]:
+        sess = db.session
+        result = []
+        for tbl in tbl_list:
+            get_job_id = f"""
+    SELECT j.job_id FROM timescaledb_information.jobs j
+    WHERE j.proc_name = 'policy_compression' AND j.hypertable_name = '{tbl}'"""
+            job_id = sess.execute(sa.text(get_job_id)).scalar()
+            if job_id:
+                # 暂停压缩任务
+                sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => false);'))
+                # 解压缩涉及的块
+                decps_sql = f'''SELECT decompress_chunk(i, true) FROM show_chunks('{tbl}') i ;'''
+                sess.execute(sa.text(decps_sql))
+                result.append(job_id)
+            else:
+                logger.warning(f"no compress job id found {tbl}")
         sess.commit()
-        get_job_id = f"""
-SELECT j.job_id FROM timescaledb_information.jobs j
-WHERE j.proc_name = 'policy_compression' AND j.hypertable_name = '{ins_tbl}'"""
-        job_id = sess.execute(sa.text(get_job_id)).scalar()
-        if job_id:
-            # 暂停压缩任务
-            sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => false);'))
-            # 解压缩涉及的块
-            decps_sql = f'''
-SELECT decompress_chunk(i, true) FROM show_chunks('{ins_tbl}', 
-newer_than => to_timestamp({start_ms/1000})::timestamp without time zone) i limit 1;'''
-            sess.execute(sa.text(decps_sql)).fetchall()
-        else:
-            logger.warning(f"no compress job id found {ins_tbl}")
-        callback()
-        if job_id:
-            # 启动压缩任务
+        return result
+
+    @classmethod
+    def restore_compress(cls, jobs: List[int]):
+        if not jobs:
+            return
+        sess = db.session
+        for job_id in jobs:
+            # 启动压缩任务（不会立刻执行压缩）
             sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => true);'))
-            # 执行压缩
-            sess.execute(sa.text(f'call run_job({job_id});'))
+        sess.commit()
 
     @classmethod
     def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
@@ -461,9 +464,6 @@ ORDER BY sid, 2'''
         merged: List[KHole] = []
         for h in holes:
             if not merged or merged[-1].stop < h.start:
-                if not h.id:
-                    sess.add(h)
-                    sess.flush()
                 merged.append(h)
             else:
                 prev = merged[-1]
@@ -474,10 +474,10 @@ ORDER BY sid, 2'''
                     sess.delete(hole)
                 if hole.stop > old_h.stop:
                     old_h.stop = hole.stop
-                    if not old_h.id:
-                        sess.add(old_h)
-                        sess.flush()
                 merged[-1] = old_h
+        for m in merged:
+            if not m.id:
+                sess.add(m)
         sess.commit()
 
     @classmethod
