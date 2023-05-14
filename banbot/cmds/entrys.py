@@ -72,7 +72,6 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     except (KeyboardInterrupt):
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
-        backtesting.cleanup()
     finally:
         logger.info("worker found ... calling exit")
 

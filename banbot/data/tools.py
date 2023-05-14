@@ -198,41 +198,32 @@ def load_data_range_from_bt(btres: dict):
     )
 
 
-async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optional[int] = None,
-                          end_ts: Optional[int] = None, limit: Optional[int] = None, show_info: bool = True):
+async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, show_info: bool = True):
     '''
     按给定时间段下载交易对的K线数据。
     :param exchange:
     :param pair:
     :param timeframe:
-    :param start_ts: 毫秒时间戳（含）
-    :param end_ts: 毫秒时间戳（不含）
-    :param limit:
+    :param start_ms: 毫秒时间戳（含）
+    :param end_ms: 毫秒时间戳（不含）
     :param show_info: 是否显示进度信息
     :return:
     '''
     from tqdm import tqdm
-    assert start_ts or limit, 'start or limit is required'
     tf_msecs = tf_to_secs(timeframe) * 1000
-    if not end_ts:
-        end_ts = int(btime.time() * 1000)
-    if not start_ts:
-        start_ts = end_ts - tf_msecs * limit
-    else:
-        assert start_ts > 1000000000000, '`start_ts` must be milli seconds'
-    batch_size = 1000
-    if limit and limit < batch_size:
-        batch_size = limit
-    req_times = (end_ts - start_ts) // tf_msecs / batch_size
+    assert start_ms > 1000000000000, '`start_ts` must be milli seconds'
+    fetch_num = (end_ms - start_ms) // tf_msecs
+    batch_size = min(1000, fetch_num + 5)
+    req_times = fetch_num / batch_size
     if show_info:
-        start_text, end_text = btime.to_datestr(start_ts), btime.to_datestr(end_ts)
+        start_text, end_text = btime.to_datestr(start_ms), btime.to_datestr(end_ms)
         logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
         if req_times < 3:
             show_info = False
-    since, total_tr = round(start_ts), end_ts - start_ts
+    since, total_tr = round(start_ms), end_ms - start_ms
     result = []
     pbar = tqdm() if show_info else None
-    while since + tf_msecs <= end_ts:
+    while since + tf_msecs <= end_ms:
         data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
         if not len(data):
             break
@@ -241,12 +232,8 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ts: Optiona
         if show_info:
             pbar.update(round((cur_end - since) * 100 / total_tr, 2))
         since = cur_end + 1
-        if limit and len(result) >= limit:
-            break
-    if limit:
-        result = result[:limit]
     end_pos = len(result) - 1
-    while end_pos >= 0 and result[end_pos][0] >= end_ts:
+    while end_pos >= 0 and result[end_pos][0] >= end_ms:
         end_pos -= 1
     return result[:end_pos + 1]
 
@@ -259,7 +246,14 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
     if timeframe not in {'1m', '1h'}:
         raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
     exg_name = exchange.name
-    from banbot.storage import KLine
+    from banbot.storage import KLine, ExSymbol, KHole
+    obj = ExSymbol.get(exg_name, pair)
+    if not obj.list_dt:
+        await obj.init_list_dt()
+    start_ms = obj.get_valid_start(start_ms)
+    start_ms, end_ms = KHole.get_down_range(obj.id, timeframe, start_ms, end_ms)
+    if not start_ms:
+        return
     if check_exist:
         old_start, old_end = KLine.query_range(exg_name, pair, timeframe)
         if old_start and old_end > old_start:
@@ -268,17 +262,20 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
                 cur_end = round(old_start)
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
                 KLine.insert(exg_name, pair, timeframe, predata)
+                KLine.log_candles_conts(exg_name, pair, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end, end_ms)
                 KLine.insert(exg_name, pair, timeframe, predata)
+                KLine.log_candles_conts(exg_name, pair, timeframe, old_end, end_ms, predata)
                 return
             else:
                 # 要下载的数据全部存在，直接退出
                 return
     newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
     KLine.insert(exg_name, pair, timeframe, newdata, check_exist)
+    KLine.log_candles_conts(exg_name, pair, timeframe, start_ms, end_ms, newdata)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):

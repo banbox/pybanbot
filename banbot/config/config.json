@@ -17,7 +17,7 @@
   },
   "pairlists": [
     {"name": "VolumePairList"},
-    {"name": "PriceFilter", "precision": 0.001, "max_unit_value": 100},
+    {"name": "PriceFilter", "precision": 0.0015, "max_unit_value": 100},
     {"name": "RangeStabilityFilter", "back_days": 5, "min_chg_rate": 0.03},
     {"name": "SpreadFilter", "max_ratio": 0.005},
     {"name": "VolatilityFilter", "max": 1, "min": 0.05},

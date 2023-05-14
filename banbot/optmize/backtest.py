@@ -60,6 +60,7 @@ class BackTest(Trader):
         with db():
             BotTask.init()
             KLine.sync_timeframes()
+            await ExSymbol.fill_list_dts()
             await self.pair_mgr.refresh_pairlist()
             pair_tfs = self._load_strategies(self.pair_mgr.symbols)
             await self.data_mgr.sub_pairs(pair_tfs)

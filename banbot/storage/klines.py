@@ -3,12 +3,15 @@
 # File  : klines.py
 # Author: anyongjin
 # Date  : 2023/4/24
+import math
+
 import six
 
 from banbot.storage.base import *
 from typing import Callable, Tuple, ClassVar, Dict
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.util import btime
+from datetime import datetime
 
 
 class BarAgg:
@@ -143,8 +146,8 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
     def _get_sid(cls, exg_name: str, symbol: Union[str, int]):
         sid = symbol
         if isinstance(symbol, six.string_types):
-            from banbot.storage.symbols import SymbolTF
-            sid = SymbolTF.get_id(exg_name, symbol)
+            from banbot.storage.symbols import ExSymbol
+            sid = ExSymbol.get_id(exg_name, symbol)
         return sid
 
     @classmethod
@@ -319,12 +322,46 @@ group by 1'''
         ins_cols = "sid, time, open, high, low, close, volume"
         places = ":sid, :time, :open, :high, :low, :close, :volume"
         insert_sql = f"insert into {ins_tbl} ({ins_cols}) values ({places}) {cls._insert_conflict}"
-        sess.execute(sa.text(insert_sql), ins_rows)
+        try:
+            sess.execute(sa.text(insert_sql), ins_rows)
+        except Exception as e:
+            if str(e).find('not supported on compressed chunks') >= 0:
+                logger.info(f"err: insert into compressed, {ins_tbl} {exg_name} {pair} {start_ms}-{end_ms}")
+                # def do_insert():
+                #     insert_sql = f"insert into {ins_tbl} ({ins_cols}) values ({places})"
+                #     sess.execute(sa.text(insert_sql), ins_rows)
+                # cls._exec_no_compress(sess, ins_tbl, start_ms, end_ms, do_insert)
+            else:
+                raise
         sess.commit()
         # 更新区间
         cls._update_range(sid, timeframe, start_ms, end_ms)
         # 刷新相关的连续聚合
         cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
+
+    @classmethod
+    def _exec_no_compress(cls, sess: SqlSession, ins_tbl: str, start_ms: int, end_ms: int, callback):
+        sess.commit()
+        get_job_id = f"""
+SELECT j.job_id FROM timescaledb_information.jobs j
+WHERE j.proc_name = 'policy_compression' AND j.hypertable_name = '{ins_tbl}'"""
+        job_id = sess.execute(sa.text(get_job_id)).scalar()
+        if job_id:
+            # 暂停压缩任务
+            sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => false);'))
+            # 解压缩涉及的块
+            decps_sql = f'''
+SELECT decompress_chunk(i, true) FROM show_chunks('{ins_tbl}', 
+newer_than => to_timestamp({start_ms/1000})::timestamp without time zone) i limit 1;'''
+            sess.execute(sa.text(decps_sql)).fetchall()
+        else:
+            logger.warning(f"no compress job id found {ins_tbl}")
+        callback()
+        if job_id:
+            # 启动压缩任务
+            sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => true);'))
+            # 执行压缩
+            sess.execute(sa.text(f'call run_job({job_id});'))
 
     @classmethod
     def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
@@ -384,17 +421,79 @@ ORDER BY sid, 2'''
             logger.error(f'refresh conti agg error: {e}, {tbl.tf}')
 
     @classmethod
-    def _find_sid_hole(cls, sess: SqlSession, timeframe: str, sid: int, since: float, until: float = 0., as_ts=True):
+    def log_candles_conts(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: int, candles: list):
+        '''
+        检查下载的蜡烛数据是否连续，如不连续记录到khole中
+        '''
+        tf_msecs = tf_to_secs(timeframe) * 1000
+        # 取 >= start_ms的第一个bar开始时间
+        start_ms = math.ceil(start_ms / tf_msecs) * tf_msecs
+        # 取 < end_ms的最后一个bar开始时间
+        end_ms = (math.ceil(end_ms / tf_msecs) - 1) * tf_msecs
+        if start_ms > end_ms:
+            return
+        until_ms = end_ms + tf_msecs
+        holes = []
+        if not candles:
+            holes = [(start_ms, until_ms)]
+        else:
+            if candles[0][0] > start_ms:
+                holes.append((start_ms, candles[0][0]))
+            prev_date = candles[0][0]
+            for row in candles[1:]:
+                cur_intv = row[0] - prev_date
+                if cur_intv > tf_msecs:
+                    holes.append((prev_date + tf_msecs, row[0]))
+                elif cur_intv < tf_msecs:
+                    logger.warning(f'invalid kline interval: {cur_intv:.3f}, {exg_name}/{pair}/{timeframe}')
+                prev_date = row[0]
+            if prev_date != end_ms:
+                holes.append((prev_date + tf_msecs, until_ms))
+        if not holes:
+            return
+        sid = cls._get_sid(exg_name, pair)
+        holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
+        holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
+        sess = db.session
+        old_holes: List[KHole] = sess.query(KHole).filter(KHole.sid == sid, KHole.timeframe == timeframe).all()
+        holes.extend(old_holes)
+        holes.sort(key=lambda x: x.start)
+        merged: List[KHole] = []
+        for h in holes:
+            if not merged or merged[-1].stop < h.start:
+                if not h.id:
+                    sess.add(h)
+                    sess.flush()
+                merged.append(h)
+            else:
+                prev = merged[-1]
+                old_h, hole = prev, h
+                if h.id:
+                    old_h, hole = h, prev
+                if hole.id:
+                    sess.delete(hole)
+                if hole.stop > old_h.stop:
+                    old_h.stop = hole.stop
+                    if not old_h.id:
+                        sess.add(old_h)
+                        sess.flush()
+                merged[-1] = old_h
+        sess.commit()
+
+    @classmethod
+    def _find_sid_hole(cls, sess: SqlSession, timeframe: str, sid: int, since: datetime, until: datetime = None):
         tbl = f'kline_{timeframe}'
         batch_size, true_intv = 1000, tf_to_secs(timeframe) * 1.
+        intv_delta = btime.timedelta(seconds=true_intv)
         prev_date = None
         res_holes = []
+        hole_sql = f"SELECT time FROM {tbl} where sid={sid} and time >= :since "
+        if until:
+            hole_sql += f'and time < :stop '
+        hole_sql += f"ORDER BY time limit {batch_size};"
         while True:
-            hole_sql = f"SELECT time FROM {tbl} where sid={sid} and time >= to_timestamp({since}) "
-            if until:
-                hole_sql += f'and time < to_timestamp({until}) '
-            hole_sql += f"ORDER BY time limit {batch_size};"
-            rows = sess.execute(sa.text(hole_sql)).fetchall()
+            args = dict(since=since, stop=until) if until else dict(since=since)
+            rows = sess.execute(sa.text(hole_sql), args).fetchall()
             if not len(rows):
                 break
             off_idx = 0
@@ -404,50 +503,45 @@ ORDER BY sid, 2'''
             for row in rows[off_idx:]:
                 cur_intv = (row[0] - prev_date).total_seconds()
                 if cur_intv > true_intv:
-                    if as_ts:
-                        hole_start, hold_end = btime.to_utcstamp(prev_date), btime.to_utcstamp(row[0])
-                    else:
-                        hole_start, hold_end = prev_date, row[0]
-                    res_holes.append((hole_start, hold_end))
+                    res_holes.append((prev_date + intv_delta, row[0]))
                 elif cur_intv < true_intv:
                     logger.warning(f'invalid kline interval: {cur_intv:.3f}, sid: {sid}')
                 prev_date = row[0]
-            since = btime.to_utcstamp(prev_date) + 0.1
+            since = prev_date + btime.timedelta(seconds=0.1)
         return res_holes
 
     @classmethod
     async def _fill_tf_hole(cls, timeframe: str):
         from banbot.data.tools import download_to_db
-        from banbot.storage.symbols import SymbolTF
+        from banbot.storage.symbols import ExSymbol
         from banbot.exchange.crypto_exchange import get_exchange
         sess = db.session
         tbl = f'kline_{timeframe}'
-        gp_sql = f'SELECT sid, extract(epoch from min(time))::float as mtime FROM {tbl} GROUP BY sid;'
+        gp_sql = f'SELECT sid, min(time) FROM {tbl} GROUP BY sid;'
         sid_rows = sess.execute(sa.text(gp_sql)).fetchall()
         if not len(sid_rows):
             return
-        for sid, start_ts in sid_rows:
-            hole_list = cls._find_sid_hole(sess, timeframe, sid, start_ts)
+        down_tf = KLine.get_down_tf(timeframe)
+        for sid, start_dt in sid_rows:
+            hole_list = cls._find_sid_hole(sess, timeframe, sid, start_dt)
             if not hole_list:
                 continue
-            old_holes = sess.query(KHole).filter(KHole.sid == sid, KHole.timeframe == timeframe).all()
-            old_holes = [(btime.to_utcstamp(row.start), btime.to_utcstamp(row.stop)) for row in old_holes]
-            hole_list = [h for h in hole_list if h not in old_holes]
-            if not hole_list:
+            fts = [KHole.sid == sid, KHole.timeframe == timeframe]
+            old_holes = sess.query(KHole).filter(*fts).order_by(KHole.start).all()
+            res_holes = []
+            for h in hole_list:
+                start, stop = get_unknown_range(h[0], h[1], old_holes)
+                if start < stop:
+                    res_holes.append((start, stop))
+            if not res_holes:
                 continue
-            stf: SymbolTF = sess.query(SymbolTF).get(sid)
+            stf: ExSymbol = sess.query(ExSymbol).get(sid)
             exchange = get_exchange(stf.exchange)
-            for hole in hole_list:
-                start_ms, end_ms = int(hole[0] * 1000) + 1, int(hole[1] * 1000)
+            for hole in res_holes:
+                start_ms = btime.to_utcstamp(hole[0], True, True)
+                end_ms = btime.to_utcstamp(hole[1], True, True)
                 logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
-                await download_to_db(exchange, stf.symbol, timeframe, start_ms, end_ms, check_exist=False)
-                real_holes = cls._find_sid_hole(sess, timeframe, sid, hole[0], hole[1] + 0.1, as_ts=False)
-                if not real_holes:
-                    continue
-                logger.warning(f'REAL Holes: {stf.symbol} {real_holes}')
-                for rhole in real_holes:
-                    sess.add(KHole(sid=sid, timeframe=timeframe, start=rhole[0], stop=rhole[1]))
-                sess.commit()
+                await download_to_db(exchange, stf.symbol, down_tf, start_ms, end_ms, check_exist=False)
 
     @classmethod
     async def fill_holes(cls):
@@ -545,5 +639,28 @@ class KHole(BaseDbModel):
     id = Column(sa.Integer, primary_key=True)
     sid = Column(sa.Integer)
     timeframe = Column(sa.String(5))
-    start = Column(sa.DateTime)
-    stop = Column(sa.DateTime)
+    start = Column(sa.DateTime)  # 从第一个缺失的bar时间戳记录
+    stop = Column(sa.DateTime)  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
+
+    @classmethod
+    def get_down_range(cls, sid: int, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
+        sess = db.session
+        start = btime.to_datetime(start_ms)
+        stop = btime.to_datetime(stop_ms)
+        fts = [KHole.sid == sid, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]
+        holes: List[KHole] = sess.query(KHole).filter(*fts).order_by(KHole.start).all()
+        start, stop = get_unknown_range(start, stop, holes)
+        if start >= stop:
+            return 0, 0
+        return btime.to_utcstamp(start, True, True), btime.to_utcstamp(stop, True, True)
+
+
+def get_unknown_range(start, stop, holes: List[KHole]):
+    for h in holes:
+        if h.start <= start:
+            start = max(start, h.stop)
+        elif h.stop >= stop:
+            stop = min(stop, h.start)
+        if start >= stop:
+            return start, stop
+    return start, stop
