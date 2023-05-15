@@ -22,7 +22,7 @@ class Trader:
         self.order_mgr: OrderManager = None
         self.data_mgr: DataProvider = None
         self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
-        self._job_exp_end = btime.time() + 5
+        self._job: Tuple[str, float, float] = None
         self._run_tasks: List[asyncio.Task] = []
 
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
@@ -92,8 +92,9 @@ class Trader:
             time.sleep(5)
             while True:
                 time.sleep(min_intv * 0.3)
-                if self._job_exp_end < btime.time():
-                    logger.error('check loop tasks heartbeat fail, task stucked')
+                if self._job and self._job[-1] < btime.time():
+                    start_at = btime.to_datestr(self._job[1])
+                    logger.error(f'loop tasks stucked: {self._job[0]}, start at {start_at}')
                     time.sleep(30)
 
         Thread(target=handle, daemon=True).start()
@@ -109,15 +110,17 @@ class Trader:
         for job in biz_list:
             job[2] += cur_time
         # 轮询执行任务
+        logger.info('start run loop tasks...')
         while BotGlobal.state == BotState.RUNNING:
             live_mode = btime.run_mode in LIVE_MODES
             wait_list = sorted(biz_list, key=lambda x: x[2])
             biz_func, interval, next_start = wait_list[0]
             wait_secs = next_start - btime.time()
-            self._job_exp_end = next_start + interval * 2
             func_name = biz_func.__qualname__
             if wait_secs > 0:
                 await asyncio.sleep(wait_secs)
+            cur_time = btime.time()
+            self._job = (func_name, cur_time, cur_time + interval * 2)
             job_start = time.monotonic()
             # 执行任务
             await run_async(biz_func)

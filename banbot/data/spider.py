@@ -30,8 +30,18 @@ def get_check_interval(timeframe_secs: int) -> float:
         check_interval = 0.5
     elif timeframe_secs < 60:
         check_interval = 1
+    elif timeframe_secs < 300:
+        # 1m维度3s刷新一次
+        check_interval = 3
+    elif timeframe_secs < 900:
+        # 5m维度10s刷新一次
+        check_interval = 10
+    elif timeframe_secs < 3600:
+        # 15m维度30s刷新一次
+        check_interval = 30
     else:
-        return 3
+        # 一小时及以上维度，1m刷新一次
+        check_interval = 60
     return check_interval
 
 
@@ -89,20 +99,29 @@ def run_down_pairs(args: Dict[str, Any]):
 
 class LiveMiner(Watcher):
     _list_key = 'miner_symbols'
+    save_tfsecs = 60
     '''
     交易对实时数据更新，仅用于实盘。
     '''
-    def __init__(self, exg_name, pair: str, since: Optional[int] = None):
+    def __init__(self, exg_name, pair: str, timeframe: str, since: Optional[int] = None):
         super(LiveMiner, self).__init__(pair, self._on_bar_finish)
+        self.state_sml = None
+        self.check_intv = None
+        self.state = None
+        self.tf_secs = None
         self.exchange = get_exchange(exg_name)
-        timeframe, tf_secs = '1m', 60  # 固定1m间隔更新数据
-        self.tf_secs = tf_secs
-        self.state = PairTFCache(timeframe, tf_secs)
-        self.state_sec = PairTFCache('1s', 1)  # 用于从交易归集
-        self.check_intv = get_check_interval(tf_secs)  # 3s更新一次
         self.key = f'{exg_name}_{pair}'  # 取消标志，启动时设置为tf_secs，删除时表示取消任务
         self.next_since = int(since) if since else None
         self.auto_prefire = AppConfig.get().get('prefire')
+        self.init_tf(timeframe)
+
+    def init_tf(self, timeframe: str):
+        tf_secs = tf_to_secs(timeframe)
+        self.tf_secs = tf_secs
+        self.state = PairTFCache(timeframe, tf_secs)
+        self.check_intv = get_check_interval(tf_secs)
+        sml_tf = '1s' if self.check_intv < 60 else '1m'
+        self.state_sml = PairTFCache(sml_tf, tf_to_secs(sml_tf))  # 用于从交易归集
 
     async def run(self):
         async with AsyncRedis() as redis:
@@ -111,8 +130,11 @@ class LiveMiner(Watcher):
         while True:
             try:
                 async with AsyncRedis() as redis:
-                    if await redis.get(self.key) != self.tf_secs:
+                    new_tf = await redis.get(self.key)
+                    if not new_tf:
                         break
+                    if new_tf != self.tf_secs:
+                        self.init_tf(new_tf)
                 await self._try_update()
                 await asyncio.sleep(self.check_intv)
             except Exception:
@@ -130,31 +152,33 @@ class LiveMiner(Watcher):
             is_from_ohlcv = True
             if self.check_intv > 2:
                 # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
-                ohlcvs_sec = await self.exchange.fetch_ohlcv(self.pair, '1s', since=self.next_since)
-                if not ohlcvs_sec:
+                sml_tf = self.state_sml.timeframe
+                ohlcvs_sml = await self.exchange.fetch_ohlcv(self.pair, sml_tf, since=self.next_since)
+                if not ohlcvs_sml:
                     return
-                self.next_since = ohlcvs_sec[-1][0] + 1
-                finish_bars = ohlcvs_sec  # 从交易所1s抓取的都是已完成的
+                self.next_since = ohlcvs_sml[-1][0] + 1
+                finish_bars = ohlcvs_sml  # 从交易所抓取的都是已完成的
             else:
                 details = await self.exchange.watch_trades(self.pair)
                 details = trades_to_ohlcv(details)
-                # 交易按1s维度归集和通知
-                ohlcvs_sec = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
-                ohlcvs_sec, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sec)
-                do_fire = self.state.tf_secs <= self.state_sec.tf_secs
-                finish_bars = self._on_state_ohlcv(self.state_sec, ohlcvs_sec, False, do_fire)
+                # 交易按小维度归集和通知；减少传输数据大小；
+                ohlcvs_sml = [self.state_sml.wait_bar] if self.state_sml.wait_bar else []
+                ohlcvs_sml, _ = build_ohlcvc(details, self.state_sml.tf_secs, ohlcvs=ohlcvs_sml)
+                do_fire = self.state.tf_secs <= self.state_sml.tf_secs
+                # 未完成数据存储在wait_bar中
+                finish_bars = self._on_state_ohlcv(self.state_sml, ohlcvs_sml, False, do_fire)
                 is_from_ohlcv = False
-            if self.state.tf_secs > self.state_sec.tf_secs:
+            if self.state.tf_secs > self.state_sml.tf_secs:
                 # 合并得到数据库周期维度1m的数据
                 ohlcvs = [self.state.wait_bar] if self.state.wait_bar else []
                 # 和旧的bar_row合并更新，判断是否有完成的bar
-                ohlcvs, last_finish = build_ohlcvc(ohlcvs_sec, self.tf_secs, ohlcvs=ohlcvs)
+                ohlcvs, last_finish = build_ohlcvc(ohlcvs_sml, self.tf_secs, ohlcvs=ohlcvs)
                 last_finish = last_finish and is_from_ohlcv
                 # 检查是否有完成的bar。写入到数据库
                 self._on_state_ohlcv(self.state, ohlcvs, last_finish)
             if finish_bars:
                 # 发布1s间隔数据到redis订阅方
-                sre_data = orjson.dumps((finish_bars, 1))
+                sre_data = orjson.dumps((finish_bars, self.state_sml.tf_secs))
                 async with AsyncRedis() as redis:
                     await redis.publish(self.key, sre_data)
         except ccxt.NetworkError:

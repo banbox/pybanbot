@@ -18,31 +18,12 @@ class ExSymbol(BaseDbModel):
     symbol = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
 
-    def get_valid_start(self, start_ms: int):
-        if self.list_dt:
-            list_ms = btime.to_utcstamp(self.list_dt, ms=True, round_int=True)
-            start_ms = max(list_ms, start_ms)
-        return start_ms
-
-    async def init_list_dt(self):
-        from banbot.exchange.crypto_exchange import get_exchange
-        sess = db.session
-        sess.refresh(self)
-        if self.list_dt:
-            return
-        exchange = get_exchange(self.exchange)
-        candles = await exchange.fetch_ohlcv(self.symbol, '1s', 1325376000, limit=10)
-        if not candles:
-            logger.warning(f'no candles found for {self.exchange}/{self.symbol}')
-            return
-        self.list_dt = btime.to_datetime(candles[0][0])
-        sess.commit()
-
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):
         records = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
         for r in records:
             rkey = f'{r.exchange}:{r.symbol}'
+            sess.expunge(r)
             cls._object_map[rkey] = r
 
     @classmethod
@@ -60,14 +41,39 @@ class ExSymbol(BaseDbModel):
             return cls._object_map[key]
         obj = ExSymbol(exchange=exg_name, symbol=symbol)
         sess.add(obj)
-        sess.flush()
-        cls._object_map[key] = obj
         sess.commit()
+        sess.expunge(obj)
+        cls._object_map[key] = obj
         return obj
 
     @classmethod
     def get_id(cls, exg_name: str, symbol: str) -> int:
         return cls.get(exg_name, symbol).id
+
+    @classmethod
+    async def get_valid_start(cls, exg_name: str, symbol: str, start_ms: int):
+        obj = cls.get(exg_name, symbol)
+        if not obj.list_dt:
+            await obj.init_list_dt()
+        list_ms = btime.to_utcstamp(obj.list_dt, ms=True, round_int=True)
+        start_ms = max(list_ms, start_ms)
+        return start_ms
+
+    async def init_list_dt(self):
+        if self.list_dt:
+            return
+        sess = db.session
+        inst: ExSymbol = sess.query(ExSymbol).get(self.id)
+        if not inst.list_dt:
+            from banbot.exchange.crypto_exchange import get_exchange
+            exchange = get_exchange(self.exchange)
+            candles = await exchange.fetch_ohlcv(self.symbol, '1s', 1325376000, limit=10)
+            if not candles:
+                logger.warning(f'no candles found for {self.exchange}/{self.symbol}')
+                return
+            inst.list_dt = btime.to_datetime(candles[0][0])
+            sess.commit()
+        self.list_dt = inst.list_dt
 
     @classmethod
     async def fill_list_dts(cls):

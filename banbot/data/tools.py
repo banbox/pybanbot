@@ -251,11 +251,8 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
         raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
     exg_name = exchange.name
     from banbot.storage import KLine, ExSymbol, KHole
-    obj = ExSymbol.get(exg_name, pair)
-    if not obj.list_dt:
-        await obj.init_list_dt()
-    start_ms = obj.get_valid_start(start_ms)
-    start_ms, end_ms = KHole.get_down_range(obj.id, timeframe, start_ms, end_ms)
+    start_ms = await ExSymbol.get_valid_start(exg_name, pair, start_ms)
+    start_ms, end_ms = KHole.get_down_range(exg_name, pair, timeframe, start_ms, end_ms)
     if not start_ms:
         return
     if check_exist:

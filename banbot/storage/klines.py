@@ -311,6 +311,8 @@ group by 1'''
                                  f'insert: [{start_ms}, {end_ms}]')
             if skip_in_range:
                 rows = [r for r in rows if not (old_start <= r[0] < old_stop)]
+        if not rows:
+            return
         ins_rows = []
         for r in rows:
             row_ts = btime.to_datetime(r[0])
@@ -538,9 +540,10 @@ ORDER BY sid, 2'''
             stf: ExSymbol = sess.query(ExSymbol).get(sid)
             exchange = get_exchange(stf.exchange)
             for hole in res_holes:
+                start_dt, end_dt = btime.to_datestr(hole[0]), btime.to_datestr(hole[1])
+                logger.warning(f'filling hole: {stf.symbol}, {start_dt} - {end_dt}')
                 start_ms = btime.to_utcstamp(hole[0], True, True)
                 end_ms = btime.to_utcstamp(hole[1], True, True)
-                logger.warning(f'filling hole: {stf.symbol}, {start_ms} - {end_ms}')
                 await download_to_db(exchange, stf.symbol, down_tf, start_ms, end_ms, check_exist=False)
 
     @classmethod
@@ -643,7 +646,9 @@ class KHole(BaseDbModel):
     stop = Column(sa.DateTime)  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
 
     @classmethod
-    def get_down_range(cls, sid: int, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
+    def get_down_range(cls, exg_name: str, symbol: str, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
+        from banbot.storage.symbols import ExSymbol
+        sid = ExSymbol.get_id(exg_name, symbol)
         sess = db.session
         start = btime.to_datetime(start_ms)
         stop = btime.to_datetime(stop_ms)

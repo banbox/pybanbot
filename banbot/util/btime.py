@@ -50,7 +50,12 @@ def to_datetime(timestamp: float = None):
 
 
 def to_utcstamp(dt, ms=False, round_int=False) -> Union[int, float]:
-    stamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    if isinstance(dt, datetime.datetime):
+        stamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+    elif isinstance(dt, (int, float)):
+        stamp = dt
+    else:
+        raise TypeError(f'unsupport type: {type(dt)} {dt}')
     if ms:
         stamp *= 1000
     if round_int:
@@ -58,8 +63,11 @@ def to_utcstamp(dt, ms=False, round_int=False) -> Union[int, float]:
     return stamp
 
 
-def to_datestr(timestamp: int = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
-    dt = to_datetime(timestamp)
+def to_datestr(ts_or_dt: Union[float, datetime.datetime] = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
+    if ts_or_dt and not isinstance(ts_or_dt, datetime.datetime):
+        dt = to_datetime(ts_or_dt)
+    else:
+        dt = ts_or_dt
     return dt.strftime(fmt)
 
 

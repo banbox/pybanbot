@@ -165,6 +165,7 @@ class LiveDataProvider(DataProvider):
     @classmethod
     async def watch_ohlcvs(cls):
         assert cls._obj, '`LiveDataProvider` is not initialized yet!'
+        logger.info('start watching ohlcvs from spider...')
         async for msg in cls._obj.conn.listen():
             if msg['type'] != 'message':
                 continue
