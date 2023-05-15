@@ -22,8 +22,8 @@ class VolumePairList(PairList):
         self.limit = handler_cfg.get('limit', sys.maxsize)
         self.sort_key: str = handler_cfg.get('sort_key') or 'quoteVolume'
         self.min_value = handler_cfg.get('min_value', 0)
-        self.refresh_period = handler_cfg.get('refresh_period', 1800)  # in secs
-        self.pair_cache = TTLCache(maxsize=1, ttl=self.refresh_period)
+        self.refresh_secs = handler_cfg.get('refresh_secs', 7200)  # in secs
+        self.pair_cache = TTLCache(maxsize=1, ttl=self.refresh_secs)
         self.backtf = handler_cfg.get('back_timeframe', '1d')
         if self.backtf not in KLine.agg_map:
             raise RuntimeError(f'`back_timeframe` must in {KLine.agg_map.keys()}')

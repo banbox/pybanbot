@@ -79,3 +79,17 @@ def to_pytypes(data):
     if hasattr(data, 'dtype'):
         return data.item()
     return data
+
+
+def np_rolling(a, window: int):
+    shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+
+
+def max_rolling(a, window, axis=1):
+    return np.max(np_rolling(a, window), axis=axis)
+
+
+def min_rolling(a, window, axis=1):
+    return np.min(np_rolling(a, window), axis=axis)

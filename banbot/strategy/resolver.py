@@ -77,16 +77,23 @@ class StrategyResolver(IResolver):
     initial_search_path = Path(__file__).parent.resolve()
 
     @classmethod
-    def load_run_jobs(cls, config: dict, pairlist: List[str])\
+    def load_run_jobs(cls, config: dict, pairlist: List[str],
+                      pair_tfscores: Dict[str, List[Tuple[str, float]]] = None)\
             -> Dict[str, Tuple[int, Dict[str, Set[Type[BaseStrategy]]]]]:
         PTFJob.reset()
-        timeframe = '1m'  # 默认周期1m，后期根据K线和策略自动计算
+        exg_name = config['exchange']['name']
+        if not pair_tfscores:
+            pair_tfscores = dict()
+            for pair in pairlist:
+                pair_tfscores[pair] = [('1m', 1.)]
         for policy in config['run_policy']:
             strategy_cls = get_strategy(policy['name'])
             if not strategy_cls:
                 raise RuntimeError(f'unknown Strategy: {policy["name"]}')
             for pair in pairlist:
-                # TODO: 这里可根据策略，自定义此交易对的交易维度
+                timeframe = strategy_cls.pick_timeframe(exg_name, pair, pair_tfscores.get(pair))
+                if not timeframe:
+                    continue
                 PTFJob.add(pair, timeframe, strategy_cls)
         # 记录此次任务的策略哈希值。
         BotGlobal.stg_hash = PTFJob.strategy_hash()

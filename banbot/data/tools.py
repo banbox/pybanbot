@@ -241,7 +241,8 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, en
     return result[:end_pos + 1]
 
 
-async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, check_exist=True):
+async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
+                         allow_lack: float = 0.):
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -268,6 +269,9 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
                 KLine.log_candles_conts(exg_name, pair, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
+                if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
+                    # 最新部分缺失的较少，不再请求交易所，节省时间
+                    return
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end, end_ms)
                 KLine.insert(exg_name, pair, timeframe, predata)
@@ -307,7 +311,8 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
 
 
 async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Optional[int] = None,
-                           end_ms: Optional[int] = None, limit: Optional[int] = None):
+                           end_ms: Optional[int] = None, limit: Optional[int] = None,
+                           allow_lack: float = 0.):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -317,6 +322,7 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     :param start_ms: 毫秒
     :param end_ms: 毫秒
     :param limit:
+    :param allow_lack: 最大允许缺失的最新数据比例。设置此项避免对很小数据缺失时的不必要网络请求
     :return:
     '''
     from banbot.storage import KLine
@@ -328,7 +334,7 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
         start_ms = end_ms - tf_msecs * limit
     start_ms = start_ms // tf_msecs * tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
-    await download_to_db(exchange, pair, down_tf, start_ms, end_ms)
+    await download_to_db(exchange, pair, down_tf, start_ms, end_ms, allow_lack=allow_lack)
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
 

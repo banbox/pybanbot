@@ -12,6 +12,7 @@ class BaseStrategy:
     可直接在策略的__init__中存储本策略在此交易对和交易维度上的缓存信息。不会和其他交易对冲突。
     '''
     warmup_num = 900
+    min_tfscore = 0.8
     skip_exit_on_enter = True
     skip_enter_on_exit = True
     version = 1
@@ -91,3 +92,11 @@ class BaseStrategy:
     @property
     def name(self):
         return self.__class__.__name__
+
+    @classmethod
+    def pick_timeframe(cls, exg_name: str, symbol: str, tfscores: List[Tuple[str, float]]) -> Optional[str]:
+        if not tfscores:
+            return None
+        for tf, score in tfscores:
+            if score >= cls.min_tfscore:
+                return tf

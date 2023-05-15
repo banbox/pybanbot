@@ -8,11 +8,14 @@ import time
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
 from banbot.exchange.crypto_exchange import CryptoExchange
-from cachetools import TTLCache, cached
+from cachetools import TTLCache
+from banbot.symbols.tfscaler import calc_symboltf_scales
 
 
 class PairManager:
     '''
+    交易对管理器，自动刷新筛选要交易的货币。
+    同时计算交易对的最佳交易周期。
     暂时不建议在回测中使用：SpreadFilter
     '''
 
@@ -34,6 +37,7 @@ class PairManager:
         self.ticker_cache = TTLCache(maxsize=1, ttl=1800)
         self._ava_at = 0
         self._ava_symbols = None
+        self.pair_tfscores: Dict[str, List[Tuple[str, float]]] = dict()  # 记录每个交易对的周期质量分数
 
     @property
     def symbols(self):
@@ -53,6 +57,12 @@ class PairManager:
         pairlist = await self.handlers[0].gen_pairlist(tickers)
         for handler in self.handlers[1:]:
             pairlist = await handler.filter_pairlist(pairlist, tickers)
+
+        # 计算交易对各维度K线质量分数
+        back_num = 300
+        if hasattr(self.handlers[0], 'refresh_secs'):
+            back_num = self.handlers[0].refresh_secs // 30
+        self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist, back_num)
 
         self._whitelist = pairlist
 

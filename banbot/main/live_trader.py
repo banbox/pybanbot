@@ -49,6 +49,7 @@ class LiveTrader(Trader):
 
     async def init(self):
         await self.exchange.load_markets()
+        assert self.exchange.markets, 'markets not load'
         with db():
             BotTask.init()
             KLine.sync_timeframes()
@@ -56,7 +57,7 @@ class LiveTrader(Trader):
             await self.pair_mgr.refresh_pairlist()
             await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
-            pair_tfs = self._load_strategies(self.pair_mgr.symbols)
+            pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
             await self.data_mgr.sub_pairs(pair_tfs)
         await self.rpc.startup_messages()
 

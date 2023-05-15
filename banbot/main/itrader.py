@@ -25,8 +25,9 @@ class Trader:
         self._job_exp_end = btime.time() + 5
         self._run_tasks: List[asyncio.Task] = []
 
-    def _load_strategies(self, pairlist: List[str]) -> Dict[Tuple[str, int], Set[str]]:
-        run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist)
+    def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
+            -> Dict[Tuple[str, int], Set[str]]:
+        run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
         pair_tfs = dict()
         for pair, (warm_secs, tf_dic) in run_jobs.items():
             for timeframe, stg_set in tf_dic.items():

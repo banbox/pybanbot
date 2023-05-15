@@ -209,7 +209,7 @@ class CryptoExchange:
         self.markets: Dict = {}
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
-        self.markets_at = time.monotonic() - 7200
+        self.markets_at = time.time() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
         self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits')
         self.conti_error = 0
@@ -223,9 +223,10 @@ class CryptoExchange:
 
     @net_retry
     async def load_markets(self):
-        if time.monotonic() - self.markets_at < 1800:
+        if time.time() - self.markets_at < 1800:
+            logger.warning('load_markets too freq, skip')
             return
-        self.markets_at = time.monotonic()
+        self.markets_at = time.time()
         restore_ts, markets = 0, []
         if btime.run_mode not in LIVE_MODES:
             restore_ts = _restore_markets(self.api_async, self.market_dir)
