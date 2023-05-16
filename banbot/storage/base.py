@@ -84,11 +84,14 @@ class DBSession(metaclass=DBSessionMeta):
         self.commit_on_exit = commit_on_exit
 
     def __enter__(self):
-        self.token = _db_sess.set(_DbSession(**self.session_args))
-        DBSession._sess = self
+        if _db_sess.get() is None:
+            self.token = _db_sess.set(_DbSession(**self.session_args))
+            DBSession._sess = self
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if not self.token:
+            return
         sess = _db_sess.get()
         if exc_type is not None:
             sess.rollback()

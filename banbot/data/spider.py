@@ -16,33 +16,30 @@ from banbot.data.wacther import *
 from banbot.data.tools import *
 
 
-def get_check_interval(timeframe_secs: int) -> float:
+def get_check_interval(tf_secs: int) -> float:
     '''
     根据监听的交易对和时间帧。计算最小检查间隔。
     <60s的通过WebSocket获取数据，检查更新间隔可以比较小。
     1m及以上的通过API的秒级接口获取数据，3s更新一次
-    :param timeframe_secs:
+    :param tf_secs:
     :return:
     '''
-    if timeframe_secs <= 3:
-        check_interval = 0.2
-    elif timeframe_secs <= 10:
-        check_interval = 0.5
-    elif timeframe_secs < 60:
-        check_interval = 1
-    elif timeframe_secs < 300:
-        # 1m维度3s刷新一次
-        check_interval = 3
-    elif timeframe_secs < 900:
-        # 5m维度10s刷新一次
-        check_interval = 10
-    elif timeframe_secs < 3600:
-        # 15m维度30s刷新一次
-        check_interval = 30
+    if tf_secs <= 3:
+        check_intv = 0.5
+    elif tf_secs <= 10:
+        check_intv = tf_secs * 0.35
+    elif tf_secs <= 60:
+        check_intv = tf_secs * 0.2
+    elif tf_secs <= 300:
+        check_intv = tf_secs * 0.15
+    elif tf_secs <= 900:
+        check_intv = tf_secs * 0.1
+    elif tf_secs <= 3600:
+        check_intv = tf_secs * 0.07
     else:
-        # 一小时及以上维度，1m刷新一次
-        check_interval = 60
-    return check_interval
+        # 超过1小时维度的，10分钟刷新一次
+        check_intv = 600
+    return check_intv
 
 
 async def down_pairs_by_config(config: Config):
@@ -149,7 +146,8 @@ class MinerJob(PairTFCache):
 
 
 class LiveMiner(Watcher):
-    loop_intv = 3
+    loop_intv = 0.5  # 没有任务时，睡眠间隔
+    max_run_num = 10  # 最大同时更新交易对数量，太多的话会卡死
     '''
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
     一个LiveMiner对应一个交易所。处理此交易所下所有数据的监听
@@ -171,22 +169,26 @@ class LiveMiner(Watcher):
                 job.check_intv = check_intv
                 logger.debug('miner %s/%s check_intv %.1f -> %.1f', *fmt_args)
         else:
-            self.jobs[pair] = MinerJob(pair, save_tf, check_intv, since)
+            job = MinerJob(pair, save_tf, check_intv, since)
+            self.jobs[pair] = job
+            fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
+            logger.debug('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
 
     async def run(self):
+        from banbot.storage import db
         while True:
             try:
                 if not self.jobs:
                     await asyncio.sleep(1)
                     continue
-                job: MinerJob = sorted(self.jobs.values(), key=lambda j: j.next_run)[0]
-                wait_secs = job.next_run - time.time()
-                if wait_secs > 0:
-                    if wait_secs > self.loop_intv:
-                        await asyncio.sleep(self.loop_intv)
-                        continue
-                    await asyncio.sleep(wait_secs)
-                await self._try_update(job)
+                batch_jobs = [v for k, v in self.jobs.items() if v.next_run <= time.time()]
+                if not batch_jobs:
+                    await asyncio.sleep(self.loop_intv)
+                    continue
+                batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:self.max_run_num]
+                with db():
+                    tasks = [self._try_update(j) for j in batch_jobs]
+                    await asyncio.gather(*tasks)
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
@@ -200,7 +202,10 @@ class LiveMiner(Watcher):
         import ccxt
         try:
             job.next_run = time.time() + job.check_intv
-            logger.debug('miner try update: %s/%s %s', job.pair, job.timeframe, job.since)
+            next_bar = job.next_run // job.tf_secs * job.tf_secs
+            if job.wait_bar and next_bar > job.wait_bar[0] // 1000:
+                # 当下次轮询会有新的完成数据时，尽可能在第一时间更新
+                job.next_run = next_bar
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
@@ -208,9 +213,9 @@ class LiveMiner(Watcher):
             job.since = ohlcvs_sml[-1][0] + job.fetch_tfsecs * 1000
             if job.tf_secs > job.fetch_tfsecs:
                 # 合并得到保存到数据库周期维度的数据
-                ohlcvs = [job.wait_bar] if job.wait_bar else []
+                old_ohlcvs = [job.wait_bar] if job.wait_bar else []
                 # 和旧的bar_row合并更新，判断是否有完成的bar
-                ohlcvs, last_finish = build_ohlcvc(ohlcvs, job.tf_secs, ohlcvs=ohlcvs)
+                ohlcvs, last_finish = build_ohlcvc(ohlcvs_sml, job.tf_secs, ohlcvs=old_ohlcvs)
             else:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
@@ -260,7 +265,6 @@ class LiveSpider:
         async for msg in self.conn.listen():
             if msg['type'] != 'message':
                 continue
-            logger.debug('spider receive msg: %s', msg)
             kwargs = orjson.loads(msg['data'])
             asyncio.create_task(self._run_job(kwargs))
 
