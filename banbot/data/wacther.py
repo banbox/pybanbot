@@ -22,11 +22,10 @@ class PairTFCache:
 
 
 class Watcher:
-    def __init__(self, pair: str, callback: Callable):
-        self.pair = pair
+    def __init__(self, callback: Callable):
         self.callback = callback
 
-    def _on_state_ohlcv(self, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
+    def _on_state_ohlcv(self, pair: str, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
         finish_bars = []
         for i in range(len(ohlcvs)):
             new_bar = ohlcvs[i]
@@ -37,16 +36,16 @@ class Watcher:
             finish_bars.append(state.wait_bar)
             state.wait_bar = None
         if finish_bars and do_fire:
-            self._fire_callback(finish_bars, state.timeframe, state.tf_secs)
+            self._fire_callback(finish_bars, pair, state.timeframe, state.tf_secs)
         return finish_bars
 
-    def _fire_callback(self, bar_arr, timeframe: str, tf_secs: int):
+    def _fire_callback(self, bar_arr, pair: str, timeframe: str, tf_secs: int):
         for bar_row in bar_arr:
             if btime.run_mode not in btime.LIVE_MODES:
                 btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
-            self.callback(self.pair, timeframe, bar_row)
+            self.callback(pair, timeframe, bar_row)
         if btime.run_mode in btime.LIVE_MODES:
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
-                logger.warning('{0}/{1} bar is too late, delay:{2}', self.pair, timeframe, bar_delay)
+                logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)

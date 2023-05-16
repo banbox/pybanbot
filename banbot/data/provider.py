@@ -31,20 +31,24 @@ class DataProvider:
 
     async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
         old_map = {h.pair: h for h in self.holders}
-        new_pairs = []
+        new_pairs, chg_holds = [], []
         for (pair, warm_secs), tf in pairs.items():
             tf_list = [tf] if isinstance(tf, six.string_types) else tf
             hold: DataFeeder = old_map.get(pair)
             if not hold:
                 new_pairs.append((pair, warm_secs, tf_list))
                 continue
+            old_min_tf = hold.states[0].timeframe
             new_tfs = hold.sub_tflist(*tf_list)
             if new_tfs:
                 await hold.warm_tfs(warm_secs, *new_tfs)
+            cur_min_tf = hold.states[0].timeframe
+            if old_min_tf != cur_min_tf:
+                chg_holds.append(hold)
         new_holds = [self.feed_cls(p, warm_secs, tf_list, self._callback, **self._init_args)
                      for p, warm_secs, tf_list in new_pairs]
         self.holders.extend(new_holds)
-        return new_holds
+        return new_holds, chg_holds
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
@@ -93,7 +97,6 @@ class HistDataProvider(DataProvider):
                 feeder()
                 self._update_bar()
             self.pbar.close()
-            print("")
         except Exception:
             logger.exception('loop data main fail')
 
@@ -135,16 +138,23 @@ class LiveDataProvider(DataProvider):
         LiveDataProvider._obj = self
 
     async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
-        new_holds = await super(LiveDataProvider, self).sub_pairs(pairs)
-        if not new_holds:
+        new_holds, chg_holds = await super(LiveDataProvider, self).sub_pairs(pairs)
+        if not new_holds and not chg_holds:
             return
         from banbot.data.spider import LiveSpider, SpiderJob
         job_list = []
-        for hold in new_holds:
-            tfs = [st.timeframe for st in hold.states]
-            since_ms = await hold.warm_tfs(hold.warm_secs, *tfs)
-            job_list.append(SpiderJob('watch_ohlcv', self.exg_name, hold.pair, since_ms))
-            await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
+        if new_holds:
+            for hold in new_holds:
+                tfs = [st.timeframe for st in hold.states]
+                since_ms = await hold.warm_tfs(hold.warm_secs, *tfs)
+                args = [self.exg_name, hold.pair, tfs[0], since_ms]
+                job_list.append(SpiderJob('watch_ohlcv', *args))
+                await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
+        elif chg_holds:
+            for hold in chg_holds:
+                args = [self.exg_name, hold.pair, hold.states[0].timeframe, 0]
+                job_list.append(SpiderJob('watch_ohlcv', *args))
+                await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
         # 发送消息给爬虫，实时抓取数据
         await LiveSpider.send(*job_list)
 
@@ -173,7 +183,3 @@ class LiveDataProvider(DataProvider):
                 cls._on_ohlcv_msg(msg)
             except Exception:
                 logger.exception(f'handle live ohlcv listen error: {msg}')
-
-    async def cleanup(self):
-        from banbot.data.spider import LiveSpider
-        await LiveSpider.cleanup()

@@ -7,6 +7,7 @@ import ccxt
 from typing import *
 from banbot.util import btime
 _tfsecs_map = dict()
+_secstf_map = dict()
 
 
 def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> Tuple[str, int]:
@@ -36,8 +37,14 @@ def tf_to_secs(timeframe: str) -> int:
     of seconds for one timeframe interval.
     """
     if timeframe not in _tfsecs_map:
-        _tfsecs_map[timeframe] = ccxt.Exchange.parse_timeframe(timeframe)
+        tfsecs = ccxt.Exchange.parse_timeframe(timeframe)
+        _tfsecs_map[timeframe] = tfsecs
+        _secstf_map[tfsecs] = timeframe
     return _tfsecs_map[timeframe]
+
+
+def secs_to_tf(tfsecs: int) -> str:
+    return _secstf_map.get(tfsecs)
 
 
 def get_back_ts(tf_secs: int, back_period: int, in_ms: bool = True) -> Tuple[int, int]:

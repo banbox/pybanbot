@@ -234,7 +234,6 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, en
         since = cur_end + 1
     if show_info:
         pbar.close()
-        print('')
     end_pos = len(result) - 1
     while end_pos >= 0 and result[end_pos][0] >= end_ms:
         end_pos -= 1

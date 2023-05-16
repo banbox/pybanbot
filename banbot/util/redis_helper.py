@@ -337,6 +337,19 @@ class AsyncRedis:
         items = [self.deserializer(v) for v in items]
         return [v for v in items if v]
 
+    async def hset(self, key: str, field: str, val):
+        key = await self.get_key(key)
+        field = await self.get_key(field)
+        return await self.redis.hset(key, field, val)
+
+    async def hgetall(self, key: str):
+        key = await self.get_key(key)
+        data = await self.redis.hgetall(key)
+        if not data:
+            return dict()
+        data = {k: self.deserializer(v) for k, v in data.items()}
+        return {k: v for k, v in data.items() if v}
+
     async def set(self, key, val='1', expire_time=None):
         '''
         设置redis的键值，过期时间可选

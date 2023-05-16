@@ -95,7 +95,6 @@ class LiveTrader(Trader):
             logger.info('listen websocket , watch wallets and order updates ...')
 
     async def cleanup(self):
-        await self.data_mgr.cleanup()
         await self.order_mgr.cleanup()
         await self.rpc.send_msg(dict(
             type=RPCMessageType.STATUS,

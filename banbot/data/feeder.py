@@ -8,6 +8,7 @@ import time
 from banbot.exchange.crypto_exchange import *
 from banbot.data.tools import *
 from banbot.data.wacther import *
+from banbot.storage import BotGlobal
 
 
 class DataFeeder(Watcher):
@@ -20,7 +21,8 @@ class DataFeeder(Watcher):
     LiveFeeder新交易对和新周期都需要预热；HistFeeder仅新周期需要预热
     '''
     def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False):
-        super(DataFeeder, self).__init__(pair, callback)
+        super(DataFeeder, self).__init__(callback)
+        self.pair = pair
         self.warm_secs = warm_secs
         self.states: List[PairTFCache] = []
         self.auto_prefire = auto_prefire
@@ -70,7 +72,7 @@ class DataFeeder(Watcher):
         else:
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
-        min_finished = self._on_state_ohlcv(state, ohlcvs, last_finish)
+        min_finished = self._on_state_ohlcv(self.pair, state, ohlcvs, last_finish)
         if len(self.states) > 1:
             # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
             # 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
@@ -83,7 +85,7 @@ class DataFeeder(Watcher):
                 cur_ohlcvs = [state.wait_bar] if state.wait_bar else []
                 prefire = 0.05 if self.auto_prefire else 0
                 cur_ohlcvs, last_finish = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
-                self._on_state_ohlcv(state, cur_ohlcvs, last_finish)
+                self._on_state_ohlcv(self.pair, state, cur_ohlcvs, last_finish)
         return bool(min_finished)
 
 
@@ -165,7 +167,11 @@ class FileDataFeeder(HistDataFeeder):
             tf_secs = tf_to_secs(tf)
             if tf_secs > self.fetch_tfsecs:
                 ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, tf_secs)
-            self._fire_callback(ohlcv_arr, tf, tf_secs)
+            try:
+                BotGlobal.is_wramup = True
+                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
+            finally:
+                BotGlobal.is_wramup = False
             max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
         return max_end_ms
 
@@ -235,7 +241,14 @@ class DBDataFeeder(HistDataFeeder):
             if not ohlcv_arr:
                 logger.warning(f"warm {self.pair} {tf} fail, no data...")
                 continue
-            self._fire_callback(ohlcv_arr, tf, tf_secs)
+            start_dt = btime.to_datestr(ohlcv_arr[0][0])
+            end_dt = btime.to_datestr(ohlcv_arr[-1][0] + tf_secs * 1000)
+            logger.info(f'warmup {self.pair}/{tf} {start_dt} - {end_dt}')
+            try:
+                BotGlobal.is_wramup = True
+                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
+            finally:
+                BotGlobal.is_wramup = False
             max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
         return max_end_ms
 

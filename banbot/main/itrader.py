@@ -41,7 +41,8 @@ class Trader:
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):
-        logger.debug('data_feed %s %s %s', pair, timeframe, row)
+        if not BotGlobal.is_wramup:
+            logger.debug('data_feed %s %s %s', pair, timeframe, row)
         pair_tf = f'{pair}/{timeframe}'
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
