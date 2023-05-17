@@ -334,6 +334,29 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
     return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
 
 
+async def bulk_ohlcv_do(exg, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],
+                        callback: Callable):
+    '''
+    批量下载并处理K线数据。
+    :param exg: 交易所对象
+    :param symbols: 所有待处理的交易对
+    :param timeframe: 下载处理的K线维度
+    :param kwargs: 下载K线的额外参数，支持：start_ms,end_ms,limit,allow_lack
+    :param callback: 获得K线数据后回调处理函数，接受参数：ohlcv_arr, symbol, timeframe, **kwargs
+    '''
+    from banbot.util.misc import parallel_jobs
+    if isinstance(kwargs, dict):
+        kwargs = [kwargs] * len(symbols)
+    for rid in range(0, len(symbols), MAX_CONC_OHLCV):
+        # 批量下载，提升效率
+        batch = symbols[rid: rid + MAX_CONC_OHLCV]
+        args_list = [((exg, pair, timeframe), kwargs[rid + i]) for i, pair in enumerate(batch)]
+        task_iter = parallel_jobs(auto_fetch_ohlcv, args_list)
+        for f in task_iter:
+            res = await f
+            callback(res['data'], res['args'][1], res['args'][2], **res['kwargs'])
+
+
 if __name__ == '__main__':
     cdata_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
     convert_bnb_klines_datas(cdata_dir, '1s')

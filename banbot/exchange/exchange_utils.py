@@ -47,6 +47,10 @@ def secs_to_tf(tfsecs: int) -> str:
     return _secstf_map.get(tfsecs)
 
 
+def tfsecs(num: int, timeframe: str):
+    return num * tf_to_secs(timeframe)
+
+
 def get_back_ts(tf_secs: int, back_period: int, in_ms: bool = True) -> Tuple[int, int]:
     cur_time_int = int(btime.time())
     to_ms = (cur_time_int - cur_time_int % tf_secs)

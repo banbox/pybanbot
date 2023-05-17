@@ -58,7 +58,7 @@ class LiveTrader(Trader):
             await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
-            await self.data_mgr.sub_pairs(pair_tfs)
+            await self.data_mgr.sub_warm_pairs(pair_tfs)
         await self.rpc.startup_messages()
 
     async def run(self):

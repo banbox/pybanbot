@@ -14,8 +14,13 @@ strategy_map: Optional[Dict[str, BaseStrategy]] = None
 
 class PTFJob:
     pairs: Dict[str, Dict[str, Set[Type[BaseStrategy]]]] = dict()
+    'pair:timeframe: stg_list'
+
     pair_stg: Set[Tuple[str, str]] = set()
-    pair_warms: Dict[str, int] = dict()
+    'pair+stg：防止一个策略重复处理一个交易对的多个维度'
+
+    ptf_warms: Dict[Tuple[str, str], int] = dict()
+    'pair+tf: 预热数量'
 
     @classmethod
     def add(cls, pair: str, timeframe: str, stg: Type[BaseStrategy]):
@@ -31,23 +36,27 @@ class PTFJob:
         if stg in stg_set:
             return
         if stg.warmup_num:
-            if pair not in cls.pair_warms:
-                cls.pair_warms[pair] = 0
-            tf_secs = tf_to_secs(timeframe)
-            cls.pair_warms[pair] = max(cls.pair_warms[pair], tf_secs * stg.warmup_num)
+            wkey = pair, timeframe
+            if wkey not in cls.ptf_warms or stg.warmup_num > cls.ptf_warms[wkey]:
+                cls.ptf_warms[wkey] = stg.warmup_num
         stg_set.add(stg)
 
     @classmethod
     def reset(cls):
         cls.pairs = dict()
         cls.pair_stg = set()
-        cls.pair_warms = dict()
+        cls.ptf_warms = dict()
 
     @classmethod
-    def tojobs(cls) -> Dict[str, Tuple[int, Dict[str, Set[Type[BaseStrategy]]]]]:
-        results: Dict[str, Tuple[int, Dict[str, Set[Type[BaseStrategy]]]]] = dict()
+    def tojobs(cls) -> List[Tuple[str, str, int, Set[Type[BaseStrategy]]]]:
+        '''
+        返回：pair, timeframe, 预热数量, 策略列表
+        '''
+        results: List[Tuple[str, str, int, Set[Type[BaseStrategy]]]] = []
         for pair, tf_dic in cls.pairs.items():
-            results[pair] = cls.pair_warms[pair], tf_dic
+            for tf, stg_list in tf_dic.items():
+                warm_num = cls.ptf_warms.get((pair, tf))
+                results.append((pair, tf, warm_num, stg_list))
         return results
 
     @classmethod
@@ -79,7 +88,10 @@ class StrategyResolver(IResolver):
     @classmethod
     def load_run_jobs(cls, config: dict, pairlist: List[str],
                       pair_tfscores: Dict[str, List[Tuple[str, float]]] = None)\
-            -> Dict[str, Tuple[int, Dict[str, Set[Type[BaseStrategy]]]]]:
+            -> List[Tuple[str, str, int, Set[Type[BaseStrategy]]]]:
+        '''
+        加载策略和交易对，返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
+        '''
         PTFJob.reset()
         exg_name = config['exchange']['name']
         if not pair_tfscores:

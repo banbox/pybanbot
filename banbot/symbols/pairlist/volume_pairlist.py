@@ -66,8 +66,8 @@ class VolumePairList(PairList):
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         if not self.use_tickers:
             res_list = []
-            for pair in pairlist:
-                data = await auto_fetch_ohlcv(self.exchange, pair, self.backtf, limit=self.backperiod)
+
+            def kline_cb(data, pair, timeframe, **kwargs):
                 item = dict(symbol=pair)
                 contract_size = self.exchange.markets[pair].get('contractSize', 1.0) or 1.0
                 if not data:
@@ -81,6 +81,8 @@ class VolumePairList(PairList):
                         quote_vol = arr[:, vcol]
                     item['quoteVolume'] = np.sum(quote_vol[-self.backperiod:])
                 res_list.append(item)
+            down_args = dict(limit=self.backperiod)
+            await bulk_ohlcv_do(self.exchange, pairlist, self.backtf, down_args, kline_cb)
         else:
             # Tickers mode - filter based on incoming pairlist.
             res_list = [dict(symbol=k, quoteVolume=v.get('quoteVolume', 0))

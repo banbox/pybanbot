@@ -24,7 +24,7 @@ class PairList:
     def name(self) -> str:
         return self.__class__.__name__
 
-    async def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
+    def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
         raise NotImplementedError()
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:
@@ -34,7 +34,7 @@ class PairList:
         if not self.enable:
             return pairlist
         for p in deepcopy(pairlist):
-            if not await self._validate_pair(p, tickers.get(p)):
+            if not self._validate_pair(p, tickers.get(p)):
                 pairlist.remove(p)
         return pairlist
 

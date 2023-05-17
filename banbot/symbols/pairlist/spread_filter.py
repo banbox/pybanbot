@@ -32,7 +32,7 @@ class SpreadFilter(PairList):
                 "which is not available for the selected exchange / trading mode."
             )
 
-    async def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
+    def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
         if ticker and 'bid' in ticker and 'ask' in ticker and ticker['ask'] and ticker['bid']:
             spread = 1 - ticker['bid'] / ticker['ask']
             if spread > self.max_ratio:

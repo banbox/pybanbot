@@ -5,28 +5,27 @@
 # Date  : 2023/5/14
 from typing import List, Tuple, Dict
 from banbot.storage import KLine
-from banbot.data.tools import auto_fetch_ohlcv, MAX_CONC_OHLCV
+from banbot.data.tools import bulk_ohlcv_do
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.compute.tainds import ocol, hcol, lcol, ccol
-from banbot.util.misc import parallel_jobs
 
 
 async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\
         -> Dict[str, List[Tuple[str, float]]]:
+    from banbot.exchange.exchange_utils import tf_to_secs
     agg_list = [agg for agg in KLine.agg_list if agg.secs < 1800]
     pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}
     res_list = []
+
+    def ohlcv_cb(candles, pair, timeframe, **kwargs):
+        kscore = calc_candles_score(candles, pip_prices.get(pair))
+        tf_secs = tf_to_secs(timeframe)
+        res_list.append((pair, timeframe, tf_secs, kscore))
+
     for agg in agg_list:
-        for rid in range(0, len(symbols), MAX_CONC_OHLCV):
-            # 批量下载，提升效率
-            batch = symbols[rid: rid + MAX_CONC_OHLCV]
-            args_list = [((exg, pair, agg.tf), dict(limit=back_num, allow_lack=0.1)) for pair in batch]
-            task_iter = parallel_jobs(auto_fetch_ohlcv, args_list)
-            for f in task_iter:
-                res = await f
-                candles, symbol = res['data'], res['args'][1]
-                kscore = calc_candles_score(candles, pip_prices.get(symbol))
-                res_list.append((symbol, agg.tf, agg.secs, kscore))
+        down_args = dict(limit=back_num, allow_lack=0.1)
+        await bulk_ohlcv_do(exg, symbols, agg.tf, down_args, ohlcv_cb)
+
     from itertools import groupby
     res_list = sorted(res_list, key=lambda x: x[0])
     gp_res = groupby(res_list, key=lambda x: x[0])

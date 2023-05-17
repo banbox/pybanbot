@@ -36,14 +36,17 @@ class AgeFilter(PairList):
         if not self.enable:
             return pairlist
         since_days = (self.max_days if self.max_days else self.min_days) + 1
-        for pair in new_pairs:
-            candles = await auto_fetch_ohlcv(self.exchange, pair, '1d', limit=since_days)
+
+        def kline_cb(candles, pair, timeframe, **kwargs):
             knum = len(candles)
-            cur_ms = btime.time() * 1000
+            cur_ms = int(btime.time() * 1000)
             if knum >= self.min_days and (not self.max_days or knum <= self.max_days):
                 self._checked[pair] = cur_ms
             else:
                 self._failed[pair] = cur_ms
                 nofails.remove(pair)
+
+        down_args = dict(limit=since_days)
+        await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)
 
         return nofails

@@ -48,10 +48,13 @@ max: 1.050  min: 0.941  avg: 1.000  avg_log: 0.004 std_log: 0.027 score: 0.086
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         new_pairs = [p for p in pairlist if p not in self.pair_cache]
-        for p in new_pairs:
-            candles = await auto_fetch_ohlcv(self.exchange, p, '1d', limit=self.backdays)
-            if not self._validate_pair_loc(p, candles):
-                pairlist.remove(p)
+
+        def kline_cb(candles, pair, timeframe, **kwargs):
+            if not self._validate_pair_loc(pair, candles):
+                pairlist.remove(pair)
+
+        down_args = dict(limit=self.backdays)
+        await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)
         return pairlist
 
     def _validate_pair_loc(self, pair: str, candles: List):

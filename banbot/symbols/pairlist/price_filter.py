@@ -29,17 +29,30 @@ class PriceFilter(PairList):
                                        or self.max_price > 0 or self.max_unit_value > 0)
         self.stoploss = 0.95
 
-    async def _validate_pair(self, pair: str, ticker: Optional[Ticker]) -> bool:
+    async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
+        if not self.enable:
+            return pairlist
+        res_pairs = []
         if btime.run_mode in LIVE_MODES:
-            if not ticker or not ticker.get('last'):
-                return False
-            price = ticker['last']
+            if not tickers:
+                logger.warning('no tickers, price_filter skipped')
+                return pairlist
+            for p in pairlist:
+                tk = tickers.get(p)
+                if not tk or not tk.get('last'):
+                    continue
+                if self._validate_price(p, tk.get('last')):
+                    res_pairs.append(p)
         else:
-            candles = await auto_fetch_ohlcv(self.exchange, pair, '1h', limit=1)
-            if not len(candles):
-                return False
-            price = candles[-1][ccol]
+            def kline_cb(candles, pair, timeframe, **kwargs):
+                if not candles:
+                    return
+                if self._validate_price(pair, candles[-1][ccol]):
+                    res_pairs.append(pair)
+            await bulk_ohlcv_do(self.exchange, pairlist, '1h', dict(limit=1), kline_cb)
+        return res_pairs
 
+    def _validate_price(self, pair: str, price: float) -> bool:
         if self.precision > 0:
             compare = self.exchange.price_get_one_pip(pair)
             changeprec = compare / price

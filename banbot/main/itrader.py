@@ -26,18 +26,16 @@ class Trader:
         self._run_tasks: List[asyncio.Task] = []
 
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
-            -> Dict[Tuple[str, int], Set[str]]:
+            -> Dict[str, Dict[str, int]]:
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
         pair_tfs = dict()
-        for pair, (warm_secs, tf_dic) in run_jobs.items():
-            for timeframe, stg_set in tf_dic.items():
-                res_key = pair, warm_secs
-                if res_key not in pair_tfs:
-                    pair_tfs[res_key] = set()
-                pair_tfs[res_key].add(timeframe)
-                symbol = f'{pair}/{timeframe}'
-                with TempContext(symbol):
-                    self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
+        for pair, timeframe, warm_num, stg_set in run_jobs:
+            if pair not in pair_tfs:
+                pair_tfs[pair] = dict()
+            pair_tfs[pair][timeframe] = warm_num
+            symbol = f'{pair}/{timeframe}'
+            with TempContext(symbol):
+                self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):

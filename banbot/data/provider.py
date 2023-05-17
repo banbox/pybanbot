@@ -29,26 +29,32 @@ class DataProvider:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler
 
-    async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
+    def sub_pairs(self, pairs: Dict[str, Dict[str, int]]):
+        '''
+        从数据提供者添加新的交易对订阅。
+        返回最小周期变化的交易对(新增/旧对新周期)、预热任务
+        '''
         old_map = {h.pair: h for h in self.holders}
-        new_pairs, chg_holds = [], []
-        for (pair, warm_secs), tf in pairs.items():
-            tf_list = [tf] if isinstance(tf, six.string_types) else tf
+        new_pairs, sub_holds, warm_jobs = [], [], []
+        for pair, tf_warms in pairs.items():
             hold: DataFeeder = old_map.get(pair)
             if not hold:
-                new_pairs.append((pair, warm_secs, tf_list))
+                new_pairs.append((pair, tf_warms))
                 continue
             old_min_tf = hold.states[0].timeframe
-            new_tfs = hold.sub_tflist(*tf_list)
-            if new_tfs:
-                await hold.warm_tfs(warm_secs, *new_tfs)
+            new_tfs = hold.sub_tflist(*tf_warms.keys())
             cur_min_tf = hold.states[0].timeframe
             if old_min_tf != cur_min_tf:
-                chg_holds.append(hold)
-        new_holds = [self.feed_cls(p, warm_secs, tf_list, self._callback, **self._init_args)
-                     for p, warm_secs, tf_list in new_pairs]
-        self.holders.extend(new_holds)
-        return new_holds, chg_holds
+                sub_holds.append(hold)
+            if new_tfs:
+                warm_tf = {tf: tf_warms[tf] for tf in new_tfs}
+                warm_jobs.append((hold, warm_tf))
+        for p, tf_warms in new_pairs:
+            hold = self.feed_cls(p, tf_warms, self._callback, **self._init_args)
+            self.holders.append(hold)
+            sub_holds.append(hold)
+            warm_jobs.append((hold, tf_warms))
+        return sub_holds, warm_jobs
 
     def get_latest_ohlcv(self, pair: str):
         for hold in self.holders:
@@ -137,22 +143,43 @@ class LiveDataProvider(DataProvider):
         self.conn = self.redis.pubsub()
         LiveDataProvider._obj = self
 
-    async def sub_pairs(self, pairs: Dict[Tuple[str, int], Set[str]]):
-        new_holds, chg_holds = await super(LiveDataProvider, self).sub_pairs(pairs)
-        if not new_holds and not chg_holds:
+    async def sub_warm_pairs(self, pairs: Dict[str, Dict[str, int]]):
+        new_holds, warm_jobs = super(LiveDataProvider, self).sub_pairs(pairs)
+        if not new_holds and not warm_jobs:
             return
         from banbot.data.spider import LiveSpider, SpiderJob
-        job_list = []
+        job_list, since_map = [], dict()
+        if warm_jobs:
+            tf_symbols: Dict[str, List[str]] = dict()
+            tf_arg_list: Dict[str, List[dict]] = dict()
+            cur_mtime = int(btime.time() * 1000)
+            for hold, tf_warms in warm_jobs:
+                for tf, warm_num in tf_warms.items():
+                    tf_msecs = tf_to_secs(tf) * 1000
+                    end_ms = cur_mtime // tf_msecs * tf_msecs
+                    start_ms = end_ms - tf_msecs * warm_num
+                    if tf not in tf_symbols:
+                        tf_symbols[tf] = []
+                    tf_symbols[tf].append(hold.pair)
+                    if tf not in tf_arg_list:
+                        tf_arg_list[tf] = []
+                    tf_arg_list[tf].append(dict(start_ms=start_ms, end_ms=end_ms))
+
+            hold_map = {h.pair: h for h, _ in warm_jobs}
+
+            def ohlcv_cb(data, pair, timeframe, **kwargs):
+                since_ms = hold_map[pair].warm_tfs({timeframe: data})
+                since_map[f'{pair}/{timeframe}'] = since_ms
+
+            exg = get_exchange(self.exg_name)
+            for tf, pairs in tf_symbols.items():
+                arg_list = tf_arg_list[tf]
+                await bulk_ohlcv_do(exg, pairs, tf, arg_list, ohlcv_cb)
         if new_holds:
             for hold in new_holds:
-                tfs = [st.timeframe for st in hold.states]
-                since_ms = await hold.warm_tfs(hold.warm_secs, *tfs)
-                args = [self.exg_name, hold.pair, tfs[0], since_ms]
-                job_list.append(SpiderJob('watch_ohlcv', *args))
-                await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
-        elif chg_holds:
-            for hold in chg_holds:
-                args = [self.exg_name, hold.pair, hold.states[0].timeframe, 0]
+                sub_tf = hold.states[0].timeframe
+                since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
+                args = [self.exg_name, hold.pair, sub_tf, since]
                 job_list.append(SpiderJob('watch_ohlcv', *args))
                 await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
         # 发送消息给爬虫，实时抓取数据

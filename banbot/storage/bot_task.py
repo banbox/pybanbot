@@ -7,6 +7,7 @@ import time
 
 from banbot.strategy.base import *
 from banbot.storage.common import BotGlobal
+from banbot.exchange.exchange_utils import tfsecs
 
 
 class BotTask(BaseDbModel):
@@ -31,7 +32,7 @@ class BotTask(BaseDbModel):
         run_jobs = StrategyResolver.load_run_jobs(AppConfig.get(), ['BTC/USDT'])
         if not live_mode:
             # 非实时模式，需要设置初始模拟时钟
-            warm_secs = max([warm_secs for pair, (warm_secs, tf_dic) in run_jobs.items()])
+            warm_secs = max([tfsecs(warm_num, timeframe) for _, timeframe, warm_num, _ in run_jobs])
             start_at = AppConfig.get().get('timerange').startts - warm_secs
             btime.cur_timestamp = start_at
         sess = db.session

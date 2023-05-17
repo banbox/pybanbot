@@ -20,13 +20,12 @@ class DataFeeder(Watcher):
     支持预热数据。每个策略+交易对全程单独预热，不可交叉预热，避免btime被污染。
     LiveFeeder新交易对和新周期都需要预热；HistFeeder仅新周期需要预热
     '''
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False):
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False):
         super(DataFeeder, self).__init__(callback)
         self.pair = pair
-        self.warm_secs = warm_secs
         self.states: List[PairTFCache] = []
         self.auto_prefire = auto_prefire
-        self.sub_tflist(*timeframes)
+        self.sub_tflist(*tf_warms.keys())
 
     def sub_tflist(self, *timeframes):
         '''
@@ -52,13 +51,28 @@ class DataFeeder(Watcher):
         self.states = sorted(self.states, key=lambda x: x.tf_secs)
         return timeframes
 
-    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
+    def warm_tfs(self, tf_datas: Dict[str, List[Tuple]]) -> Optional[int]:
         '''
         预热周期数据。当动态添加周期到已有的HistDataFeeder时，应调用此方法预热数据。
         LiveFeeder在初始化时也应当调用此函数
         :retrun 返回结束的时间戳（即下一个bar开始时间戳）
         '''
-        raise NotImplementedError
+        max_end_ms = 0
+        for tf, ohlcv_arr in tf_datas.items():
+            if not ohlcv_arr:
+                logger.warning(f"warm {self.pair} {tf} fail, no data...")
+                continue
+            tf_secs = tf_to_secs(tf)
+            start_dt = btime.to_datestr(ohlcv_arr[0][0])
+            end_dt = btime.to_datestr(ohlcv_arr[-1][0] + tf_secs * 1000)
+            logger.info(f'warmup {self.pair}/{tf} {start_dt} - {end_dt}')
+            try:
+                BotGlobal.is_wramup = True
+                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
+            finally:
+                BotGlobal.is_wramup = False
+            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
+        return max_end_ms
 
     def on_new_data(self, details: List, fetch_intv: int) -> bool:
         # 获取从上次间隔至今期间，更新的子序列
@@ -95,17 +109,18 @@ class HistDataFeeder(DataFeeder):
     可通过next_at属性获取下个bar的达到时间。按到达时间对所有Feeder排序。
     然后针对第一个Feeder，直接调用对象即可触发数据回调
     '''
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        super(HistDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire)
+        super(HistDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire)
         # 回测取历史数据，如时间段未指定时，应使用真实的时间
         creal_time = time.time()
         if not timerange:
             timerange = TimeRange(creal_time, creal_time)
         elif not timerange.stopts:
             timerange.stopts = creal_time
-        if self.warm_secs:
-            timerange = TimeRange(timerange.startts - self.warm_secs, timerange.stopts)
+        warm_secs = max([tfsecs(num, tf) for tf, num in tf_warms.items()])
+        if warm_secs:
+            timerange = TimeRange(timerange.startts - warm_secs, timerange.stopts)
         self.timerange = timerange
         self.total_len = 0
         self.row_id = 0
@@ -134,9 +149,9 @@ class HistDataFeeder(DataFeeder):
 
 class FileDataFeeder(HistDataFeeder):
 
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, data_dir: str,
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, data_dir: str,
                  auto_prefire=False, timerange: Optional[TimeRange] = None):
-        super(FileDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
+        super(FileDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self.data_dir = data_dir
         self.min_tfsecs = self.states[0].tf_secs
         self.data_path, self.fetch_tfsecs = parse_data_path(self.data_dir, self.pair, self.min_tfsecs)
@@ -157,30 +172,12 @@ class FileDataFeeder(HistDataFeeder):
             self.row_id += back_len
         self._next_arr = ret_arr
 
-    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
-        tr = TimeRange(btime.time() - warm_secs, btime.time() + 0.1)
-        ohlcv_arr: List[Tuple] = load_file_range(self.data_path, tr).values.tolist()
-        max_end_ms = 0
-        if not ohlcv_arr:
-            return
-        for tf in timeframes:
-            tf_secs = tf_to_secs(tf)
-            if tf_secs > self.fetch_tfsecs:
-                ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, tf_secs)
-            try:
-                BotGlobal.is_wramup = True
-                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
-            finally:
-                BotGlobal.is_wramup = False
-            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
-        return max_end_ms
-
 
 class DBDataFeeder(HistDataFeeder):
 
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable, auto_prefire=False,
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        super(DBDataFeeder, self).__init__(pair, warm_secs, timeframes, callback, auto_prefire, timerange)
+        super(DBDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self._offset_ts = int(self.timerange.startts * 1000)
         self.exg_name = AppConfig.get()['exchange']['name']
         self._batch_size = 300
@@ -230,28 +227,6 @@ class DBDataFeeder(HistDataFeeder):
         self._row_id += 1
         self.row_id += 1
 
-    async def warm_tfs(self, warm_secs: int, *timeframes) -> Optional[int]:
-        end_ms = int(btime.time() * 1000) + 1
-        start_ms = end_ms - warm_secs * 1000
-        max_end_ms = 0
-        exchange = get_exchange(self.exg_name)
-        for tf in timeframes:
-            tf_secs = tf_to_secs(tf)
-            ohlcv_arr = await auto_fetch_ohlcv(exchange, self.pair, tf, start_ms, end_ms)
-            if not ohlcv_arr:
-                logger.warning(f"warm {self.pair} {tf} fail, no data...")
-                continue
-            start_dt = btime.to_datestr(ohlcv_arr[0][0])
-            end_dt = btime.to_datestr(ohlcv_arr[-1][0] + tf_secs * 1000)
-            logger.info(f'warmup {self.pair}/{tf} {start_dt} - {end_dt}')
-            try:
-                BotGlobal.is_wramup = True
-                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
-            finally:
-                BotGlobal.is_wramup = False
-            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
-        return max_end_ms
-
 
 class LiveDataFeader(DBDataFeeder):
     '''
@@ -263,9 +238,9 @@ class LiveDataFeader(DBDataFeeder):
     通过redis检查此交易对是否已在监听刷新，如没有则发消息给爬虫监听。
     '''
 
-    def __init__(self, pair: str, warm_secs: int, timeframes: List[str], callback: Callable):
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable):
         # 实盘数据的auto_prefire在爬虫端进行。
-        super(LiveDataFeader, self).__init__(pair, warm_secs, timeframes, callback)
+        super(LiveDataFeader, self).__init__(pair, tf_warms, callback)
 
 
 

@@ -63,7 +63,7 @@ class BackTest(Trader):
             await ExSymbol.fill_list_dts()
             await self.pair_mgr.refresh_pairlist()
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
-            await self.data_mgr.sub_pairs(pair_tfs)
+            self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id
         for pair in self.pair_mgr.symbols:
             base_s, quote_s = pair.split('/')

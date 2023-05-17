@@ -29,11 +29,14 @@ class RangeStabilityFilter(PairList):
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         if not self.enable:
             return pairlist
+
+        def kline_cb(candles, pair, timeframe, **kwargs):
+            if not self._validate_pair_loc(pair, candles):
+                pairlist.remove(pair)
+
         new_pairs = [pair for pair in pairlist if pair not in self.pair_cache]
-        for p in new_pairs:
-            candles = await auto_fetch_ohlcv(self.exchange, p, '1d', limit=self.backdays)
-            if not self._validate_pair_loc(p, candles):
-                pairlist.remove(p)
+        down_args = dict(limit=self.backdays)
+        await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)
         return pairlist
 
     def _validate_pair_loc(self, pair: str, candles: List):
