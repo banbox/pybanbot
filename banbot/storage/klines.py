@@ -524,6 +524,7 @@ ORDER BY sid, 2'''
         if not len(sid_rows):
             return
         down_tf = KLine.get_down_tf(timeframe)
+        down_tfsecs = tf_to_secs(down_tf)
         for sid, start_dt in sid_rows:
             hole_list = cls._find_sid_hole(sess, timeframe, sid, start_dt)
             if not hole_list:
@@ -544,7 +545,14 @@ ORDER BY sid, 2'''
                 logger.warning(f'filling hole: {stf.symbol}, {start_dt} - {end_dt}')
                 start_ms = btime.to_utcstamp(hole[0], True, True)
                 end_ms = btime.to_utcstamp(hole[1], True, True)
-                await download_to_db(exchange, stf.symbol, down_tf, start_ms, end_ms, check_exist=False)
+                sub_arr = cls.query(exchange.name, stf.symbol, down_tf, start_ms, end_ms)
+                true_len = (end_ms - start_ms) // down_tfsecs
+                if true_len == len(sub_arr):
+                    # 子维度周期数据存在，直接归集更新
+                    cls._refresh_agg(sess, cls.agg_map[timeframe], sid, start_ms, end_ms, f'kline_{down_tf}')
+                else:
+                    logger.info(f'db sub tf {down_tf} not enough {len(sub_arr)} < {true_len}, downloading..')
+                    await download_to_db(exchange, stf.symbol, down_tf, start_ms, end_ms, check_exist=False)
 
     @classmethod
     async def fill_holes(cls):

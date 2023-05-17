@@ -108,8 +108,11 @@ class CryptoWallet(WalletsLocal):
         message = []
         for symbol in self._symbols:
             state = balances[symbol]
-            self.data[symbol] = state['free'], state['used']
-            message.append(f'{symbol}: {self.data[symbol][0]}/{self.data[symbol][1]}')
+            free, used = state['free'], state['used']
+            self.data[symbol] = free, used
+            if free + used < 0.00001:
+                continue
+            message.append(f'{symbol}: {free}/{used}')
         return '  '.join(message)
 
     async def init(self, pairs: List[str]):

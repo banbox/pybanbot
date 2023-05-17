@@ -356,7 +356,3 @@ async def bulk_ohlcv_do(exg, symbols: List[str], timeframe: str, kwargs: Union[d
             res = await f
             callback(res['data'], res['args'][1], res['args'][2], **res['kwargs'])
 
-
-if __name__ == '__main__':
-    cdata_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
-    convert_bnb_klines_datas(cdata_dir, '1s')

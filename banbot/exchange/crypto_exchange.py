@@ -160,7 +160,7 @@ def net_retry(func):
                 ret_val = await func(self, *args, **kwargs)
                 self.conti_error = 0
                 return ret_val
-            except ccxt.ExchangeNotAvailable:
+            except (ccxt.ExchangeNotAvailable, ccxt.RequestTimeout):
                 self.conti_error += 1
                 if self.conti_error > retry_num:
                     raise
@@ -480,6 +480,7 @@ class CryptoExchange:
         # 查询数据库的订单，删除未创建成功的入场订单
         from banbot.storage import InOutOrder, db, InOutStatus
         op_ods = InOutOrder.open_orders()
+        open_pairs = set()
         if op_ods:
             sess = db.session
             for od in op_ods:
@@ -487,9 +488,12 @@ class CryptoExchange:
                     sess.delete(od)
                     if od.enter:
                         sess.delete(od.enter)
+                if od.status in {InOutStatus.Init, InOutStatus.PartExit, InOutStatus.PartEnter}:
+                    open_pairs.add(od.symbol)
             sess.commit()
-        symbols, success_cnt = set(symbols), 0
-        for symbol in symbols:
+        success_cnt = 0
+        for symbol in open_pairs:
+            # 这里不要使用fetch_open_orders不带参数一次性获取，有1200s频率限制
             orders = await self.api_async.fetch_open_orders(symbol)
             for od in orders:
                 if self.name == 'binance' and not od['clientOrderId'].startswith(self.bot_name):
