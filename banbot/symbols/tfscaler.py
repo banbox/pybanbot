@@ -3,30 +3,37 @@
 # File  : tfscaler.py
 # Author: anyongjin
 # Date  : 2023/5/14
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from banbot.storage import KLine
-from banbot.data.tools import auto_fetch_ohlcv
+from banbot.data.tools import auto_fetch_ohlcv, MAX_CONC_OHLCV
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.compute.tainds import ocol, hcol, lcol, ccol
+from banbot.util.misc import parallel_jobs
 
 
-async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300):
+async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\
+        -> Dict[str, List[Tuple[str, float]]]:
+    agg_list = [agg for agg in KLine.agg_list if agg.secs < 1800]
+    pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}
+    res_list = []
+    for agg in agg_list:
+        for rid in range(0, len(symbols), MAX_CONC_OHLCV):
+            # 批量下载，提升效率
+            batch = symbols[rid: rid + MAX_CONC_OHLCV]
+            args_list = [((exg, pair, agg.tf), dict(limit=back_num, allow_lack=0.1)) for pair in batch]
+            task_iter = parallel_jobs(auto_fetch_ohlcv, args_list)
+            for f in task_iter:
+                res = await f
+                candles, symbol = res['data'], res['args'][1]
+                kscore = calc_candles_score(candles, pip_prices.get(symbol))
+                res_list.append((symbol, agg.tf, agg.secs, kscore))
+    from itertools import groupby
+    res_list = sorted(res_list, key=lambda x: x[0])
+    gp_res = groupby(res_list, key=lambda x: x[0])
     result = dict()
-    for symbol in symbols:
-        result[symbol] = await calc_tf_scale(exg, symbol, back_num)
-    return result
-
-
-async def calc_tf_scale(exg: CryptoExchange, symbol: str, back_num: int = 300) -> List[Tuple[str, float]]:
-    price_pip = exg.price_get_one_pip(symbol)
-    result = []
-    for agg in KLine.agg_list:
-        if agg.secs >= 1800:
-            # 只计算30m以下维度
-            break
-        candles = await auto_fetch_ohlcv(exg, symbol, agg.tf, limit=back_num, allow_lack=0.1)
-        kscore = calc_candles_score(candles, price_pip)
-        result.append((agg.tf, kscore))
+    for symbol, gp in gp_res:
+        items = sorted(list(gp), key=lambda x: x[2])
+        result[symbol] = list(map(lambda x: (x[1], x[3]), items))
     return result
 
 

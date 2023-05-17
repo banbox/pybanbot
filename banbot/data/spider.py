@@ -3,17 +3,16 @@
 # File  : spider.py
 # Author: anyongjin
 # Date  : 2023/4/25
-import asyncio
 import os.path
 import time
 
 import orjson
 
 from banbot.config.appconfig import AppConfig
+from banbot.data.tools import *
+from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.util.redis_helper import AsyncRedis
-from banbot.data.wacther import *
-from banbot.data.tools import *
 
 
 def get_check_interval(tf_secs: int) -> float:
@@ -147,7 +146,6 @@ class MinerJob(PairTFCache):
 
 class LiveMiner(Watcher):
     loop_intv = 0.5  # 没有任务时，睡眠间隔
-    max_run_num = 10  # 最大同时更新交易对数量，太多的话会卡死
     '''
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
     一个LiveMiner对应一个交易所。处理此交易所下所有数据的监听
@@ -185,7 +183,7 @@ class LiveMiner(Watcher):
                 if not batch_jobs:
                     await asyncio.sleep(self.loop_intv)
                     continue
-                batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:self.max_run_num]
+                batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:MAX_CONC_OHLCV]
                 with db():
                     tasks = [self._try_update(j) for j in batch_jobs]
                     await asyncio.gather(*tasks)

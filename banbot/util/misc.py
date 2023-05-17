@@ -29,7 +29,7 @@ def parallel_jobs(func, args_list: List[tuple]):
     '''
     并行执行异步任务。用于对一个函数调用多次，且顺序不重要的情况。
     :param func:
-    :param args_list: 每一项是调用的参数。一个列表表示args参数，列表中有两项，且第一个是列表第二个字典，则分别作为args和kwargs
+    :param args_list: 每一项是调用的参数。如果列表中有两项，且第一个是列表第二个字典，则分别作为args和kwargs；否则整个列表表示args参数
     :return: [dict(data=return, args=args, kwargs=kwargs), ...]
     '''
     async def wrap_func(*args, **kwargs):
@@ -42,7 +42,7 @@ def parallel_jobs(func, args_list: List[tuple]):
             args, kwargs = job
         else:
             args, kwargs = job, {}
-        jobs.append(asyncio.create_task(wrap_func(*args, **kwargs)))
+        jobs.append(wrap_func(*args, **kwargs))
     return asyncio.as_completed(jobs)
 
 
