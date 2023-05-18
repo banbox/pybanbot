@@ -8,73 +8,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="调整依赖类库">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix pandas dependence">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/__main__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/__main__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/arguments.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/arguments.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/cmds/entrys.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/entrys.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/classic_inds.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/classic_inds.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/ctx.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/ctx.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/patterns.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/patterns.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/appconfig.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/timerange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/timerange.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/core/iresolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/core/iresolver.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/data/feeder.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/feeder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/wacther.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/wacther.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/exchange_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/exchange_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/live_trader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/live_trader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/wallets.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/wallets.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/bad_features.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/bad_features.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/consts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/consts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/datatools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/datatools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/fea_selection.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/fea_selection.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/features.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/features.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/mldata.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/mldata.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/mlpred/mltrain.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/mlpred/mltrain.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/backtest.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/od_compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/od_compare.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/plot.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/plot.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/reports.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/reports.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/rpc/rpc.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/rpc/rpc.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/rpc/rpc_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/rpc/rpc_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/rpc/wework.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/rpc/wework.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/bot_task.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/bot_task.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/horz_break.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/horz_break.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/oversold_up.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/oversold_up.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/resolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/resolver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_resolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_resolver.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/price_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/range_stability_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/range_stability_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/shuffle_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/shuffle_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/volatility_filter.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volatility_filter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/volume_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/volume_pairlist.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/tfscaler.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/tfscaler.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/util/btime.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/btime.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/misc.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/misc.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/num_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/num_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/redis_helper.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/redis_helper.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -423,7 +363,7 @@
       <workItem from="1684113172484" duration="24687000" />
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
-      <workItem from="1684375523336" duration="21017000" />
+      <workItem from="1684375523336" duration="23054000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -705,7 +645,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684403951051</updated>
     </task>
-    <option name="localTasksCounter" value="41" />
+    <task id="LOCAL-00041" summary="fix pandas dependence">
+      <created>1684406247633</created>
+      <option name="number" value="00041" />
+      <option name="presentableId" value="LOCAL-00041" />
+      <option name="project" value="LOCAL" />
+      <updated>1684406247633</updated>
+    </task>
+    <option name="localTasksCounter" value="42" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -734,7 +681,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="关联订单的任务ID，实盘模式策略没有变化时沿用上次的任务" />
     <MESSAGE value="优化命令入口&#10;订单时间戳规则修改&#10;支持简单回测实盘订单对比" />
     <MESSAGE value="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比" />
     <MESSAGE value="解决实盘若干bug" />
@@ -759,7 +705,8 @@
     <MESSAGE value="order market price change" />
     <MESSAGE value="update" />
     <MESSAGE value="调整依赖类库" />
-    <option name="LAST_COMMIT_MESSAGE" value="调整依赖类库" />
+    <MESSAGE value="fix pandas dependence" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix pandas dependence" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -776,15 +723,15 @@
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1684329907800" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1684333226500" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_util.coverage" NAME="test_util Coverage Results" MODIFIED="1684391451728" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
+    <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1684408152791" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$tools.coverage" NAME="tools Coverage Results" MODIFIED="1684329607458" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/data" />
     <SUITE FILE_PATH="coverage/banbot$plot.coverage" NAME="plot Coverage Results" MODIFIED="1683542689405" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
-    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684394275559" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684408460802" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684064859723" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684407968128" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

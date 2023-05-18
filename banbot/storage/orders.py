@@ -4,8 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 
-from typing import *
-
 from banbot.compute.tainds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *

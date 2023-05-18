@@ -10,7 +10,7 @@
 '''
 import datetime
 from typing import Union
-
+from datetime import timedelta  # noqa
 from banbot.config.consts import *
 
 global cur_timestamp, run_mode

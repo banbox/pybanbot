@@ -184,8 +184,9 @@ class DBDataFeeder(HistDataFeeder):
         self._calc_total()
 
     async def down_if_need(self):
+        from banbot.storage import KLine
         exg = get_exchange(self.exg_name)
-        down_tf = self.states[0].timeframe
+        down_tf = KLine.get_down_tf(self.states[0].timeframe)
         start_ms = int(self.timerange.startts * 1000)
         end = int(self.timerange.stopts * 1000)
         await download_to_db(exg, self.pair, down_tf, start_ms, end)

@@ -9,7 +9,7 @@ from typing import Optional, List, Union, Type, Dict
 
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, pool
+from sqlalchemy import create_engine, pool, Column, orm  # noqa
 from sqlalchemy import event as db_event
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base

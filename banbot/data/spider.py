@@ -5,7 +5,7 @@
 # Date  : 2023/4/25
 import os.path
 import time
-
+import asyncio
 import orjson
 
 from banbot.config.appconfig import AppConfig
