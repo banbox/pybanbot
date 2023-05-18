@@ -290,6 +290,15 @@ class LiveSpider:
             asyncio.create_task(miner.run())
         miner.sub_pair(pair, timeframe, since)
 
+    async def unwatch_pairs(self, exg_name: str, pairs: List[str]):
+        miner = self.miners.get(exg_name)
+        if not miner or not pairs:
+            return
+        for p in pairs:
+            if p not in miner.jobs:
+                continue
+            del miner.jobs[p]
+
     @classmethod
     async def send(cls, *job_list: SpiderJob):
         '''

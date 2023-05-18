@@ -205,7 +205,7 @@ class CryptoExchange:
         self.trade_mode = config.get('trade_mode')
         self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
-        self.quote_symbols: Set[str] = set()
+        self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
@@ -217,7 +217,6 @@ class CryptoExchange:
             os.mkdir(self.market_dir)
 
     async def init(self, pairs: List[str]):
-        self.quote_symbols = {p.split('/')[1] for p in pairs}
         await self.update_quote_price()
         await self.cancel_open_orders(pairs)
 

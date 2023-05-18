@@ -8,7 +8,6 @@ import six
 from banbot.data.feeder import *
 from banbot.config import *
 from banbot.util.common import logger
-from banbot.storage.common import *
 from banbot.storage import *
 from tqdm import tqdm
 
@@ -28,6 +27,16 @@ class DataProvider:
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler
+
+    def unsub_pairs(self, pairs: List[str]):
+        old_map = {h.pair: h for h in self.holders}
+        removed = []
+        for p in pairs:
+            hold = old_map.get(p)
+            if hold:
+                self.holders.remove(hold)
+                removed.append(hold)
+        return removed
 
     def sub_pairs(self, pairs: Dict[str, Dict[str, int]]):
         '''
@@ -184,6 +193,18 @@ class LiveDataProvider(DataProvider):
                 await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
         # 发送消息给爬虫，实时抓取数据
         await LiveSpider.send(*job_list)
+
+    async def unsub_pairs(self, pairs: List[str]):
+        '''
+        取消订阅交易对数据
+        '''
+        from banbot.data.spider import LiveSpider, SpiderJob
+        removed = super(LiveDataProvider, self).unsub_pairs(pairs)
+        if not removed:
+            return
+        for hold in removed:
+            await self.conn.unsubscribe(f'{self.exg_name}_{hold.pair}')
+        await LiveSpider.send(SpiderJob('unwatch_pairs', self.exg_name, pairs))
 
     @classmethod
     def _on_ohlcv_msg(cls, msg: dict):

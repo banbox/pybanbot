@@ -100,9 +100,9 @@ class CryptoWallet(WalletsLocal):
         self._symbols = set()
 
     def _get_symbol_price(self, symbol: str):
-        if symbol not in self.exchange.quote_symbols:
+        if symbol not in self.exchange.quote_prices:
             raise ValueError(f'unsupport quote symbol: {symbol}')
-        return self.exchange.quote_symbols[symbol]
+        return self.exchange.quote_prices[symbol]
 
     def _update_local(self, balances: dict):
         message = []

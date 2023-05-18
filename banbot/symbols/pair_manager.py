@@ -35,6 +35,8 @@ class PairManager:
         if not exchange.has_api('fetchTickers') and ticker_names:
             raise ValueError(f'exchange not support fetchTickers, affect: {ticker_names}')
         self.ticker_cache = TTLCache(maxsize=1, ttl=1800)
+        pair_cfg = config.get('paircfg') or dict()
+        self.refresh_secs = pair_cfg.get('refresh_mins', 720) * 60  # 交易对定期刷新间隔
         self._ava_at = 0
         self._ava_symbols = None
         self.pair_tfscores: Dict[str, List[Tuple[str, float]]] = dict()  # 记录每个交易对的周期质量分数

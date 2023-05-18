@@ -15,6 +15,9 @@
     "180": 0.2,
     "1440": 0.1
   },
+  "paircfg": {
+    "refresh_mins": 720
+  },
   "pairlists": [
     {"name": "VolumePairList"},
     {"name": "PriceFilter", "precision": 0.0015, "max_unit_value": 100},

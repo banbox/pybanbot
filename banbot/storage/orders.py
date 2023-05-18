@@ -3,6 +3,7 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
+import six
 
 from banbot.compute.tainds import *
 from banbot.util.misc import del_dict_prefix
@@ -277,9 +278,10 @@ class InOutOrder(BaseDbModel):
             self._save_to_db()
 
     @classmethod
-    def get_orders(cls, strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
+    def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\
+            -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
-            return get_db_orders(strategy, pair, status)
+            return get_db_orders(strategy, pairs, status)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -287,13 +289,21 @@ class InOutOrder(BaseDbModel):
                 candicates: List[InOutOrder] = list(cls._open_ods.values())
             else:
                 candicates = cls._his_ods + list(cls._open_ods.values())
-            if not strategy and not pair:
+            if not strategy and not pairs:
                 return candicates
-            return [od for od in candicates if od.strategy == strategy and od.symbol == pair]
+            if strategy:
+                candicates = [od for od in candicates if od.strategy == strategy]
+            if pairs:
+                if isinstance(pairs, six.string_types):
+                    candicates = [od for od in candicates if od.symbol == pairs]
+                else:
+                    pairs = set(pairs)
+                    candicates = [od for od in candicates if od.symbol in pairs]
+            return candicates
 
     @classmethod
-    def open_orders(cls, strategy: str = None, pair: str = None) -> List['InOutOrder']:
-        return cls.get_orders(strategy, pair, 'open')
+    def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
+        return cls.get_orders(strategy, pairs, 'open')
 
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:
@@ -330,7 +340,7 @@ class OrderJob:
         self.is_enter = is_enter
 
 
-def get_db_orders(strategy: str = None, pair: str = None, status: str = None) -> List['InOutOrder']:
+def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None) -> List['InOutOrder']:
     '''
     此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
     '''
@@ -344,8 +354,11 @@ def get_db_orders(strategy: str = None, pair: str = None, status: str = None) ->
             where_list.append(InOutOrder.status < InOutStatus.FullExit)
     if strategy:
         where_list.append(InOutOrder.strategy == strategy)
-    if pair:
-        where_list.append(InOutOrder.symbol == pair)
+    if pairs:
+        if isinstance(pairs, six.string_types):
+            where_list.append(InOutOrder.symbol == pairs)
+        else:
+            where_list.append(InOutOrder.symbol.in_(set(pairs)))
     io_rows = sess.query(InOutOrder).filter(*where_list).all()
     io_ids = {row.id for row in io_rows}
     ex_filters = [Order.task_id == BotTask.cur_id, Order.inout_id.in_(io_ids)]

@@ -80,6 +80,8 @@ class LiveTrader(Trader):
     async def _start_tasks(self):
         # 监听实时数据推送
         self._run_tasks.append(asyncio.create_task(LiveDataProvider.watch_ohlcvs()))
+        # 定期刷新交易对
+        self._run_tasks.append(asyncio.create_task(self.loop_refresh_pairs()))
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
@@ -93,6 +95,40 @@ class LiveTrader(Trader):
                 asyncio.create_task(self.order_mgr.consume_queue())
             ])
             logger.info('listen websocket , watch wallets and order updates ...')
+
+    async def refresh_pairs(self):
+        '''
+        定期刷新交易对
+        '''
+        logger.info("start refreshing symbols")
+        old_symbols = set(self.pair_mgr.symbols)
+        await self.pair_mgr.refresh_pairlist()
+        now_symbols = self.pair_mgr.symbols
+        await self.wallets.init(now_symbols)
+        # 移除已删除的交易对
+        del_symbols = list(old_symbols.difference(now_symbols))
+        if del_symbols:
+            logger.info(f"remove symbols: {del_symbols}")
+            await self.exchange.cancel_open_orders(del_symbols)
+            self.order_mgr.exit_open_orders('pair_del', pairs=del_symbols)
+            await self.data_mgr.unsub_pairs(del_symbols)
+        # 处理新增的交易对
+        add_symbols = list(set(now_symbols).difference(old_symbols))
+        if add_symbols:
+            logger.info(f"listen new symbols: {add_symbols}")
+            pair_tfs = self._load_strategies(add_symbols, self.pair_mgr.pair_tfscores)
+            await self.data_mgr.sub_warm_pairs(pair_tfs)
+
+    async def loop_refresh_pairs(self):
+        refresh_intv = self.pair_mgr.refresh_secs
+        if not refresh_intv:
+            return
+        while True:
+            await asyncio.sleep(refresh_intv)
+            try:
+                await self.refresh_pairs()
+            except Exception:
+                logger.exception('loop refresh pairs error')
 
     async def cleanup(self):
         await self.order_mgr.cleanup()

@@ -154,10 +154,9 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     def exit_open_orders(self, exit_tag: str, price: Optional[float] = None, strategy: str = None,
-                         pair: str = None) -> List[InOutOrder]:
-        order_list = InOutOrder.open_orders(strategy, pair)
+                         pairs: Union[str, List[str]] = None, is_force=False) -> List[InOutOrder]:
+        order_list = InOutOrder.open_orders(strategy, pairs)
         result = []
-        is_force = exit_tag == 'force_exit'
         for od in order_list:
             if not od.can_close():
                 # 订单正在退出、或刚入场需等到下个bar退出
@@ -404,7 +403,7 @@ class LocalOrderManager(OrderManager):
                 self._fill_pending_enter(candle, od)
 
     def cleanup(self):
-        self.exit_open_orders('force_exit', 0)
+        self.exit_open_orders('bot_stop', 0)
         self.fill_pending_orders()
         InOutOrder.dump_to_db()
 
@@ -749,7 +748,7 @@ class LiveOrderManager(OrderManager):
 
     async def cleanup(self):
         with db():
-            exit_ods = self.exit_open_orders('force_exit', 0)
+            exit_ods = self.exit_open_orders('bot_stop', 0, is_force=True)
             if exit_ods:
                 logger.info('exit %d open trades', len(exit_ods))
         await self.order_q.join()
