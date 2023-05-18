@@ -3,11 +3,12 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/4/17
-from banbot.exchange.types import *
-from banbot.data.provider import *
-from banbot.config.consts import *
-from typing import *
 from copy import deepcopy
+from typing import *
+
+from banbot.config.consts import *
+from banbot.data.provider import *
+from banbot.exchange.types import *
 
 
 class PairList:

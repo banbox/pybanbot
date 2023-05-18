@@ -3,16 +3,15 @@
 # File  : od_analyze.py
 # Author: anyongjin
 # Date  : 2023/5/7
-import asyncio
 from typing import *
 
 import numpy as np
 
 from banbot.config import AppConfig
-from banbot.strategy.resolver import StrategyResolver
-from banbot.storage import *
-from banbot.util.common import logger
 from banbot.config.consts import *
+from banbot.storage import *
+from banbot.strategy.resolver import StrategyResolver
+from banbot.util.common import logger
 
 
 def calc_overlap_rate(od1, od2):

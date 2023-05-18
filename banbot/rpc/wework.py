@@ -3,10 +3,11 @@
 # File  : wework.py
 # Author: anyongjin
 # Date  : 2023/4/1
-import asyncio
-from banbot.rpc.rpc import *
-from corpwechatbot.app import AppMsgSender
 from functools import partial
+
+from corpwechatbot.app import AppMsgSender
+
+from banbot.rpc.rpc import *
 
 
 class WeWork(Webhook):

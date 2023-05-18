@@ -3,26 +3,19 @@
 # File  : crypto_exchange.py
 # Author: anyongjin
 # Date  : 2023/3/29
-import asyncio
 import random
-import time
-
-import six
-
-import ccxt
-from ccxt import TICK_SIZE
-import ccxt.async_support as ccxt_async
-import ccxt.pro as ccxtpro
-import os
-
-import orjson
-
-from banbot.config.appconfig import AppConfig
-from banbot.util.misc import *
-from banbot.data.tools import *
-from banbot.storage.orders import Order
 from typing import *
 
+import ccxt.async_support as ccxt_async
+import ccxt.pro as ccxtpro
+import orjson
+import six
+from ccxt import TICK_SIZE
+
+from banbot.config.appconfig import AppConfig
+from banbot.data.tools import *
+from banbot.storage.orders import Order
+from banbot.util.misc import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']

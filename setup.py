@@ -20,7 +20,6 @@ setup(
         'ccxt',
         'orjson',
         'aiodns',
-        'aiofiles',
         'arrow',
         'sqlalchemy',
         'psycopg2-binary',
@@ -35,6 +34,8 @@ setup(
             'dash>=2.8.1',
             'jupyter-dash',
             'tabulate',
+            'aiofiles',
+            'pandas'
         ]
     }
 )

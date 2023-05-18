@@ -4,12 +4,13 @@
 # Author: anyongjin
 # Date  : 2023/3/29
 
-from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
-from banbot.util.common import logger
-from banbot.util import btime
-from banbot.config.consts import MIN_STAKE_AMOUNT
 from numbers import Number
 from typing import List
+
+from banbot.config.consts import MIN_STAKE_AMOUNT
+from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
+from banbot.util import btime
+from banbot.util.common import logger
 
 
 class WalletsLocal:

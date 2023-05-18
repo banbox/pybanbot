@@ -3,15 +3,11 @@
 # File  : timerange.py
 # Author: anyongjin
 # Date  : 2023/4/5
-import logging
 import re
 from datetime import datetime, timezone
 from typing import Optional
 
 import arrow
-
-from banbot.config.consts import DATETIME_PRINT_FORMAT
-from banbot.util.common import logger
 
 
 class TimeRange:

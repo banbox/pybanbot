@@ -5,8 +5,8 @@
 # Date  : 2023/4/1
 import argparse
 from typing import Any, Dict, List, Optional, Callable
-from banbot.cmds.cli_options import *
 
+from banbot.cmds.cli_options import *
 
 ARGS_COMMON = ["config", "logfile", "data_dir", "no_db"]
 

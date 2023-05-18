@@ -3,9 +3,10 @@
 # File  : __main__.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import sys
+
 from banbot.cmds.arguments import *
 from banbot.util.common import logger
-import sys
 
 
 def main(sysargv: Optional[List[str]] = None) -> None:

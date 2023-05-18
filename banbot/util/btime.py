@@ -9,9 +9,9 @@
 请避免直接调用datatime和time类库
 '''
 import datetime
-from datetime import timedelta
-from banbot.config.consts import *
 from typing import Union
+
+from banbot.config.consts import *
 
 global cur_timestamp, run_mode
 

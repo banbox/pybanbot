@@ -4,10 +4,11 @@
 # Author: anyongjin
 # Date  : 2023/5/14
 from typing import List, Tuple, Dict
-from banbot.storage import KLine
+
+from banbot.compute.tainds import ocol, hcol, lcol, ccol
 from banbot.data.tools import bulk_ohlcv_do
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.compute.tainds import ocol, hcol, lcol, ccol
+from banbot.storage import KLine
 
 
 async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\

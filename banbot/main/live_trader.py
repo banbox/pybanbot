@@ -3,14 +3,14 @@
 # File  : whack_mole.py
 # Author: anyongjin
 # Date  : 2023/2/28
+from banbot.config import *
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
-from banbot.util.misc import *
-from banbot.config import *
-from banbot.util import btime
 from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
-from banbot.symbols.pair_manager import PairManager
 from banbot.storage import *
+from banbot.symbols.pair_manager import PairManager
+from banbot.util import btime
+from banbot.util.misc import *
 
 
 class LiveTrader(Trader):

@@ -4,22 +4,23 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import time
+from contextvars import ContextVar
+from typing import Optional, List, Union, Type, Dict
+
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, pool, Column, orm
+from sqlalchemy import create_engine, pool
 from sqlalchemy import event as db_event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import Session as SqlSession
 from sqlalchemy.engine import Engine
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session as SqlSession
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import make_transient
-from typing import Optional, List, Union, Type, Dict
-from contextvars import ContextVar
-from banbot.util.common import logger
+from sqlalchemy.types import TypeDecorator
+
 from banbot.config import AppConfig
 from banbot.util import btime
-
+from banbot.util.common import logger
 
 _BaseDbModel = declarative_base()
 _db_engine: Optional[Engine] = None

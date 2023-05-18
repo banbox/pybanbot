@@ -3,12 +3,12 @@
 # File  : pair_manager.py
 # Author: anyongjin
 # Date  : 2023/4/17
-import time
 
+from cachetools import TTLCache
+
+from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
-from banbot.exchange.crypto_exchange import CryptoExchange
-from cachetools import TTLCache
 from banbot.symbols.tfscaler import calc_symboltf_scales
 
 

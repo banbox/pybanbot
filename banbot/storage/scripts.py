@@ -3,11 +3,11 @@
 # File  : scripts.py
 # Author: anyongjin
 # Date  : 2023/4/24
+from typing import Any, Dict, List
+
 from banbot.storage import *
 from banbot.storage.base import BaseDbModel, sa, init_db
 from banbot.util.common import logger
-from typing import Any, Dict, List
-
 
 all_tables = [ExSymbol, KLine, KHole, BotTask, Order, InOutOrder]
 tbl_map: Dict[str, BaseDbModel] = dict()

@@ -3,11 +3,11 @@
 # File  : wacther.py
 # Author: anyongjin
 # Date  : 2023/4/30
-import sys
 from typing import List, Tuple, Callable
+
+from banbot.storage import BotGlobal
 from banbot.util import btime
 from banbot.util.common import logger
-from banbot.storage import BotGlobal
 
 
 class PairTFCache:

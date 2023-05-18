@@ -4,8 +4,8 @@
 # Author: anyongjin
 # Date  : 2023/3/16
 from banbot.compute.tainds import *
-from banbot.util.common import logger
 from banbot.util import btime
+from banbot.util.common import logger
 
 
 def append_new_bar(row, tf_secs: int) -> np.ndarray:

@@ -3,11 +3,9 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/3/28
-import time
 
-from banbot.exchange.crypto_exchange import *
-from banbot.data.tools import *
 from banbot.data.wacther import *
+from banbot.exchange.crypto_exchange import *
 from banbot.storage import BotGlobal
 
 

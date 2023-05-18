@@ -17,9 +17,11 @@
 ***************   方案三：最细的技术指标直接作为特征   ******************
 基于features的所有涉及到的IndInfo，全部共20+，不做聚类，直接训练。
 '''
-from banbot.mlpred.mldata import *
-from banbot.compute.utils import *
 from typing import Optional
+
+from banbot.compute.utils import *
+
+from banbot.mlpred.mldata import *
 
 save_dir = r'E:\trade\freqtd_data\user_data\models\feaprob4'
 if not os.path.isdir(save_dir):

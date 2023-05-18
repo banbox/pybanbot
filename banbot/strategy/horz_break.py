@@ -3,7 +3,6 @@
 # File  : horz_break.py
 # Author: anyongjin
 # Date  : 2023/4/9
-import numpy as np
 
 from banbot.strategy.base import *
 

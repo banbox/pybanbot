@@ -3,8 +3,9 @@
 # File  : rpc_manager.py
 # Author: anyongjin
 # Date  : 2023/4/1
-from banbot.rpc.rpc import *
 from collections import deque
+
+from banbot.rpc.rpc import *
 from banbot.util import btime
 from banbot.util.common import Singleton
 

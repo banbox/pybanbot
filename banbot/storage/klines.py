@@ -4,14 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import math
-
-import six
-
-from banbot.storage.base import *
-from typing import Callable, Tuple, ClassVar, Dict
-from banbot.exchange.exchange_utils import tf_to_secs
-from banbot.util import btime
 from datetime import datetime
+from typing import Callable, Tuple, ClassVar, Dict
+
+from banbot.exchange.exchange_utils import tf_to_secs
+from banbot.storage.base import *
+from banbot.util import btime
 
 
 class BarAgg:

@@ -3,17 +3,16 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
-import time
-from collections import OrderedDict
 from asyncio import Queue
+from collections import OrderedDict
 
-from banbot.storage.orders import *
-from banbot.util.common import logger, SingletonArg
-from banbot.util.num_utils import to_pytypes
-from banbot.main.wallets import CryptoWallet, WalletsLocal
-from banbot.strategy.base import BaseStrategy
 from banbot.data.provider import *
+from banbot.main.wallets import CryptoWallet, WalletsLocal
+from banbot.storage.orders import *
+from banbot.strategy.base import BaseStrategy
+from banbot.util.common import SingletonArg
 from banbot.util.misc import *
+from banbot.util.num_utils import to_pytypes
 
 
 class OrderBook():

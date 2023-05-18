@@ -4,16 +4,15 @@
 # Author: anyongjin
 # Date  : 2023/2/21
 import asyncio
+from datetime import datetime
+from typing import List, Optional, Union
 
 import numpy as np
 import pandas as pd
-import six
-from datetime import datetime
-
-from pandas import DataFrame
 import plotly.graph_objects as go
+import six
+from pandas import DataFrame
 from plotly.subplots import make_subplots
-from typing import List, Optional, Union
 
 
 def _make_yrange(col):

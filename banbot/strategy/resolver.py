@@ -3,11 +3,11 @@
 # File  : resolver.py
 # Author: anyongjin
 # Date  : 2023/3/31
-from banbot.strategy.base import BaseStrategy
 from banbot.core.iresolver import *
-from banbot.util.common import logger
-from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.common import BotGlobal
+from banbot.strategy.base import BaseStrategy
+from banbot.util.common import logger
+
 global strategy_map
 strategy_map: Optional[Dict[str, BaseStrategy]] = None
 

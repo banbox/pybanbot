@@ -4,9 +4,9 @@
 # Author: anyongjin
 # Date  : 2023/2/13
 import os.path
-from pandas import DataFrame
-from banbot.mlpred.features import *
+
 from banbot.mlpred.datatools import *
+from banbot.mlpred.features import *
 
 
 class MicroWave:

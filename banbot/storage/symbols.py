@@ -3,10 +3,10 @@
 # File  : symbols.py
 # Author: anyongjin
 # Date  : 2023/4/24
-import time
+
+from typing import Dict, ClassVar
 
 from banbot.storage.base import *
-from typing import Dict, ClassVar
 
 
 class ExSymbol(BaseDbModel):

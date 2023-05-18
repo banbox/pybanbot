@@ -4,8 +4,9 @@
 # Author: anyongjin
 # Date  : 2023/1/29
 import numpy as np
-from pandas import Series, DataFrame
 import talib.abstract as ta
+from pandas import Series, DataFrame
+
 np.seterr(divide='ignore', invalid='ignore')
 
 

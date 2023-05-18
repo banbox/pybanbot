@@ -4,8 +4,10 @@
 # Author: anyongjin
 # Date  : 2023/3/22
 import os
-import orjson
 from typing import Tuple
+
+import orjson
+
 from banbot.config.appconfig import AppConfig, Config
 
 

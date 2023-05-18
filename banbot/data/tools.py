@@ -3,17 +3,14 @@
 # File  : tools.py
 # Author: anyongjin
 # Date  : 2023/2/28
-import asyncio
 import datetime
 import os
-
-import ccxt
-import pandas as pd
-from banbot.util.common import logger
-from banbot.config.timerange import TimeRange
-from banbot.config.consts import *
-from banbot.exchange.exchange_utils import *
 from typing import Tuple, List
+
+from banbot.config.consts import *
+from banbot.config.timerange import TimeRange
+from banbot.exchange.exchange_utils import *
+from banbot.util.common import logger
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
@@ -137,10 +134,11 @@ def parse_data_path(data_dir: str, pair: str, tf_secs: int) -> Tuple[str, int]:
     raise FileNotFoundError(f'no data found, try: {try_list} in {data_dir}')
 
 
-def load_file_range(data_path: str, tr: Optional[TimeRange]) -> pd.DataFrame:
+def load_file_range(data_path: str, tr: Optional[TimeRange]):
     '''
     加载数据文件，必须是feather，按给定的范围截取并返回DataFrame
     '''
+    import pandas as pd
     df = pd.read_feather(data_path)
     if df.date.dtype != 'int64':
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
@@ -161,10 +159,11 @@ def load_file_range(data_path: str, tr: Optional[TimeRange]) -> pd.DataFrame:
     return df
 
 
-def load_pair_file_range(data_dir: str, pair: str, timeframe: str, ts_from: float, ts_to: float) -> pd.DataFrame:
+def load_pair_file_range(data_dir: str, pair: str, timeframe: str, ts_from: float, ts_to: float):
     '''
     从给定目录下，查找交易对的指定时间维度数据，按时间段截取返回.
     '''
+    import pandas as pd
     tf_secs = tf_to_secs(timeframe)
     trange = TimeRange.parse_timerange(f'{ts_from}-{ts_to}')
     try:
@@ -282,6 +281,7 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
+    import pandas as pd
     fname = pair.replace('/', '_') + '-' + timeframe + '.feather'
     data_path = os.path.join(out_dir, fname)
     columns = ['date', 'open', 'high', 'low', 'close', 'volume']

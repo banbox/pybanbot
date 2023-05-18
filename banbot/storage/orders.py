@@ -3,16 +3,14 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
-import six
 
-from banbot.compute.tainds import *
-from banbot.util.misc import del_dict_prefix
-from banbot.storage.base import *
-from banbot.util.redis_helper import AsyncRedis
-from banbot.exchange.exchange_utils import tf_to_secs
 from typing import *
 
-import numpy as np
+from banbot.compute.tainds import *
+from banbot.exchange.exchange_utils import tf_to_secs
+from banbot.storage.base import *
+from banbot.util.misc import del_dict_prefix
+from banbot.util.redis_helper import AsyncRedis
 
 
 class OrderStatus:

@@ -3,13 +3,14 @@
 # File  : mldata.py
 # Author: anyongjin
 # Date  : 2023/2/14
+import logging
+import os
 import time
 
-import pandas as pd
-import os
-import numpy as np
 import lightgbm as lgb
-import logging
+import numpy as np
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 data_dir = r'E:\trade\freqtd_data\user_data\freqai_data\feaprob'

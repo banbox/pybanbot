@@ -3,11 +3,10 @@
 # File  : bot_task.py
 # Author: anyongjin
 # Date  : 2023/5/5
-import time
 
-from banbot.strategy.base import *
-from banbot.storage.common import BotGlobal
 from banbot.exchange.exchange_utils import tfsecs
+from banbot.storage.common import BotGlobal
+from banbot.strategy.base import *
 
 
 class BotTask(BaseDbModel):

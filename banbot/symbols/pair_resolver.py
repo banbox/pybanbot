@@ -5,7 +5,6 @@
 # Date  : 2023/4/17
 from banbot.core.iresolver import *
 from banbot.symbols.pairlist.base import *
-from banbot.data.provider import DataProvider
 
 
 class PairResolver(IResolver):

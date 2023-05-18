@@ -3,9 +3,12 @@
 # File  : exchange_utils.py
 # Author: anyongjin
 # Date  : 2023/3/25
-import ccxt
 from typing import *
+
+import ccxt
+
 from banbot.util import btime
+
 _tfsecs_map = dict()
 _secstf_map = dict()
 

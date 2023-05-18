@@ -6,8 +6,10 @@
 import sys
 from pathlib import Path
 from typing import *
-from banbot.config.consts import *
+
 import orjson
+
+from banbot.config.consts import *
 from banbot.util.common import logger, Singleton
 from banbot.util.misc import deep_merge_dicts
 

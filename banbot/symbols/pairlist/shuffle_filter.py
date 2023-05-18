@@ -3,7 +3,6 @@
 # File  : shuffle_filter.py
 # Author: anyongjin
 # Date  : 2023/4/19
-import random
 
 from banbot.symbols.pairlist.base import *
 

@@ -3,8 +3,9 @@
 # File  : num_utils.py
 # Author: anyongjin
 # Date  : 2023/3/2
-import numpy as np
 from typing import List
+
+import numpy as np
 
 
 def cross_zero(arr: np.ndarray, go_type=0) -> List[int]:

@@ -3,11 +3,11 @@
 # File  : mean_rev.py
 # Author: anyongjin
 # Date  : 2023/3/4
-import numpy as np
 
-from banbot.strategy.base import *
-from banbot.compute.addons import *
 from typing import Tuple, Optional
+
+from banbot.compute.addons import *
+from banbot.strategy.base import *
 
 
 class MeanRev(BaseStrategy):

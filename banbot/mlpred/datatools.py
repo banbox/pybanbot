@@ -9,13 +9,13 @@
 import json
 import os
 import time
-
-from typing import List, Tuple, Dict, Optional
 from pathlib import Path
+from typing import Tuple, Optional
+
 import freqtrade.vendor.qtpylib.indicators as qtpylib
-import numpy as np
-from freqtrade.data import history
 from freqtrade.configuration import TimeRange
+from freqtrade.data import history
+
 from banbot.compute.classic_inds import *
 from banbot.mlpred.consts import *
 

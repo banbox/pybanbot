@@ -3,13 +3,13 @@
 # File  : live_provider.py
 # Author: anyongjin
 # Date  : 2023/3/28
-import six
 
-from banbot.data.feeder import *
-from banbot.config import *
-from banbot.util.common import logger
-from banbot.storage import *
 from tqdm import tqdm
+
+from banbot.config import *
+from banbot.data.feeder import *
+from banbot.storage import *
+from banbot.util.common import logger
 
 
 class DataProvider:

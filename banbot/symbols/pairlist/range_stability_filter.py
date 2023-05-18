@@ -3,10 +3,11 @@
 # File  : range_stability_filter.py
 # Author: anyongjin
 # Date  : 2023/4/19
-from cachetools import TTLCache
-from banbot.symbols.pairlist.base import *
-from banbot.compute.tainds import hcol, lcol
 import numpy as np
+from cachetools import TTLCache
+
+from banbot.compute.tainds import hcol, lcol
+from banbot.symbols.pairlist.base import *
 
 
 class RangeStabilityFilter(PairList):

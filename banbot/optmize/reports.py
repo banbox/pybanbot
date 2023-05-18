@@ -3,10 +3,12 @@
 # File  : reports.py
 # Author: anyongjin
 # Date  : 2023/3/20
-import numpy as np
-from tabulate import tabulate
 from typing import *
+
+import numpy as np
 import pandas as pd
+from tabulate import tabulate
+
 from banbot.util.common import logger
 
 

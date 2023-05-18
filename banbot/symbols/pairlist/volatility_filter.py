@@ -3,12 +3,12 @@
 # File  : volatility_filter.py
 # Author: anyongjin
 # Date  : 2023/4/19
-import sys
 
 import numpy as np
 from cachetools import TTLCache
-from banbot.symbols.pairlist.base import *
+
 from banbot.compute.tainds import ccol
+from banbot.symbols.pairlist.base import *
 
 
 class VolatilityFilter(PairList):

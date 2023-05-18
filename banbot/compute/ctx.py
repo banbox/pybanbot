@@ -13,11 +13,11 @@ wait_fir
 wait
 gather
 '''
-import numpy as np
-from typing import *
-from numbers import Number
 from contextvars import Context, ContextVar, copy_context
+from numbers import Number
+from typing import *
 
+import numpy as np
 
 # 所有对上下文变量的数据访问，均应先获取锁，避免协程交互访问时发生混乱
 bar_num = ContextVar('bar_num')

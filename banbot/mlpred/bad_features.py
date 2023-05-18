@@ -3,10 +3,10 @@
 # File  : bad_attempts.py
 # Author: anyongjin
 # Date  : 2023/2/2
+import pandas_ta as pta
+
 from banbot.compute.classic_inds import *
 from banbot.mlpred.consts import *
-import pandas_ta as pta
-from typing import Dict
 
 
 class CTI(TFeature):

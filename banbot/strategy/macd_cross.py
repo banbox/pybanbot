@@ -3,8 +3,8 @@
 # File  : macd_cross.py
 # Author: anyongjin
 # Date  : 2023/3/27
-from banbot.strategy.base import *
 from banbot.compute.addons import *
+from banbot.strategy.base import *
 
 
 class MACDCross(BaseStrategy):

@@ -5,11 +5,10 @@
 # Date  : 2023/3/17
 import os.path
 
-from banbot.util.num_utils import to_pytypes
-from banbot.main.itrader import *
 from banbot.data.provider import *
-from banbot.symbols.pair_manager import PairManager
+from banbot.main.itrader import *
 from banbot.storage import *
+from banbot.symbols.pair_manager import PairManager
 
 
 class BackTest(Trader):

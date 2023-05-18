@@ -3,15 +3,16 @@
 # File  : iresolver.py
 # Author: anyongjin
 # Date  : 2023/4/17
-import os.path
-from typing import *
-from pathlib import Path
 import importlib
 import importlib.util
 import inspect
+import os.path
 import sys
-from banbot.util.common import logger
+from pathlib import Path
+from typing import *
+
 from banbot.config.consts import *
+from banbot.util.common import logger
 
 
 class PathModifier:

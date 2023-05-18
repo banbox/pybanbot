@@ -3,10 +3,11 @@
 # File  : volume_pairlist.py
 # Author: anyongjin
 # Date  : 2023/4/19
-from cachetools import TTLCache
-from banbot.symbols.pairlist.base import *
-from banbot.compute.tainds import hcol, lcol, ccol, vcol
 import numpy as np
+from cachetools import TTLCache
+
+from banbot.compute.tainds import hcol, lcol, ccol, vcol
+from banbot.symbols.pairlist.base import *
 
 SORT_VALUES = ['quoteVolume']
 

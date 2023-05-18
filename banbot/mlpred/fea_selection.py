@@ -7,16 +7,13 @@
 测试指标组合效果。
 指标特征相关性分析
 '''
-import os
 import pickle
-import time
-
-import numpy as np
-
-from banbot.mlpred.datatools import *
-from banbot.mlpred import features as fts
-from banbot.compute.utils import *
 import statistics
+
+from banbot.compute.utils import *
+
+from banbot.mlpred import features as fts
+from banbot.mlpred.datatools import *
 
 '''特征发现：指标组合胜率测试'''
 

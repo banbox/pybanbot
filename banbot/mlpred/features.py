@@ -67,13 +67,14 @@ pos_true: 0.95/sma3_pt  pos_false: 0.93/sma3_pf  neg_true: 1.00/sma3_nt  neg_fal
 [rsi+aroon]
 pos_true: 0.79/sma3_pt  pos_false: 0.58/sma3_pf  neg_true: 0.85/sma3_nt  neg_false: 0.57/sma3_nf
 '''
-from banbot.compute.classic_inds import *
-from banbot.mlpred.consts import *
-from sklearn.preprocessing import MinMaxScaler
-import freqtrade.vendor.qtpylib.indicators as qtpylib
-from technical.indicators import RMI
 from typing import Dict, Tuple
 
+import freqtrade.vendor.qtpylib.indicators as qtpylib
+from sklearn.preprocessing import MinMaxScaler
+from technical.indicators import RMI
+
+from banbot.compute.classic_inds import *
+from banbot.mlpred.consts import *
 
 use_policy = [
     'bb20',

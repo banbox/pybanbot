@@ -5,13 +5,9 @@
 # Date  : 2023/3/4
 import math
 import os
-import time
-import uuid
 
-import pandas as pd
-import numpy as np
-from typing import List, Dict
 from banbot.compute.tainds import *
+
 '''
 K线形态参考：
 https://github.com/SpiralDevelopment/candlestick-patterns/tree/master/candlestick/patterns
@@ -395,6 +391,7 @@ def test_pattern_draws(arr: np.ndarray, bar_avg_chg: int):
 
 
 def load_bnb_1s():
+    import pandas as pd
     data_dir = r'E:\trade\freqtd_data\user_data\spec_data\bnb1s'
     fname = 'BTCUSDT-1s-2023-02-22-2023-02-26.feather'
     return pd.read_feather(os.path.join(data_dir, fname))

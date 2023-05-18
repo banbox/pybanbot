@@ -3,7 +3,6 @@
 # File  : oversold_up.py
 # Author: anyongjin
 # Date  : 2023/4/11
-import numpy as np
 
 from banbot.strategy.base import *
 
