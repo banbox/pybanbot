@@ -234,7 +234,7 @@ class CryptoExchange:
         logger.info('%d markets loaded for %s', len(markets), self.api.name)
         if not self.markets:
             # 首次加载，输出统计的交易对信息
-            from banbot.optmize.reports import text_markets
+            from banbot.exchange.exchange_utils import text_markets
             print(text_markets(self.api_async.markets, 30))
         self.markets = self.api_async.markets
         self.markets_at = time.time()
