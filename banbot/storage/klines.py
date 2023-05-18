@@ -84,7 +84,7 @@ ORDER BY sid, 2'''
     def _init_hypertbl(cls, conn: sa.Connection, tbl: BarAgg):
         statements = [
             f"SELECT create_hypertable('{tbl.tbl}','time');",
-            '''ALTER TABLE {tbl.tbl} SET (
+            f'''ALTER TABLE {tbl.tbl} SET (
               timescaledb.compress,
               timescaledb.compress_orderby = 'time DESC',
               timescaledb.compress_segmentby = 'sid'
