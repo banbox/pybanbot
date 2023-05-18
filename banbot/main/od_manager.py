@@ -715,36 +715,29 @@ class LiveOrderManager(OrderManager):
         logger.info(f'pending open orders: {exp_orders}')
         from itertools import groupby
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
-            buy_price, sell_price = self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))
-            buy_price = await buy_price()
-            sell_price = await sell_price()
+            buy_price, sell_price = await self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))
             for od in od_list:
                 if od.exit and od.exit_tag:
                     if sell_price >= od.exit.price:
                         continue
-                    od.exit.create_at = btime.time()
-                    logger.info('change price exit %s price: %f -> %f', od.key, od.exit.price, sell_price)
-                    od.exit.price = sell_price
-                    if not od.exit.order_id:
-                        await self._exec_order_exit(od)
-                    else:
-                        left_amount = od.exit.amount - od.exit.filled
-                        res = await self.exchange.edit_limit_order(od.exit.order_id, od.symbol, od.exit.side,
-                                                                   left_amount, sell_price)
-                        await self._update_subod_by_ccxtres(od, False, res)
+                    sub_od, is_enter, new_price = od.exit, False, sell_price
                 else:
                     if buy_price <= od.enter.price:
                         continue
-                    od.enter.create_at = btime.time()
-                    logger.info('change price enter %s price: %f -> %f', od.key, od.enter.price, buy_price)
-                    od.enter.price = buy_price
-                    if not od.enter.order_id:
-                        await self._exec_order_enter(od)
-                    else:
-                        left_amount = od.enter.amount - od.enter.filled
-                        res = await self.exchange.edit_limit_order(od.enter.order_id, od.symbol, od.enter.side,
-                                                                   left_amount, buy_price)
-                        await self._update_subod_by_ccxtres(od, True, res)
+                    sub_od, is_enter, new_price = od.enter, True, buy_price
+                sub_od.create_at = btime.time()
+                logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
+                sub_od.price = new_price
+                if not sub_od.order_id:
+                    await self._exec_order_enter(od)
+                else:
+                    left_amount = sub_od.amount - sub_od.filled
+                    try:
+                        res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
+                                                                   left_amount, new_price)
+                        await self._update_subod_by_ccxtres(od, is_enter, res)
+                    except ccxt.InvalidOrder as e:
+                        logger.error('edit invalid order: %s', e)
 
     async def cleanup(self):
         with db():
