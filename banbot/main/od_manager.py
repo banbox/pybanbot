@@ -697,8 +697,11 @@ class LiveOrderManager(OrderManager):
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
         if btime.prod_mode():
-            with db():
-                await self._trail_open_orders(timeouts)
+            try:
+                with db():
+                    await self._trail_open_orders(timeouts)
+            except Exception:
+                logger.exception('_trail_open_orders error')
         await asyncio.sleep(timeouts)
 
     async def _trail_open_orders(self, timeouts: int):
