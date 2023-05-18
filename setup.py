@@ -29,7 +29,7 @@ setup(
         'aiofiles',
         'arrow',
         'sqlalchemy',
-        'psycopg2',
+        'psycopg2-binary',
         'redis',
         'hiredis'
     ]
