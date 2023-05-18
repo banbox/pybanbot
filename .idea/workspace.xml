@@ -8,7 +8,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="支持定期刷新交易对，默认12小时" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix order trail bug">
+      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -356,7 +358,7 @@
       <workItem from="1684113172484" duration="24687000" />
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
-      <workItem from="1684375523336" duration="15016000" />
+      <workItem from="1684375523336" duration="16441000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -610,7 +612,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684394793033</updated>
     </task>
-    <option name="localTasksCounter" value="37" />
+    <task id="LOCAL-00037" summary="fix order trail bug">
+      <created>1684396481452</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1684396481452</updated>
+    </task>
+    <option name="localTasksCounter" value="38" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -628,7 +637,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="支持订单数据库存储" />
     <MESSAGE value="回测时订单暂存内存，加快效率" />
     <MESSAGE value="fix回测完成未显示报告" />
     <MESSAGE value="支持实盘订单写入数据库，fixbug" />
@@ -653,7 +661,8 @@
     <MESSAGE value="解决交易所初始化关闭开仓订单很慢问题" />
     <MESSAGE value="解决预热处理订单导致比较慢问题" />
     <MESSAGE value="支持定期刷新交易对，默认12小时" />
-    <option name="LAST_COMMIT_MESSAGE" value="支持定期刷新交易对，默认12小时" />
+    <MESSAGE value="fix order trail bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix order trail bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

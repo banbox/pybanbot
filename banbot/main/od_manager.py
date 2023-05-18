@@ -458,8 +458,8 @@ class LiveOrderManager(OrderManager):
             buy_price = await self._get_odbook_price(pair, 'buy', depth)
             sell_price = await self._get_odbook_price(pair, 'sell', depth)
         else:
-            buy_price = high_price * 2 - low_price
-            sell_price = low_price * 2 - high_price
+            buy_price = high_price * 2
+            sell_price = low_price / 2
         return buy_price, sell_price
 
     async def _get_pair_prices(self, pair: str, vol_sec=0):
