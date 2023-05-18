@@ -218,7 +218,6 @@ class CryptoExchange:
         if time.time() - self.markets_at < 1800:
             logger.warning('load_markets too freq, skip')
             return
-        self.markets_at = time.time()
         restore_ts, markets = 0, []
         if btime.run_mode not in LIVE_MODES:
             restore_ts = _restore_markets(self.api_async, self.market_dir)
@@ -238,6 +237,7 @@ class CryptoExchange:
             from banbot.optmize.reports import text_markets
             print(text_markets(self.api_async.markets, 30))
         self.markets = self.api_async.markets
+        self.markets_at = time.time()
 
     def calc_funding_fee(self, od: Order):
         '''

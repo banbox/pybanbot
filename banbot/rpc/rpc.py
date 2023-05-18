@@ -119,7 +119,7 @@ class Webhook(RPCHandler):
         """
         super().__init__(rpc, config)
 
-        self._url = self._config['webhook']['url']
+        self._url = self._config['webhook'].get('url')
         self._retries = self._config['webhook'].get('retries', 0)
         self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
 
