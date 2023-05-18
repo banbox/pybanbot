@@ -23,8 +23,11 @@ class RPCManager(metaclass=Singleton):
 
         if config.get('wework', {}).get('enabled', False):
             logger.info('start rpc.wework ...')
-            from banbot.rpc.wework import WeWork
-            self.channels.append(WeWork(self._rpc, config))
+            try:
+                from banbot.rpc.wework import WeWork
+                self.channels.append(WeWork(self._rpc, config))
+            except Exception:
+                logger.exception('init wechat corp fail')
 
     async def cleanup(self) -> None:
         """ Stops all enabled rpc modules """

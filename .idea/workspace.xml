@@ -8,7 +8,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix import" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bug">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/rpc/wework.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/rpc/wework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -356,7 +360,7 @@
       <workItem from="1684113172484" duration="24687000" />
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
-      <workItem from="1684375523336" duration="23358000" />
+      <workItem from="1684375523336" duration="28864000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -652,7 +656,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684408840347</updated>
     </task>
-    <option name="localTasksCounter" value="43" />
+    <task id="LOCAL-00043" summary="fix bug">
+      <created>1684409644539</created>
+      <option name="number" value="00043" />
+      <option name="presentableId" value="LOCAL-00043" />
+      <option name="project" value="LOCAL" />
+      <updated>1684409644539</updated>
+    </task>
+    <option name="localTasksCounter" value="44" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -694,7 +705,6 @@
     <MESSAGE value="自动计算交易周期" />
     <MESSAGE value="fix bugs" />
     <MESSAGE value="解决太多对同时请求k线导致卡死问题" />
-    <MESSAGE value="fix bug" />
     <MESSAGE value="计算K线质量时，批量下载交易对，提升效率" />
     <MESSAGE value="所有K线下载均批量执行，提升效率" />
     <MESSAGE value="解决交易所初始化关闭开仓订单很慢问题" />
@@ -706,7 +716,8 @@
     <MESSAGE value="调整依赖类库" />
     <MESSAGE value="fix pandas dependence" />
     <MESSAGE value="fix import" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix import" />
+    <MESSAGE value="fix bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

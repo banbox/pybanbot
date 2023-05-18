@@ -24,7 +24,9 @@ setup(
         'sqlalchemy',
         'psycopg2-binary',
         'redis',
-        'hiredis'
+        'hiredis',
+        'cachetools',
+        'corpwechatbot'
     ],
     extras_require={
         "develop": [
