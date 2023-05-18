@@ -8,7 +8,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="order market price change">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -358,7 +358,7 @@
       <workItem from="1684113172484" duration="24687000" />
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
-      <workItem from="1684375523336" duration="18139000" />
+      <workItem from="1684375523336" duration="19368000" />
     </task>
     <task id="LOCAL-00001" summary="update .idea">
       <created>1682303570862</created>
@@ -626,7 +626,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684397065755</updated>
     </task>
-    <option name="localTasksCounter" value="39" />
+    <task id="LOCAL-00039" summary="update">
+      <created>1684402022344</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1684402022344</updated>
+    </task>
+    <option name="localTasksCounter" value="40" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -655,7 +662,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="fix回测完成未显示报告" />
     <MESSAGE value="支持实盘订单写入数据库，fixbug" />
     <MESSAGE value="关联订单的任务ID，实盘模式策略没有变化时沿用上次的任务" />
     <MESSAGE value="优化命令入口&#10;订单时间戳规则修改&#10;支持简单回测实盘订单对比" />
@@ -680,7 +686,8 @@
     <MESSAGE value="支持定期刷新交易对，默认12小时" />
     <MESSAGE value="fix order trail bug" />
     <MESSAGE value="order market price change" />
-    <option name="LAST_COMMIT_MESSAGE" value="order market price change" />
+    <MESSAGE value="update" />
+    <option name="LAST_COMMIT_MESSAGE" value="update" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

@@ -17,12 +17,6 @@ setup(
     description='high freq trade',
     packages=find_packages(),
     install_requires=[
-        'TA-Lib',
-        'pandas-ta',
-        'technical',
-        'dash>=2.8.1',
-        'jupyter-dash',
-        'tabulate',
         'ccxt',
         'orjson',
         'aiodns',
@@ -32,5 +26,15 @@ setup(
         'psycopg2-binary',
         'redis',
         'hiredis'
-    ]
+    ],
+    extras_require={
+        "develop": [
+            'TA-Lib',
+            'pandas-ta',
+            'technical',
+            'dash>=2.8.1',
+            'jupyter-dash',
+            'tabulate',
+        ]
+    }
 )
