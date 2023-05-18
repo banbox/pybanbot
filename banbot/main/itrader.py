@@ -39,9 +39,9 @@ class Trader:
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):
+        pair_tf = f'{pair}/{timeframe}'
         if not BotGlobal.is_wramup:
             logger.debug('data_feed %s %s %s', pair, timeframe, row)
-        pair_tf = f'{pair}/{timeframe}'
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
@@ -53,7 +53,8 @@ class Trader:
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
             pair_arr = append_new_bar(row, tf_secs)
-            self.order_mgr.update_by_bar(row)
+            if not BotGlobal.is_wramup:
+                self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
             ext_tags: Dict[int, str] = dict()
             enter_list, exit_list = [], []
@@ -61,16 +62,17 @@ class Trader:
                 stg_name = strategy.name
                 strategy.state = dict()
                 strategy.on_bar(pair_arr)
-                # 调用策略生成入场和出场信号
-                entry_tag = strategy.on_entry(pair_arr)
-                exit_tag = strategy.on_exit(pair_arr)
-                if entry_tag and not bar_expired and (not strategy.skip_enter_on_exit or not exit_tag):
-                    cost = strategy.custom_cost(entry_tag)
-                    enter_list.append((stg_name, entry_tag, cost))
-                if not strategy.skip_exit_on_enter or not entry_tag:
-                    if exit_tag:
-                        exit_list.append((stg_name, exit_tag))
-                    ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
+                if not BotGlobal.is_wramup:
+                    # 调用策略生成入场和出场信号
+                    entry_tag = strategy.on_entry(pair_arr)
+                    exit_tag = strategy.on_exit(pair_arr)
+                    if entry_tag and not bar_expired and (not strategy.skip_enter_on_exit or not exit_tag):
+                        cost = strategy.custom_cost(entry_tag)
+                        enter_list.append((stg_name, entry_tag, cost))
+                    if not strategy.skip_exit_on_enter or not entry_tag:
+                        if exit_tag:
+                            exit_list.append((stg_name, exit_tag))
+                        ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_cost = (time.monotonic() - start_time) * 1000
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',

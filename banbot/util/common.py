@@ -103,27 +103,54 @@ class MeasureTime:
         from typing import List, Tuple
         self.prefix = prefix
         self.history: List[Tuple[str, float]] = []
+        self.disable = False
 
     def start_for(self, name: str):
+        if self.disable:
+            return
         self.history.append((self.prefix + name, time.monotonic()))
 
     def print_all(self, top_n: int = 0):
+        if self.disable or not self.history:
+            return False
         self.history.append((self.prefix + 'end', time.monotonic()))
-        cost_list = []
+        cost_list, tags = [], set()
         for i in range(len(self.history) - 1):
             item, nt = self.history[i], self.history[i + 1]
-            cost_list.append((item[0], nt[1] - item[1]))
+            cost_list.append((item[0], nt[1] - item[1], 1))
+            tags.add(item[0])
+        tag_repeat = False
+        if len(cost_list) > len(tags):
+            tag_repeat = True
+            # 有标签重复多次，按总时间排序
+            from itertools import groupby
+            cost_list = sorted(cost_list, key=lambda x: x[0])
+            res_group = groupby(cost_list, key=lambda x: x[0])
+            cost_list = []
+            for key, group in res_group:
+                gp_list = list(group)
+                cost_sum = sum(list(map(lambda x: x[1], gp_list)))
+                cost_list.append((key, cost_sum, len(gp_list)))
         if len(cost_list) > 2:
-            cost_list.append((self.prefix + 'total', self.history[-1][1] - self.history[0][1]))
+            cost_total = self.history[-1][1] - self.history[0][1]
+            cost_list.append((self.prefix + 'total', cost_total, 0))
         cost_list = sorted(cost_list, key=lambda x: x[1], reverse=True)
         max_name_len = max(len(n[0]) for n in cost_list)
         max_name_len = max(max_name_len + 3, 12)
         title, cost_t = 'action', 'cost(s)'
-        print(f'{title:<{max_name_len}}{cost_t}')
+        time_len = 10
+        head_text = f'{title:<{max_name_len}}{cost_t:<{time_len}}'
+        if tag_repeat:
+            head_text += 'count'
+        print(head_text)
         for i, item in enumerate(cost_list):
             if top_n and i >= top_n:
                 break
-            print(f'{item[0]:<{max_name_len}}{item[1]:.5f}')
+            msg = f'{item[0]:<{max_name_len}}{item[1]:<{time_len}.5f}'
+            if tag_repeat:
+                msg += str(item[2])
+            print(msg)
+        return True
 
     def total_secs(self):
         if not self.history:
