@@ -190,8 +190,9 @@ class OrderManager(metaclass=SingletonArg):
 
     def _finish_order(self, od: InOutOrder):
         fee_rate = od.enter.fee + od.exit.fee
-        od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
-        od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
+        if od.exit.price and od.enter.price:
+            od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
+            od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
         if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
             limit_fee = self.pair_fee_limits.get(od.symbol)
             if limit_fee is not None and fee_rate > limit_fee * 2:
@@ -624,30 +625,31 @@ class LiveOrderManager(OrderManager):
     async def listen_orders_forever(self):
         trades = await self.exchange.watch_my_trades()
         logger.debug('get my trades: %s', trades)
-        related_ods = set()
-        for data in trades:
-            trade_key = f"{data['symbol']}_{data['id']}"
-            if trade_key in self.handled_trades:
-                continue
-            od_key = f"{data['symbol']}_{data['order']}"
-            if od_key not in self.exg_orders:
-                self.unmatch_trades[trade_key] = data
-                continue
-            sub_od = self.exg_orders[od_key]
-            await self._update_order(sub_od, data)
-            related_ods.add(sub_od)
-        for sub_od in related_ods:
-            await self._consume_unmatchs(sub_od)
-        if len(self.handled_trades) > 500:
-            cut_keys = list(self.handled_trades.keys())[-300:]
-            self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
-        exp_unmatchs = []
-        for trade_key, trade in list(self.unmatch_trades.items()):
-            if btime.time() - trade['timestamp'] / 1000 >= 10:
-                exp_unmatchs.append(trade)
-                del self.unmatch_trades[trade_key]
-        if exp_unmatchs:
-            logger.warning('expired unmatch orders: %s', exp_unmatchs)
+        with db():
+            related_ods = set()
+            for data in trades:
+                trade_key = f"{data['symbol']}_{data['id']}"
+                if trade_key in self.handled_trades:
+                    continue
+                od_key = f"{data['symbol']}_{data['order']}"
+                if od_key not in self.exg_orders:
+                    self.unmatch_trades[trade_key] = data
+                    continue
+                sub_od = self.exg_orders[od_key]
+                await self._update_order(sub_od, data)
+                related_ods.add(sub_od)
+            for sub_od in related_ods:
+                await self._consume_unmatchs(sub_od)
+            if len(self.handled_trades) > 500:
+                cut_keys = list(self.handled_trades.keys())[-300:]
+                self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
+            exp_unmatchs = []
+            for trade_key, trade in list(self.unmatch_trades.items()):
+                if btime.time() - trade['timestamp'] / 1000 >= 10:
+                    exp_unmatchs.append(trade)
+                    del self.unmatch_trades[trade_key]
+            if exp_unmatchs:
+                logger.warning('expired unmatch orders: %s', exp_unmatchs)
 
     async def _exec_order_enter(self, od: InOutOrder):
         if od.exit_tag:
