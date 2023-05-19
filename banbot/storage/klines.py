@@ -292,15 +292,15 @@ group by 1'''
             return
         if timeframe not in {'1m', '1h'}:
             raise RuntimeError(f'can only insert kline: 1m or 1h, current: {timeframe}')
-        intv_secs = tf_to_secs(timeframe)
+        intv_msecs = tf_to_secs(timeframe) * 1000
         rows = sorted(rows, key=lambda x: x[0])
         if len(rows) > 1:
             # 检查间隔是否正确
-            row_intv = (rows[1][0] - rows[0][0]) // 1000
-            if row_intv != intv_secs:
+            row_intv = rows[1][0] - rows[0][0]
+            if row_intv != intv_msecs:
                 raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
         sid = cls._get_sid(exg_name, pair)
-        start_ms, end_ms = rows[0][0], rows[-1][0] + intv_secs * 1000
+        start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
         old_start, old_stop = cls.query_range(exg_name, sid, timeframe)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
@@ -317,6 +317,8 @@ group by 1'''
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
+        if not ins_rows:
+            return
         sess = db.session
         ins_tbl = cls.agg_map[timeframe].tbl
         ins_cols = "sid, time, open, high, low, close, volume"

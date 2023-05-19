@@ -168,6 +168,9 @@ class LiveMiner(Watcher):
                 logger.debug('miner %s/%s check_intv %.1f -> %.1f', *fmt_args)
         else:
             job = MinerJob(pair, save_tf, check_intv, since)
+            # 将since改为所属bar的开始，避免第一个bar数据不完整
+            tf_msecs = tf_to_secs(timeframe) * 1000
+            job.since = job.since // tf_msecs * tf_msecs
             self.jobs[pair] = job
             fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
             logger.debug('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)

@@ -47,7 +47,7 @@ class Trader:
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = delay >= max(60., tf_secs * 0.5)
         is_live_mode = btime.run_mode == RunMode.PROD
-        if bar_expired and is_live_mode:
+        if bar_expired and is_live_mode and not BotGlobal.is_wramup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
@@ -100,14 +100,15 @@ class Trader:
                 if old_id:
                     raise RuntimeError(f'{bot_key} already running at {old_id}')
                 redis.set(bot_key, bot_id, 5)
+        slp_intv = min_intv * 0.3
+        key_ex_secs = round(slp_intv + 1)
 
         def handle():
             last_tip_at = 0
             while True:
-                slp_intv = min_intv * 0.3
                 time.sleep(slp_intv)
                 with SyncRedis() as sredis:
-                    sredis.set(bot_key, bot_id, slp_intv + 1)
+                    sredis.set(bot_key, bot_id, key_ex_secs)
                 if self._job:
                     cur_time = btime.time()
                     if self._job[-1] < cur_time and cur_time - last_tip_at > 30:

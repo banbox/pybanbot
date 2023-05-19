@@ -174,7 +174,7 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = exit_tag
         od.exit_at = btime.time_ms()
         _, base_s, quote_s, _ = get_cur_symbol(ctx)
-        if od.enter.filled > 0:
+        if od.enter.filled:
             # 订单已至少部分成交
             ava_amt, lock_amt = self.wallets.get(base_s, od.enter.create_at)
             exit_amount = od.enter.filled
