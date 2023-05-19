@@ -498,7 +498,6 @@ class LiveOrderManager(OrderManager):
                 handled_cnt += 1
                 continue
             self.handled_trades[od_key] = 1
-            sub_od.trades.append(trade)
         return len(trades) - handled_cnt, handled_cnt
 
     def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
@@ -616,7 +615,6 @@ class LiveOrderManager(OrderManager):
 
     async def _update_order(self, od: Order, data: dict):
         async with od.lock():
-            od.trades.append(data)
             if self.name.find('binance') >= 0:
                 await self._update_bnb_order(od, data)
             else:

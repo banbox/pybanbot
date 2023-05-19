@@ -218,7 +218,7 @@ class InOutOrder(BaseDbModel):
                 inout_id=self.enter.inout_id,
                 side='sell' if self.enter.side == 'buy' else 'buy',
             ))
-            if 'amount' not in kwargs:
+            if 'amount' not in kwargs and self.enter.filled:
                 # 未提供时，默认全部卖出。（这里模拟手续费扣除）
                 # 这里amount传入可能为0，不能通过get('amount')方式判断
                 kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)

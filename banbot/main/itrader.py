@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 from banbot.compute.tools import append_new_bar
-from banbot.data.provider import *
 from banbot.main.od_manager import *
 from banbot.strategy.resolver import StrategyResolver
 

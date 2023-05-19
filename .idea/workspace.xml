@@ -9,7 +9,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
+      <change beforePath="$PROJECT_DIR$/.idea/banbot.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/banbot.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/horz_break.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/leek_reaper.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/mean_rev.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/oversold_up.py" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -73,6 +80,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="E:\trade\ban-strategies\old" />
       <recent name="E:\trade\banbot\banbot\compute" />
       <recent name="E:\trade\banbot\banbot\storage" />
       <recent name="E:\trade\banbot\banbot\main" />
@@ -359,14 +367,7 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="16436000" />
-    </task>
-    <task id="LOCAL-00011" summary="回测时订单暂存内存，加快效率">
-      <created>1683296764905</created>
-      <option name="number" value="00011" />
-      <option name="presentableId" value="LOCAL-00011" />
-      <option name="project" value="LOCAL" />
-      <updated>1683296764905</updated>
+      <workItem from="1684459815830" duration="18868000" />
     </task>
     <task id="LOCAL-00012" summary="fix回测完成未显示报告">
       <created>1683352636073</created>
@@ -704,7 +705,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684479638111</updated>
     </task>
-    <option name="localTasksCounter" value="60" />
+    <task id="LOCAL-00060" summary="fix bugs">
+      <created>1684486829564</created>
+      <option name="number" value="00060" />
+      <option name="presentableId" value="LOCAL-00060" />
+      <option name="project" value="LOCAL" />
+      <updated>1684486829564</updated>
+    </task>
+    <option name="localTasksCounter" value="61" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
