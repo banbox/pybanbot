@@ -717,17 +717,22 @@ class LiveOrderManager(OrderManager):
             return
         logger.info(f'pending open orders: {exp_orders}')
         from itertools import groupby
+        exp_orders = sorted(exp_orders, key=lambda x: x.symbol)
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
             buy_price, sell_price = await self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))
+            od_list: List[InOutOrder] = list(od_list)
             for od in od_list:
                 if od.exit and od.exit_tag:
-                    if sell_price >= od.exit.price:
-                        continue
                     sub_od, is_enter, new_price = od.exit, False, sell_price
                 else:
-                    if buy_price <= od.enter.price:
-                        continue
                     sub_od, is_enter, new_price = od.enter, True, buy_price
+                if not sub_od.price:
+                    continue
+                price_chg = new_price - sub_od.price
+                price_chg = price_chg if is_enter else -price_chg
+                if price_chg <= 0.:
+                    # 新价格更不容易成交，跳过
+                    continue
                 sub_od.create_at = btime.time()
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 sub_od.price = new_price
