@@ -99,18 +99,21 @@ class Trader:
                 old_id = redis.get(bot_key)
                 if old_id:
                     raise RuntimeError(f'{bot_key} already running at {old_id}')
-                redis.set(bot_key, bot_id, 7)
+                redis.set(bot_key, bot_id, 5)
 
         def handle():
-            time.sleep(5)
+            last_tip_at = 0
             while True:
-                time.sleep(min_intv * 0.3)
+                slp_intv = min_intv * 0.3
+                time.sleep(slp_intv)
                 with SyncRedis() as sredis:
-                    sredis.set(bot_key, bot_id, 7)
-                if self._job and self._job[-1] < btime.time():
-                    start_at = btime.to_datestr(self._job[1])
-                    logger.error(f'loop tasks stucked: {self._job[0]}, start at {start_at}')
-                    time.sleep(30)
+                    sredis.set(bot_key, bot_id, slp_intv + 1)
+                if self._job:
+                    cur_time = btime.time()
+                    if self._job[-1] < cur_time and cur_time - last_tip_at > 30:
+                        last_tip_at = cur_time
+                        start_at = btime.to_datestr(self._job[1])
+                        logger.error(f'loop tasks stucked: {self._job[0]}, start at {start_at}')
 
         Thread(target=handle, daemon=True).start()
 
