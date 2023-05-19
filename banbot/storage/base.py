@@ -103,6 +103,7 @@ class DBSession(metaclass=DBSessionMeta):
         sess.close()
         _db_sess.reset(self.token)
         DBSession._sess = None
+        self.token = None
 
 
 db: DBSessionMeta = DBSession

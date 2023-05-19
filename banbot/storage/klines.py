@@ -400,12 +400,19 @@ group by 1'''
     @classmethod
     def _refresh_agg(cls, conn: Union[SqlSession, sa.Connection], tbl: BarAgg, sid: int,
                      start_ms: int, end_ms: int, agg_from: str = None):
-        if not agg_from:
-            agg_from = 'kline_' + tbl.agg_from
         tf_msecs = tbl.secs * 1000
         # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
-        win_start = f"'{btime.to_datetime((start_ms // tf_msecs - 1) * tf_msecs)}'"
-        win_end = f"'{btime.to_datetime(end_ms // tf_msecs * tf_msecs)}'"
+        start_ms = (start_ms // tf_msecs - 1) * tf_msecs
+        end_ms = end_ms // tf_msecs * tf_msecs
+        old_start, old_end = cls.query_range('bnb', sid, tbl.tf)
+        if old_start and old_end > old_start:
+            # 避免出现空洞或数据错误
+            start_ms = min(start_ms, old_end)
+            end_ms = max(end_ms, old_start)
+        if not agg_from:
+            agg_from = 'kline_' + tbl.agg_from
+        win_start = f"'{btime.to_datetime(start_ms)}'"
+        win_end = f"'{btime.to_datetime(end_ms)}'"
         if tbl.is_view:
             # 刷新连续聚合（连续聚合不支持按sid筛选刷新，性能批量插入历史数据时性能较差）
             stmt = f"CALL refresh_continuous_aggregate('{tbl.tbl}', {win_start}, {win_end});"
