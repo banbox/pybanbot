@@ -63,7 +63,7 @@ class WalletsLocal:
             self._update_wallet(*items[0])
         self.update_at = btime.time()
 
-    def get(self, symbol: str, after_ts: int = 0):
+    def get(self, symbol: str, after_ts: float = 0):
         assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'
         if symbol not in self.data:
             return 0, 0
@@ -72,7 +72,7 @@ class WalletsLocal:
     def _get_symbol_price(self, symbol: str):
         raise ValueError(f'unsupport quote symbol: {symbol}')
 
-    def get_avaiable_by_cost(self, symbol: str, cost: float, after_ts: int = 0):
+    def get_avaiable_by_cost(self, symbol: str, cost: float, after_ts: float = 0):
         '''
         根据花费的USDT计算需要的数量，并返回可用数量
         :param symbol:

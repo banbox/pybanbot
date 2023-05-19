@@ -8,7 +8,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/wallets.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/wallets.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -357,14 +361,7 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="10171000" />
-    </task>
-    <task id="LOCAL-00007" summary="记录K线漏洞到KHole，避免重复下载">
-      <created>1683169658784</created>
-      <option name="number" value="00007" />
-      <option name="presentableId" value="LOCAL-00007" />
-      <option name="project" value="LOCAL" />
-      <updated>1683169658784</updated>
+      <workItem from="1684459815830" duration="11561000" />
     </task>
     <task id="LOCAL-00008" summary="策略端发现漏数据输出遗漏数量">
       <created>1683171203660</created>
@@ -702,7 +699,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684470101363</updated>
     </task>
-    <option name="localTasksCounter" value="56" />
+    <task id="LOCAL-00056" summary="update">
+      <created>1684470922746</created>
+      <option name="number" value="00056" />
+      <option name="presentableId" value="LOCAL-00056" />
+      <option name="project" value="LOCAL" />
+      <updated>1684470922746</updated>
+    </task>
+    <option name="localTasksCounter" value="57" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">

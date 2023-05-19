@@ -136,6 +136,7 @@ class InOutOrder(BaseDbModel):
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
     enter_tag = Column(sa.String(30))
     init_price = Column(sa.Float)  # 发出信号时入场价格，仅用于策略后续计算
+    quote_cost = Column(sa.Float)  # 花费定价币金额，当价格不确定时，可先不设置amount，后续通过此字段计算amount
     exit_tag = Column(sa.String(30))
     enter_at = Column(sa.BIGINT)  # 13位时间戳，策略决定入场时间戳
     exit_at = Column(sa.BIGINT)  # 13位时间戳，策略决定出场时间戳
@@ -161,8 +162,6 @@ class InOutOrder(BaseDbModel):
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
         super(InOutOrder, self).__init__(**kwargs)
-        # 花费定价币数量，当价格不确定，amount可先不设置，后续通过此字段/价格计算amount
-        self.quote_cost = kwargs.get('quote_cost')
         live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:
             self.id = InOutOrder._next_id
