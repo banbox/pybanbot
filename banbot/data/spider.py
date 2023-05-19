@@ -173,7 +173,6 @@ class LiveMiner(Watcher):
             logger.debug('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
 
     async def run(self):
-        from banbot.storage import db
         while True:
             try:
                 if not self.jobs:
@@ -184,20 +183,18 @@ class LiveMiner(Watcher):
                     await asyncio.sleep(self.loop_intv)
                     continue
                 batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:MAX_CONC_OHLCV]
-                with db():
-                    tasks = [self._try_update(j) for j in batch_jobs]
-                    await asyncio.gather(*tasks)
+                tasks = [self._try_update(j) for j in batch_jobs]
+                await asyncio.gather(*tasks)
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
     def _on_bar_finish(self, pair: str, timeframe: str, bar_row: Tuple):
-        from banbot.storage import db
         from banbot.storage import KLine
-        with db():
-            KLine.insert(self.exchange.name, pair, timeframe, [bar_row])
+        KLine.insert(self.exchange.name, pair, timeframe, [bar_row])
 
     async def _try_update(self, job: MinerJob):
         import ccxt
+        from banbot.storage import db
         try:
             job.next_run = time.time() + job.check_intv
             next_bar = job.next_run // job.tf_secs * job.tf_secs
@@ -217,7 +214,8 @@ class LiveMiner(Watcher):
             else:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
-            self._on_state_ohlcv(job.pair, job, ohlcvs, last_finish)
+            with db():
+                self._on_state_ohlcv(job.pair, job, ohlcvs, last_finish)
             # 发布小间隔数据到redis订阅方
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
             async with AsyncRedis() as redis:

@@ -316,7 +316,14 @@ class InOutOrder(BaseDbModel):
     @classmethod
     def get(cls, od_id: int):
         if btime.run_mode in btime.LIVE_MODES:
-            return db.session.query(InOutOrder).get(od_id)
+            sess = db.session
+            op_od = sess.query(InOutOrder).get(od_id)
+            if not op_od:
+                return op_od
+            ex_ods = sess.query(Order).filter(Order.inout_id == od_id).all()
+            op_od.enter = next((o for o in ex_ods if o.enter), None)
+            op_od.exit = next((o for o in ex_ods if not o.enter), None)
+            return op_od
         op_od = cls._open_ods.get(od_id)
         if op_od is not None:
             return op_od

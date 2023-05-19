@@ -544,7 +544,7 @@ ORDER BY sid, 2'''
                 start_ms = btime.to_utcstamp(hole[0], True, True)
                 end_ms = btime.to_utcstamp(hole[1], True, True)
                 sub_arr = cls.query(exchange.name, stf.symbol, down_tf, start_ms, end_ms)
-                true_len = (end_ms - start_ms) // down_tfsecs
+                true_len = (end_ms - start_ms) // down_tfsecs // 1000
                 if true_len == len(sub_arr):
                     # 子维度周期数据存在，直接归集更新
                     cls._refresh_agg(sess, cls.agg_map[timeframe], sid, start_ms, end_ms, f'kline_{down_tf}')

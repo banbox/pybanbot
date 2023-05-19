@@ -688,7 +688,8 @@ class LiveOrderManager(OrderManager):
         while True:
             job = await self.order_q.get()
             try:
-                await self.exec_order(job)
+                with db():
+                    await self.exec_order(job)
             except Exception:
                 logger.exception('consume order exception: %s', job)
             self.order_q.task_done()
