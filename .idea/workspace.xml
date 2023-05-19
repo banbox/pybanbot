@@ -8,9 +8,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bug">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/restart_ban.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/restart_ban.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -360,21 +360,7 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="8505000" />
-    </task>
-    <task id="LOCAL-00004" summary="fix 回测支持数据库读取">
-      <created>1682587003588</created>
-      <option name="number" value="00004" />
-      <option name="presentableId" value="LOCAL-00004" />
-      <option name="project" value="LOCAL" />
-      <updated>1682587003588</updated>
-    </task>
-    <task id="LOCAL-00005" summary="支持K线数据存储数据库，回测实盘时从数据库读取&#10;加载交易对时自动计算预热数据时间范围。&#10;机器人启动时检测数据库时区为UTC">
-      <created>1683104798022</created>
-      <option name="number" value="00005" />
-      <option name="presentableId" value="LOCAL-00005" />
-      <option name="project" value="LOCAL" />
-      <updated>1683104798022</updated>
+      <workItem from="1684459815830" duration="9416000" />
     </task>
     <task id="LOCAL-00006" summary="支持K线数据漏洞检测和自动填充">
       <created>1683124865476</created>
@@ -705,7 +691,21 @@
       <option name="project" value="LOCAL" />
       <updated>1684467614400</updated>
     </task>
-    <option name="localTasksCounter" value="53" />
+    <task id="LOCAL-00053" summary="update">
+      <created>1684469244879</created>
+      <option name="number" value="00053" />
+      <option name="presentableId" value="LOCAL-00053" />
+      <option name="project" value="LOCAL" />
+      <updated>1684469244879</updated>
+    </task>
+    <task id="LOCAL-00054" summary="update">
+      <created>1684469420087</created>
+      <option name="number" value="00054" />
+      <option name="presentableId" value="LOCAL-00054" />
+      <option name="project" value="LOCAL" />
+      <updated>1684469420087</updated>
+    </task>
+    <option name="localTasksCounter" value="55" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -754,12 +754,12 @@
     <MESSAGE value="调整依赖类库" />
     <MESSAGE value="fix pandas dependence" />
     <MESSAGE value="fix import" />
-    <MESSAGE value="update" />
     <MESSAGE value="fix trail bug" />
     <MESSAGE value="单机模式启动检查机器人是否已运行" />
     <MESSAGE value="fix 订单和miner bug" />
     <MESSAGE value="fix bug" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bug" />
+    <MESSAGE value="update" />
+    <option name="LAST_COMMIT_MESSAGE" value="update" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

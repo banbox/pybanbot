@@ -22,6 +22,8 @@ cd $tmp_path
 # 6. 再次启动机器人
 echo "starting bot..."
 nohup python -m banbot trade --pairs BTC/TUSD -c /root/ban_data/config.json > /root/trade.out 2>&1 &
-sleep 3
-output=`tail -30 /root/trade.out`
-echo $output
+sleep 2
+echo "$(tail -n 30 /root/trade.out)"
+
+echo -e "\nTo show more log, use:"
+echo "tail -n 30 /root/trade.out"
