@@ -27,4 +27,4 @@ sleep 2
 echo "$(tail -n 30 /root/trade.out)"
 
 echo -e "\nTo show more log, use:"
-echo "tail -n 30 /root/trade.out"
+echo "tail -30 /root/trade.out"

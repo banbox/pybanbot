@@ -8,10 +8,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/wallets.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/wallets.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/restart_ban.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/restart_ban.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -361,14 +360,7 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="11561000" />
-    </task>
-    <task id="LOCAL-00008" summary="策略端发现漏数据输出遗漏数量">
-      <created>1683171203660</created>
-      <option name="number" value="00008" />
-      <option name="presentableId" value="LOCAL-00008" />
-      <option name="project" value="LOCAL" />
-      <updated>1683171203660</updated>
+      <workItem from="1684459815830" duration="12520000" />
     </task>
     <task id="LOCAL-00009" summary="项目目录结构优化">
       <created>1683175194018</created>
@@ -706,7 +698,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684470922746</updated>
     </task>
-    <option name="localTasksCounter" value="57" />
+    <task id="LOCAL-00057" summary="fix bugs">
+      <created>1684475465695</created>
+      <option name="number" value="00057" />
+      <option name="presentableId" value="LOCAL-00057" />
+      <option name="project" value="LOCAL" />
+      <updated>1684475465695</updated>
+    </task>
+    <option name="localTasksCounter" value="58" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -743,7 +742,6 @@
     <MESSAGE value="下载ohlcv时检查并记录空洞" />
     <MESSAGE value="回测时允许自动下载数据，fix bugs" />
     <MESSAGE value="自动计算交易周期" />
-    <MESSAGE value="fix bugs" />
     <MESSAGE value="解决太多对同时请求k线导致卡死问题" />
     <MESSAGE value="计算K线质量时，批量下载交易对，提升效率" />
     <MESSAGE value="所有K线下载均批量执行，提升效率" />
@@ -760,7 +758,8 @@
     <MESSAGE value="fix 订单和miner bug" />
     <MESSAGE value="fix bug" />
     <MESSAGE value="update" />
-    <option name="LAST_COMMIT_MESSAGE" value="update" />
+    <MESSAGE value="fix bugs" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix bugs" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
