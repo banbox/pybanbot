@@ -8,11 +8,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="单机模式启动检查机器人是否已运行">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix 订单和miner bug">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -362,14 +361,7 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="5899000" />
-    </task>
-    <task id="LOCAL-00002" summary="应用配置全局静态获取&#10;支持K线数据存储到时序数据库">
-      <created>1682557151606</created>
-      <option name="number" value="00002" />
-      <option name="presentableId" value="LOCAL-00002" />
-      <option name="project" value="LOCAL" />
-      <updated>1682557151606</updated>
+      <workItem from="1684459815830" duration="7246000" />
     </task>
     <task id="LOCAL-00003" summary="update kline download">
       <created>1682567976237</created>
@@ -707,7 +699,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684464181030</updated>
     </task>
-    <option name="localTasksCounter" value="51" />
+    <task id="LOCAL-00051" summary="fix 订单和miner bug">
+      <created>1684466434332</created>
+      <option name="number" value="00051" />
+      <option name="presentableId" value="LOCAL-00051" />
+      <option name="project" value="LOCAL" />
+      <updated>1684466434332</updated>
+    </task>
+    <option name="localTasksCounter" value="52" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -736,7 +735,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="RunMode命名修改" />
     <MESSAGE value="支持多维度数据写入" />
     <MESSAGE value="超表存储1m和1h，其他维度聚合得到" />
     <MESSAGE value="直接使用多个超表存储不同维度，手动聚合更新。" />
@@ -761,7 +759,8 @@
     <MESSAGE value="fix bug" />
     <MESSAGE value="fix trail bug" />
     <MESSAGE value="单机模式启动检查机器人是否已运行" />
-    <option name="LAST_COMMIT_MESSAGE" value="单机模式启动检查机器人是否已运行" />
+    <MESSAGE value="fix 订单和miner bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix 订单和miner bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

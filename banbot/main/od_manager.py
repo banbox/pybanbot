@@ -678,7 +678,7 @@ class LiveOrderManager(OrderManager):
         await self._create_exg_order(od, False)
 
     async def exec_order(self, job: OrderJob):
-        od: InOutOrder = db.session.query(InOutOrder).get(job.od_id)
+        od = InOutOrder.get(job.od_id)
         if job.is_enter:
             await self._exec_order_enter(od)
         else:

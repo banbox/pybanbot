@@ -336,6 +336,9 @@ class InOutOrder(BaseDbModel):
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class OrderJob:
     def __init__(self, od_id: int, is_enter: bool):
