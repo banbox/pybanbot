@@ -5,7 +5,6 @@
 # Date  : 2023/2/28
 import datetime
 import os
-from typing import Tuple, List
 
 from banbot.config.consts import *
 from banbot.config.timerange import TimeRange

@@ -6,7 +6,6 @@
 
 from cachetools import TTLCache
 
-from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
 from banbot.symbols.tfscaler import calc_symboltf_scales

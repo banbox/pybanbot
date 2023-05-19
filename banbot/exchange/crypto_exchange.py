@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/29
 import random
-from typing import *
 
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro

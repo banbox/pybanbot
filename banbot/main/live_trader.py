@@ -3,7 +3,6 @@
 # File  : whack_mole.py
 # Author: anyongjin
 # Date  : 2023/2/28
-from banbot.config import *
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
 from banbot.rpc.rpc_manager import RPCManager, RPCMessageType

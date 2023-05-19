@@ -5,7 +5,6 @@
 # Date  : 2023/3/17
 import os.path
 
-from banbot.data.provider import *
 from banbot.main.itrader import *
 from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager

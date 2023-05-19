@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 
-from typing import Dict, ClassVar
+from typing import ClassVar
 
 from banbot.storage.base import *
 
@@ -23,7 +23,7 @@ class ExSymbol(BaseDbModel):
         records = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
         for r in records:
             rkey = f'{r.exchange}:{r.symbol}'
-            sess.expunge(r)
+            detach_obj(sess, r)
             cls._object_map[rkey] = r
 
     @classmethod
@@ -42,7 +42,8 @@ class ExSymbol(BaseDbModel):
         obj = ExSymbol(exchange=exg_name, symbol=symbol)
         sess.add(obj)
         sess.commit()
-        sess.expunge(obj)
+        logger.info(f'create symbol: {exg_name}:{symbol}, id: {obj.id}')
+        detach_obj(sess, obj)
         cls._object_map[key] = obj
         return obj
 

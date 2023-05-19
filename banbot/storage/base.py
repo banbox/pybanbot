@@ -195,11 +195,9 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
         logger.warn(f'Slow Query Found！Cost {total:.2} secs: {statement}')
 
 
-def reset_obj(sess: SqlSession, obj: BaseDbModel):
+def detach_obj(sess: SqlSession, obj: BaseDbModel):
     sess.expunge(obj)
     make_transient(obj)
-    obj.id = None
-    sess.add(obj)
     return obj
 
 

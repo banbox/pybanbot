@@ -5,7 +5,7 @@
 # Date  : 2023/4/24
 import math
 from datetime import datetime
-from typing import Callable, Tuple, ClassVar, Dict
+from typing import Callable, Tuple, ClassVar
 
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *

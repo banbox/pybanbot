@@ -6,7 +6,6 @@
 
 from tqdm import tqdm
 
-from banbot.config import *
 from banbot.data.feeder import *
 from banbot.storage import *
 from banbot.util.common import logger
