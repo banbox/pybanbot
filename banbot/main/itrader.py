@@ -88,11 +88,25 @@ class Trader:
 
     def start_heartbeat_check(self, min_intv: float):
         from threading import Thread
+        from banbot.util.redis_helper import SyncRedis
+        import socket
+        import os
+        bot_key = f'bot_{self.config["name"]}'
+        bot_id = f'{socket.gethostname()}:{os.getpid()}'
+        if not self.config['cluster']:
+            # 仅单机模式，检查bot是否已启动
+            with SyncRedis() as redis:
+                old_id = redis.get(bot_key)
+                if old_id:
+                    raise RuntimeError(f'{bot_key} already running at {old_id}')
+                redis.set(bot_key, bot_id, 7)
 
         def handle():
             time.sleep(5)
             while True:
                 time.sleep(min_intv * 0.3)
+                with SyncRedis() as sredis:
+                    sredis.set(bot_key, bot_id, 7)
                 if self._job and self._job[-1] < btime.time():
                     start_at = btime.to_datestr(self._job[1])
                     logger.error(f'loop tasks stucked: {self._job[0]}, start at {start_at}')

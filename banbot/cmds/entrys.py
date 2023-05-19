@@ -32,7 +32,8 @@ def start_trading(args: Dict[str, Any]) -> int:
 
     config = AppConfig.init_by_args(args)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
-    logger.warning("Run Mode: %s", btime.run_mode.value)
+    cluster_text = 'Cluster' if config.get('cluster') else 'Stand-Alone'
+    logger.warning("Run Mode: %s    Arch: %s", btime.run_mode.value, cluster_text)
     trader = LiveTrader(config)
     try:
         asyncio.run(trader.run())

@@ -49,7 +49,6 @@ class LiveTrader(Trader):
 
     async def init(self):
         await self.exchange.load_markets()
-        assert self.exchange.markets, 'markets not load'
         with db():
             BotTask.init()
             KLine.sync_timeframes()
