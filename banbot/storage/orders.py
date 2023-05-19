@@ -104,7 +104,7 @@ class Order(BaseDbModel):
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
-    async def lock(self):
+    def lock(self):
         redis = AsyncRedis()
         return redis.lock(f'order_{self.id}', with_conn=True)
 
@@ -218,8 +218,9 @@ class InOutOrder(BaseDbModel):
                 inout_id=self.enter.inout_id,
                 side='sell' if self.enter.side == 'buy' else 'buy',
             ))
-            if not kwargs.get('amount'):
+            if 'amount' not in kwargs:
                 # 未提供时，默认全部卖出。（这里模拟手续费扣除）
+                # 这里amount传入可能为0，不能通过get('amount')方式判断
                 kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)
             self.exit = Order(**kwargs)
         else:
