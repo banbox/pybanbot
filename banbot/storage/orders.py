@@ -109,7 +109,7 @@ class Order(BaseDbModel):
         return redis.lock(f'order_{self.id}', with_conn=True)
 
     def __str__(self):
-        return f'{self.side} {self.amount:.5f} with {self.price}'
+        return f'{self.side} {(self.amount or 0):.5f} with {self.price}'
 
 
 class InOutOrder(BaseDbModel):

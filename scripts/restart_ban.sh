@@ -13,7 +13,8 @@ cd /root/banbot
 
 # 4. 执行 git pull 拉取最新代码
 echo "git pulling..."
-git pull origin master
+output=`git pull origin master`
+echo $output
 sleep 1
 
 # 5. 恢复当前路径
