@@ -234,9 +234,10 @@ class InOutOrder(BaseDbModel):
         '''
         if not self.status or self.status == InOutStatus.FullExit:
             return
-        # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
-        self.profit = (row[ccol] - self.enter.price) * self.enter.amount
-        self.profit_rate = row[ccol] / self.enter.price - 1
+        if self.enter.price and self.enter.amount:
+            # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
+            self.profit = (row[ccol] - self.enter.price) * self.enter.amount
+            self.profit_rate = row[ccol] / self.enter.price - 1
 
     def _save_to_db(self):
         sess = db.session

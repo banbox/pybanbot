@@ -59,7 +59,10 @@ class OrderManager(metaclass=SingletonArg):
 
     def _fire(self, od: InOutOrder, enter: bool):
         with TempContext(f'{od.symbol}/{od.timeframe}'):
-            self.callback(od, enter)
+            try:
+                self.callback(od, enter)
+            except Exception:
+                logger.exception(f'fire od callback fail {od.id}, enter: {enter}')
 
     def allow_pair(self, pair: str) -> bool:
         if self.disabled:
@@ -183,6 +186,7 @@ class OrderManager(metaclass=SingletonArg):
         else:
             exit_amount = 0
         od.update_exit(price=price, amount=exit_amount)
+        od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od.symbol, od.exit_tag)
         self._put_order(od, False)
@@ -417,7 +421,7 @@ class LiveOrderManager(OrderManager):
                  callback: Callable):
         super(LiveOrderManager, self).__init__(config, wallets, data_hd, callback)
         self.exchange = exchange
-        self.exg_orders: Dict[str, Order] = dict()
+        self.exg_orders: Dict[Tuple[str, str], int] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
         self.handled_trades: Dict[str, int] = OrderedDict()
         self.max_market_rate = config.get('max_market_rate', 0.0001)
@@ -489,7 +493,7 @@ class LiveOrderManager(OrderManager):
             logger.info('exec unmatch trade: %s', trade)
             await self._update_order(sub_od, trade)
 
-    def _check_new_trades(self, sub_od: Order, trades: List[dict]):
+    def _check_new_trades(self, trades: List[dict]):
         if not trades:
             return 0, 0
         handled_cnt = 0
@@ -507,6 +511,8 @@ class LiveOrderManager(OrderManager):
         if cur_ts < sub_od.update_at:
             return
         sub_od.update_at = cur_ts
+        sub_od.order_id = data['id']
+        sub_od.amount = data.get('amount')
         order_status, fee, filled = data.get('status'), data.get('fee'), float(data.get('filled', 0))
         if filled > 0:
             filled_price = safe_value_fallback(data, 'average', 'price', sub_od.price)
@@ -540,23 +546,24 @@ class LiveOrderManager(OrderManager):
         async with sub_od.lock():
             if sub_od.order_id:
                 # 如修改订单价格，order_id会变化
-                del self.exg_orders[f'{od.symbol}_{sub_od.order_id}']
+                del self.exg_orders[(od.symbol, sub_od.order_id)]
             sub_od.order_id = order["id"]
-            exg_key = f'{od.symbol}_{sub_od.order_id}'
-            self.exg_orders[exg_key] = sub_od
+            exg_key = od.symbol, sub_od.order_id
+            self.exg_orders[exg_key] = sub_od.id
             logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
-            new_num, old_num = self._check_new_trades(sub_od, order['trades'])
+            new_num, old_num = self._check_new_trades(order['trades'])
             if new_num:
                 self._update_order_res(od, is_enter, order)
         await self._consume_unmatchs(sub_od)
+        db.session.commit()
 
     def _finish_order(self, od: InOutOrder):
         super(LiveOrderManager, self)._finish_order(od)
-        exg_inkey = f'{od.symbol}_{od.enter.order_id}'
+        exg_inkey = od.symbol, od.enter.order_id
         if exg_inkey in self.exg_orders:
             self.exg_orders.pop(exg_inkey)
         if od.exit:
-            exg_outkey = f'{od.symbol}_{od.exit.order_id}'
+            exg_outkey = od.symbol, od.exit.order_id
             if exg_outkey in self.exg_orders:
                 self.exg_orders.pop(exg_outkey)
 
@@ -584,10 +591,10 @@ class LiveOrderManager(OrderManager):
             # 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
             return
         od.update_at = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
+        od.amount = float(info['q'])
         if state in {'CANCELED', 'REJECTED', 'EXPIRED', 'EXPIRED_IN_MATCH'}:
             od.update_props(status=OrderStatus.Close)
-        sess = db.session
-        inout_od: InOutOrder = sess.query(InOutOrder).get(od.inout_id)
+        inout_status = None
         if state in {'FILLED', 'PARTIALLY_FILLED'}:
             od_status = OrderStatus.Close if state == 'FILLED' else OrderStatus.PartOk
             filled, total_cost = float(info['z']), float(info['Z'])
@@ -604,13 +611,18 @@ class LiveOrderManager(OrderManager):
             self.exchange.pair_fees[fee_key] = od.fee_type, od.fee
             if od_status == OrderStatus.Close:
                 if od.enter:
-                    inout_od.status = InOutStatus.FullEnter
+                    inout_status = InOutStatus.FullEnter
                 else:
-                    inout_od.status = InOutStatus.FullExit
+                    inout_status = InOutStatus.FullExit
         else:
             logger.error('unknown bnb order status: %s, %s', state, data)
             return
-        if inout_od.status == InOutStatus.FullExit:
+        # 将sub_od的修改保存
+        db.session.commit()
+        inout_od: InOutOrder = InOutOrder.get(od.inout_id)
+        if inout_status:
+            inout_od.status = inout_status
+        if inout_status == InOutStatus.FullExit:
             self._finish_order(inout_od)
         self._fire(inout_od, od.enter)
 
@@ -632,11 +644,11 @@ class LiveOrderManager(OrderManager):
                 trade_key = f"{data['symbol']}_{data['id']}"
                 if trade_key in self.handled_trades:
                     continue
-                od_key = f"{data['symbol']}_{data['order']}"
+                od_key = data['symbol'], data['order']
                 if od_key not in self.exg_orders:
                     self.unmatch_trades[trade_key] = data
                     continue
-                sub_od = self.exg_orders[od_key]
+                sub_od = sess.query(Order).get(self.exg_orders[od_key])
                 await self._update_order(sub_od, data)
                 related_ods.add(sub_od)
                 sess.commit()

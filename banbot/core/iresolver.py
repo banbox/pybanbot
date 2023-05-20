@@ -104,11 +104,9 @@ class IResolver:
             return cls._load_module_objects(module)
 
     @classmethod
-    def load_object_list(cls, config: dict, extra_dir: Optional[str] = None) -> List:
+    def load_object_list(cls, config: dict, extra_dirs: Optional[List[str]] = None) -> List:
         result = []
-        extra_dirs: List[str] = []
-        if extra_dir:
-            extra_dirs.append(extra_dir)
+        extra_dirs: List[str] = extra_dirs or []
         search_paths = cls.build_search_paths(config, user_subdir=cls.user_subdir, extra_dirs=extra_dirs)
         for path in search_paths:
             if os.path.exists(path):

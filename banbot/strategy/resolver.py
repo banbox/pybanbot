@@ -123,7 +123,8 @@ def get_strategy(name: str) -> Optional[Type[BaseStrategy]]:
     if strategy_map is None:
         from banbot.config import AppConfig
         config = AppConfig.get()
-        strategy_list = StrategyResolver.load_object_list(config)
+        extra_dirs = config.get('stg_dir')
+        strategy_list = StrategyResolver.load_object_list(config, extra_dirs)
         strategy_map = {item.__name__: item for item in strategy_list}
         logger.info('found strategy: %s', list(strategy_map.keys()))
     return strategy_map.get(name)

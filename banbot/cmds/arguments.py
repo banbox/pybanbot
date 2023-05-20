@@ -61,13 +61,13 @@ def _reg_sub(subparsers, name: str, opts: List[str], run_fn: Callable, **kwargs)
 
 def _reg_trade(subparsers, **kwargs):
     from banbot.cmds.entrys import start_trading
-    opts = ["stake_amount", "fee", "pairs", "cluster"]
+    opts = ["stake_amount", "fee", "pairs", "cluster", "stg_dir"]
     _reg_sub(subparsers, 'trade', opts, start_trading, help='Live Trade', **kwargs)
 
 
 def _reg_backtest(subparsers, **kwargs):
     from banbot.cmds.entrys import start_backtesting
-    opts = ["timerange", "stake_amount", "fee", "pairs", "cprofile"]
+    opts = ["timerange", "stake_amount", "fee", "pairs", "cprofile", "stg_dir"]
     _reg_sub(subparsers, 'backtest', opts, start_backtesting, help='backtest', **kwargs)
 
 

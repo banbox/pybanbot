@@ -1,11 +1,11 @@
 {
   "name": "ayj",
   "env": "prod",
-  "run_mode": "dry_run",
+  "run_mode": "prod",
   "trade_mode": "spot",
   "prefire": false,
   "quote_base": "USDT",
-  "stake_amount": 100,
+  "stake_amount": 30,
   "stake_currency": ["USDT", "TUSD"],
   "max_market_rate": 0.0001,
   "odbook_ttl": 1000,
@@ -28,7 +28,7 @@
     {"name": "OffsetFilter", "limit": 90}
   ],
   "run_policy": [
-    {"name": "MACDCross"}
+    {"name": "Demo"}
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

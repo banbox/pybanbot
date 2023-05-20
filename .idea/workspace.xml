@@ -8,9 +8,17 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix order not save">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update script">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/restart_ban.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/restart_ban.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/cmds/arguments.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/arguments.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/cmds/cli_options.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/cmds/cli_options.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/config/appconfig.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/core/iresolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/core/iresolver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/live_trader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/live_trader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/resolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/resolver.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,18 +68,18 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/trade/ban_data&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;run.code.analysis.last.selected.profile&quot;: &quot;ppython&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;build.tools&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "WebServerToolWindowFactoryState": "false",
+    "last_opened_file_path": "E:/trade/ban_data",
+    "nodejs_package_manager_path": "npm",
+    "run.code.analysis.last.selected.profile": "ppython",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyDependenciesConfigurable",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
       <recent name="E:\trade\ban-strategies\old" />
@@ -81,7 +89,7 @@
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.test_ohlcvs">
+  <component name="RunManager" selected="Python.ban_trade">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -184,7 +192,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="trade -c E:\trade\banbot\banbot\config\config.json" />
+      <option name="PARAMETERS" value="trade --pairs BTC/TUSD -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -362,14 +370,7 @@
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
       <workItem from="1684459815830" duration="27966000" />
-      <workItem from="1684547859105" duration="3037000" />
-    </task>
-    <task id="LOCAL-00017" summary="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比">
-      <created>1683543677606</created>
-      <option name="number" value="00017" />
-      <option name="presentableId" value="LOCAL-00017" />
-      <option name="project" value="LOCAL" />
-      <updated>1683543677606</updated>
+      <workItem from="1684547859105" duration="17725000" />
     </task>
     <task id="LOCAL-00018" summary="解决实盘若干bug">
       <created>1683703250530</created>
@@ -707,7 +708,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684551048045</updated>
     </task>
-    <option name="localTasksCounter" value="66" />
+    <task id="LOCAL-00066" summary="update script">
+      <created>1684552332980</created>
+      <option name="number" value="00066" />
+      <option name="presentableId" value="LOCAL-00066" />
+      <option name="project" value="LOCAL" />
+      <updated>1684552332980</updated>
+    </task>
+    <option name="localTasksCounter" value="67" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -736,7 +744,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="优化交易对生成，过滤无效的" />
     <MESSAGE value="支持回测中使用pairlist" />
     <MESSAGE value="下载ohlcv时检查并记录空洞" />
     <MESSAGE value="回测时允许自动下载数据，fix bugs" />
@@ -761,7 +768,8 @@
     <MESSAGE value="fix 数据归集时偶发个别丢失" />
     <MESSAGE value="fix bugs" />
     <MESSAGE value="fix order not save" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix order not save" />
+    <MESSAGE value="update script" />
+    <option name="LAST_COMMIT_MESSAGE" value="update script" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -775,6 +783,21 @@
           <url>file://$PROJECT_DIR$/test/test_ohlcvs.py</url>
           <line>18</line>
           <option name="timeStamp" value="131" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/banbot/main/od_manager.py</url>
+          <line>638</line>
+          <option name="timeStamp" value="132" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/banbot/main/od_manager.py</url>
+          <line>713</line>
+          <option name="timeStamp" value="134" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/banbot/main/od_manager.py</url>
+          <line>674</line>
+          <option name="timeStamp" value="139" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
@@ -790,7 +813,7 @@
     <SUITE FILE_PATH="coverage/banbot$plot.coverage" NAME="plot Coverage Results" MODIFIED="1683542689405" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
-    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684492462985" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684593914108" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684407968128" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
