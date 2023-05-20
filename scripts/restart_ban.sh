@@ -1,26 +1,32 @@
 #!/bin/bash
 
-# 1. 查找进程名为"python -m banbot"的进程并杀死
-pid=$(ps aux | grep "python -m banbot" | head -n 1 | awk '{print $2}')
-echo "killing bot: $pid"
-kill $pid
+# 1. find process: "python -m banbot" and kill
+pid_list=$(ps aux | grep "python -m banbot" | awk '{print $2}')
 
-# 2. 暂存当前目录路径
+for pid in $pid_list; do
+  echo "killing bot: $pid"
+  kill $pid
+  while kill -0 $pid 2> /dev/null; do
+    sleep 0.3
+  done
+done
+
+# 2. save current path temp
 tmp_path=$(pwd)
 
-# 3. 进入 /root/banbot 目录
+# 3. get into /root/banbot
 cd /root/banbot
 
-# 4. 执行 git pull 拉取最新代码
+# 4. exec: git pull
 echo "git pulling..."
 output=`git pull origin master`
 echo $output
 sleep 1
 
-# 5. 恢复当前路径
+# 5. restore pwd from tmp
 cd $tmp_path
 
-# 6. 再次启动机器人
+# 6. restart the bot
 echo "starting bot..."
 nohup python -m banbot trade --pairs BTC/TUSD -c /root/ban_data/config.json > /root/trade.out 2>&1 &
 sleep 2

@@ -8,8 +8,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix order not save">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/restart_ban.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/restart_ban.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -361,14 +362,7 @@
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
       <workItem from="1684459815830" duration="27966000" />
-      <workItem from="1684547859105" duration="1736000" />
-    </task>
-    <task id="LOCAL-00016" summary="优化命令入口&#10;订单时间戳规则修改&#10;支持简单回测实盘订单对比">
-      <created>1683516368494</created>
-      <option name="number" value="00016" />
-      <option name="presentableId" value="LOCAL-00016" />
-      <option name="project" value="LOCAL" />
-      <updated>1683516368494</updated>
+      <workItem from="1684547859105" duration="3037000" />
     </task>
     <task id="LOCAL-00017" summary="解决从数据库映射ORM初始化错误&#10;支持实盘回测订单绘图对比">
       <created>1683543677606</created>
@@ -706,7 +700,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684507315536</updated>
     </task>
-    <option name="localTasksCounter" value="65" />
+    <task id="LOCAL-00065" summary="fix order not save">
+      <created>1684551048044</created>
+      <option name="number" value="00065" />
+      <option name="presentableId" value="LOCAL-00065" />
+      <option name="project" value="LOCAL" />
+      <updated>1684551048045</updated>
+    </task>
+    <option name="localTasksCounter" value="66" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -735,7 +736,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="直接使用多个超表存储不同维度，手动聚合更新。" />
     <MESSAGE value="优化交易对生成，过滤无效的" />
     <MESSAGE value="支持回测中使用pairlist" />
     <MESSAGE value="下载ohlcv时检查并记录空洞" />
@@ -760,7 +760,8 @@
     <MESSAGE value="解决新添加的symbol调用get_id时报错问题。添加后解除关联，回到暂存状态" />
     <MESSAGE value="fix 数据归集时偶发个别丢失" />
     <MESSAGE value="fix bugs" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bugs" />
+    <MESSAGE value="fix order not save" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix order not save" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
