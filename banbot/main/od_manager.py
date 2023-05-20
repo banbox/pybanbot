@@ -626,6 +626,7 @@ class LiveOrderManager(OrderManager):
         trades = await self.exchange.watch_my_trades()
         logger.debug('get my trades: %s', trades)
         with db():
+            sess = db.session
             related_ods = set()
             for data in trades:
                 trade_key = f"{data['symbol']}_{data['id']}"
@@ -638,8 +639,10 @@ class LiveOrderManager(OrderManager):
                 sub_od = self.exg_orders[od_key]
                 await self._update_order(sub_od, data)
                 related_ods.add(sub_od)
+                sess.commit()
             for sub_od in related_ods:
                 await self._consume_unmatchs(sub_od)
+            sess.commit()
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -687,6 +690,7 @@ class LiveOrderManager(OrderManager):
             await self._exec_order_enter(od)
         else:
             await self._exec_order_exit(od)
+        db.session.commit()
 
     async def consume_queue(self):
         while True:
@@ -721,6 +725,7 @@ class LiveOrderManager(OrderManager):
         if not exp_orders:
             return
         logger.info(f'pending open orders: {exp_orders}')
+        sess = db.session
         from itertools import groupby
         exp_orders = sorted(exp_orders, key=lambda x: x.symbol)
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
@@ -743,12 +748,14 @@ class LiveOrderManager(OrderManager):
                 sub_od.price = new_price
                 if not sub_od.order_id:
                     await self._exec_order_enter(od)
+                    sess.commit()
                 else:
                     left_amount = sub_od.amount - sub_od.filled
                     try:
                         res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
                                                                    left_amount, new_price)
                         await self._update_subod_by_ccxtres(od, is_enter, res)
+                        sess.commit()
                     except ccxt.InvalidOrder as e:
                         logger.error('edit invalid order: %s', e)
 

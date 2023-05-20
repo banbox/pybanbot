@@ -8,8 +8,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix 数据归集时偶发个别丢失">
-      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -360,14 +360,8 @@
       <workItem from="1684201028982" duration="34762000" />
       <workItem from="1684284610176" duration="32388000" />
       <workItem from="1684375523336" duration="30715000" />
-      <workItem from="1684459815830" duration="27392000" />
-    </task>
-    <task id="LOCAL-00015" summary="关联订单的任务ID，实盘模式策略没有变化时沿用上次的任务">
-      <created>1683436165988</created>
-      <option name="number" value="00015" />
-      <option name="presentableId" value="LOCAL-00015" />
-      <option name="project" value="LOCAL" />
-      <updated>1683436165988</updated>
+      <workItem from="1684459815830" duration="27966000" />
+      <workItem from="1684547859105" duration="1736000" />
     </task>
     <task id="LOCAL-00016" summary="优化命令入口&#10;订单时间戳规则修改&#10;支持简单回测实盘订单对比">
       <created>1683516368494</created>
@@ -705,7 +699,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684506431949</updated>
     </task>
-    <option name="localTasksCounter" value="64" />
+    <task id="LOCAL-00064" summary="fix bugs">
+      <created>1684507315536</created>
+      <option name="number" value="00064" />
+      <option name="presentableId" value="LOCAL-00064" />
+      <option name="project" value="LOCAL" />
+      <updated>1684507315536</updated>
+    </task>
+    <option name="localTasksCounter" value="65" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -756,10 +757,10 @@
     <MESSAGE value="fix 订单和miner bug" />
     <MESSAGE value="fix bug" />
     <MESSAGE value="update" />
-    <MESSAGE value="fix bugs" />
     <MESSAGE value="解决新添加的symbol调用get_id时报错问题。添加后解除关联，回到暂存状态" />
     <MESSAGE value="fix 数据归集时偶发个别丢失" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix 数据归集时偶发个别丢失" />
+    <MESSAGE value="fix bugs" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix bugs" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
