@@ -100,7 +100,7 @@ class Order(BaseDbModel):
             data = dict()
         else:
             data = dict(enter=False, order_type='limit', status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
-                        side='buy', create_at=btime.time(), update_at=btime.time())
+                        side='buy', filled=0, create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
