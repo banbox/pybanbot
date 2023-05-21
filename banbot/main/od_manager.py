@@ -304,8 +304,9 @@ class LocalOrderManager(OrderManager):
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
+        enter_price = self.exchange.pres_price(od.symbol, enter_price)
         if not od.enter.amount:
-            od.enter.amount = od.quote_cost / enter_price
+            od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
         quote_amount = enter_price * od.enter.amount
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
@@ -579,6 +580,9 @@ class LiveOrderManager(OrderManager):
     def _put_order(self, od: InOutOrder, is_enter: bool):
         if not btime.prod_mode():
             return
+        if is_enter:
+            od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
+            od.save()
         self.order_q.put_nowait(OrderJob(od.id, is_enter))
 
     async def _update_bnb_order(self, od: Order, data: dict):
@@ -671,9 +675,10 @@ class LiveOrderManager(OrderManager):
             # 订单已被取消，不再提交到交易所
             return
         if not od.enter.price:
-            od.enter.price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[0]
+            enter_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[0]
+            od.enter.price = self.exchange.pres_price(od.symbol, enter_price)
         if not od.enter.amount:
-            od.enter.amount = od.quote_cost / od.enter.price
+            od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
         await self._create_exg_order(od, True)
 
     async def _exec_order_exit(self, od: InOutOrder):

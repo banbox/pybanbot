@@ -254,9 +254,6 @@ class CryptoExchange:
                 return dict(rate=fee_rate, currency=od.symbol.split('/')[0])
         return self.api_async.calculate_fee(od.symbol, od.order_type, od.side, od.amount, od.price, taker_maker)
 
-    def price_to_precision(self, symbol: str, price: float):
-        return self.api_async.price_to_precision(symbol, price)
-
     def market_tradable(self, market: Dict[str, Any]) -> bool:
         return (
             market.get('quote') is not None
@@ -347,6 +344,18 @@ class CryptoExchange:
         :return:
         '''
         return endpoint in self.api_async.has and self.api_async.has[endpoint]
+
+    def pres_cost(self, symbol, cost):
+        return float(self.api_async.cost_to_precision(symbol, cost))
+
+    def pres_price(self, symbol, price):
+        return float(self.api_async.price_to_precision(symbol, price))
+
+    def pres_amount(self, symbol, amount):
+        return float(self.api_async.amount_to_precision(symbol, amount))
+
+    def pres_fee(self, symbol, fee):
+        return float(self.api_async.fee_to_precision(symbol, fee))
 
     @net_retry
     async def fetch_ticker(self, symbol, params={}):
