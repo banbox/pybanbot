@@ -190,10 +190,13 @@ class CachedInd(type):
 
 
 class BaseInd(metaclass=CachedInd):
+    input_dim = 0  # 0表示输入一个数字，1表示输入一行，2表示输入二维数组
+    keep_num = 600
+
     def __init__(self, cache_key: str = ''):
         self.cache_key = cache_key
         self.calc_bar = 0
-        self.arr: List[float] = []
+        self.arr: List[Any] = []
 
     def __getitem__(self, index):
         return self.arr[index]
@@ -201,19 +204,25 @@ class BaseInd(metaclass=CachedInd):
     def __len__(self):
         return len(self.arr)
 
-
-class BaseSimpleInd(BaseInd):
-    def __init__(self, period: int, cache_key: str = ''):
-        super(BaseSimpleInd, self).__init__(cache_key)
-        self.period = period
-
     def __call__(self, *args, **kwargs):
         if self.calc_bar >= bar_num.get():
             return self.arr[-1]
-        val = args[0]
-        assert isinstance(val, Number)
-        ind_val = self._compute(val)
+        in_val = args[0]
+        # 检查输入数据的有效性
+        if hasattr(in_val, 'ndim'):
+            if self.input_dim != in_val.ndim:
+                raise ValueError(f'input val dim error: {in_val.ndim}, require: {self.input_dim}')
+        elif self.input_dim == 0:
+            assert isinstance(in_val, Number)
+        elif self.input_dim == 1:
+            assert isinstance(in_val, (Tuple, List)) and isinstance(in_val[0], Number)
+        elif self.input_dim == 2:
+            assert isinstance(in_val, (Tuple, List)) and isinstance(in_val[0], (Tuple, List))
+        else:
+            raise ValueError(f'unsupport input_dim: {self.input_dim}')
+        ind_val = self._compute(in_val)
         self.arr.append(ind_val)
+        self.arr = self.arr[-self.keep_num:]
         self.calc_bar = bar_num.get()
         return ind_val
 

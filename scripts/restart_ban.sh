@@ -1,20 +1,9 @@
 #!/bin/bash
 
-# 1. find process: "python -m banbot" and kill
-pid_list=$(ps aux | grep "python -m banbot" | awk '{print $2}')
+# 1. find process: "banbot" and kill
+pkill -15 -f banbot
 
-for pid in $pid_list; do
-  echo "killing bot: $pid"
-  kill $pid
-  while kill -0 $pid 2> /dev/null; do
-    sleep 0.3
-  done
-done
-
-# 2. save current path temp
 tmp_path=$(pwd)
-
-# 3. get into /root/banbot
 cd /root/banbot
 
 # 4. exec: git pull
@@ -22,8 +11,6 @@ echo "git pulling..."
 output=`git pull origin master`
 echo $output
 sleep 1
-
-# 5. restore pwd from tmp
 cd $tmp_path
 
 # 6. restart the bot

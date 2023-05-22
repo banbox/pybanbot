@@ -82,15 +82,33 @@ def to_pytypes(data):
     return data
 
 
-def np_rolling(a, window: int):
+def arg_valid_id(a):
+    '''
+    返回第一个非Nan或Inf的索引
+    '''
+    bool_arr = np.logical_or(np.isnan(a), np.isinf(a))
+    return np.argmax(~bool_arr)
+
+
+def np_rolling(a, window: int, axis=1, pad='nan', calc_fn=None):
+    pad_width = [(0, 0)] * a.ndim
+    pad_width[axis - 1] = (window - 1, 0)
+    if pad == 'same':
+        a = np.pad(a, pad_width=pad_width, mode='edge')
+    else:
+        a = np.pad(a, pad_width=pad_width, constant_values=(np.nan, np.nan))
     shape = a.shape[:-1] + (a.shape[-1] - window + 1, window)
     strides = a.strides + (a.strides[-1],)
-    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    rol_arr = np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+    if not calc_fn:
+        return rol_arr
+    return calc_fn(rol_arr, axis=axis)
 
 
-def max_rolling(a, window, axis=1):
-    return np.max(np_rolling(a, window), axis=axis)
+def max_rolling(a, window, axis=1, pad='nan'):
+    return np_rolling(a, window, axis=axis, pad=pad, calc_fn=np.max)
 
 
-def min_rolling(a, window, axis=1):
-    return np.min(np_rolling(a, window), axis=axis)
+def min_rolling(a, window, axis=1, pad='nan'):
+    return np_rolling(a, window, axis=axis, pad=pad, calc_fn=np.min)
+

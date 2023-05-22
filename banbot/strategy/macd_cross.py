@@ -37,7 +37,8 @@ class MACDCross(BaseStrategy):
         fea_start = fea_col_start.get()
         max_chg, real, solid_rate, hline_rate, lline_rate = arr[-1, fea_start: fea_start + 5]
         len_ok = real > long_bar_len * 0.2 and solid_rate > 0.3
-        macd_up = self.macd.macd_arr[-1] > self.macd.singal_arr[-1]
+        macd_val, macd_sig = self.macd.arr[-1]
+        macd_up = macd_val > macd_sig
         ma5_up = self.ma5.arr[-1] > self.ma5.arr[-3]
         price_up = arr[-1, ccol] > max(arr[-1, ocol], arr[-2, ccol])
         if price_up and len_ok and ma5_up and macd_up:
