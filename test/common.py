@@ -3,7 +3,7 @@
 # File  : common.py
 # Author: anyongjin
 # Date  : 2023/4/12
-import numpy as np
+import pandas as pd
 
 from banbot.compute.tainds import *
 candles = [
@@ -46,10 +46,29 @@ candles = [
     [0, 30407.05, 31073.61, 30000, 30490, 48525.85093000003],
 ]
 ohlcv_arr = np.array(candles)
-close_vals = [44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08, 45.89, 46.03, 45.61, 46.28, 46.28,
-              46.00, 46.03, 46.41, 46.22, 45.64, 46.21, 46.25, 45.71, 46.45, 45.78, 45.35, 44.03, 44.18, 44.22, 44.57,
-              43.42, 42.66, 43.13]
-close_arr = np.array(close_vals)
+high_arr, low_arr, close_arr = ohlcv_arr[:, hcol], ohlcv_arr[:, lcol], ohlcv_arr[:, ccol]
+high_col, low_col, close_col = pd.Series(high_arr), pd.Series(low_arr), pd.Series(close_arr)
+
+
+def print_tares(vec_res, sta_res, ta_cres=None, ta_mres=None, mytt_res=None, pta_res=None):
+    print('\n' + ' Vector Res '.center(60, '='))
+    print(vec_res)
+    print('\n' + ' State Res '.center(60, '='))
+    print(sta_res)
+    if ta_cres is not None:
+        print('\n' + ' Ta-lib Classic '.center(60, '='))
+        print(ta_cres)
+    if ta_mres is not None:
+        print('\n' + ' Ta-lib MetaStock '.center(60, '='))
+        print(ta_mres)
+    if mytt_res is not None:
+        print('\n' + ' MyTT '.center(60, '='))
+        print(mytt_res)
+    if pta_res is not None:
+        if hasattr(pta_res, 'to_numpy'):
+            pta_res = pta_res.to_numpy()
+        print('\n' + ' Pandas-TA '.center(60, '='))
+        print(pta_res)
 
 
 def calc_state_ind(ind: BaseInd, input_arr):

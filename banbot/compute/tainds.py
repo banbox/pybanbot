@@ -48,18 +48,22 @@ def SMA(arr: np.ndarray, period: int) -> np.ndarray:
 
 
 class _StaEWMA(BaseInd):
-    def __init__(self, period: int, alpha: float, init_type: int, cache_key: str = ''):
+    def __init__(self, period: int, alpha: float, init_type: int, init_val=None, cache_key: str = ''):
         super(_StaEWMA, self).__init__(cache_key)
         self.period = period
         self.mul = alpha
         self._init_type = init_type
+        self._init_first = init_val
         self._init_vals = []
 
     def _compute(self, val):
-        if np.isnan(val):
+        if not np.isfinite(val):
             return val
-        if not self.arr or np.isnan(self.arr[-1]):
-            if self._init_type == 0:
+        if not self.arr or not np.isfinite(self.arr[-1]):
+            if self._init_first is not None:
+                # 使用给定值作为计算第一个值的前置值
+                ind_val = val * self.mul + self._init_first * (1 - self.mul)
+            elif self._init_type == 0:
                 # SMA作为第一个EMA值
                 if len(self._init_vals) < self.period:
                     self._init_vals.append(val)
@@ -74,12 +78,16 @@ class _StaEWMA(BaseInd):
         return ind_val
 
 
-def _EWMA(arr: np.ndarray, period: int, alpha: float, init_type: int) -> np.ndarray:
+def _EWMA(arr: np.ndarray, period: int, alpha: float, init_type: int, init_val=None) -> np.ndarray:
     arr = _to_nparr(arr)
     assert isinstance(arr, np.ndarray) and len(arr.shape) == 1
     result = _nan_array(arr)
     start_id = arg_valid_id(arr)
-    if init_type == 0:
+    if init_val is not None:
+        # 使用给定的值作为第一个值计算的前置值
+        old_val = init_val
+        first_idx = start_id - 1
+    elif init_type == 0:
         # SMA作为第一个EMA值
         old_val = np.sum(arr[start_id:start_id + period]) / period
         first_idx = start_id + period - 1
@@ -87,7 +95,8 @@ def _EWMA(arr: np.ndarray, period: int, alpha: float, init_type: int) -> np.ndar
         # 第一个值作为EMA值
         old_val = arr[start_id]
         first_idx = start_id
-    result[first_idx] = old_val
+    if start_id <= first_idx < len(result):
+        result[first_idx] = old_val
     for i in range(first_idx + 1, len(arr)):
         result[i] = arr[i] * alpha + old_val * (1 - alpha)
         old_val = result[i]
@@ -95,8 +104,11 @@ def _EWMA(arr: np.ndarray, period: int, alpha: float, init_type: int) -> np.ndar
 
 
 class StaEMA(_StaEWMA):
+    '''
+    最近一个权重：2/(n+1)
+    '''
     def __init__(self, period: int, init_type=0, cache_key: str = ''):
-        super(StaEMA, self).__init__(period, 2 / (period + 1), init_type, cache_key)
+        super(StaEMA, self).__init__(period, 2 / (period + 1), init_type, cache_key=cache_key)
 
 
 def EMA(arr: np.ndarray, period: int, init_type=0) -> np.ndarray:
@@ -106,13 +118,14 @@ def EMA(arr: np.ndarray, period: int, init_type=0) -> np.ndarray:
 class StaRMA(_StaEWMA):
     '''
     和StaEMA区别是：分子分母都减一
+    最近一个权重：1/n
     '''
-    def __init__(self, period: int, init_type=0, cache_key: str = ''):
-        super(StaRMA, self).__init__(period, 1 / period, init_type, cache_key)
+    def __init__(self, period: int, init_type=0, init_val=None, cache_key: str = ''):
+        super(StaRMA, self).__init__(period, 1 / period, init_type, init_val, cache_key=cache_key)
 
 
-def RMA(arr: np.ndarray, period: int, init_type=0) -> np.ndarray:
-    return _EWMA(arr, period, 1 / period, init_type)
+def RMA(arr: np.ndarray, period: int, init_type=0, init_val=None) -> np.ndarray:
+    return _EWMA(arr, period, 1 / period, init_type, init_val)
 
 
 class StaTR(BaseInd):
@@ -124,7 +137,7 @@ class StaTR(BaseInd):
     def _compute(self, val):
         crow = val[-1, :]
         if val.shape[0] < 2:
-            cur_tr = crow[hcol] - crow[lcol]
+            cur_tr = np.nan  # crow[hcol] - crow[lcol]
         else:
             prow = val[-2, :]
             cur_tr = max(crow[hcol] - crow[lcol], abs(crow[hcol] - prow[ccol]), abs(crow[lcol] - prow[ccol]))
@@ -135,7 +148,8 @@ def TR(arr) -> np.ndarray:
     arr = _to_nparr(arr)
     assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5
     result = _nan_array(arr)
-    result[0] = arr[0, hcol] - arr[0, lcol]
+    # 和ta-lib保持一致，第一个nan
+    # result[0] = arr[0, hcol] - arr[0, lcol]
     for i in range(1, result.shape[0]):
         crow, prow = arr[i, :], arr[i - 1, :]
         result[i] = max(crow[hcol] - crow[lcol], abs(crow[hcol] - prow[ccol]), abs(crow[lcol] - prow[ccol]))
@@ -147,29 +161,19 @@ class StaATR(BaseInd):
 
     def __init__(self, period: int = 3, cache_key: str = ''):
         super(StaATR, self).__init__(cache_key)
-        self.period = period
         self.tr = StaTR(cache_key)
+        self._rma = StaRMA(period, init_type=0, cache_key=cache_key + 'tr')
 
     def _compute(self, val):
         tr_val = self.tr(val)
-        if not self.arr or np.isnan(self.arr[-1]):
-            ind_val = sum(self.tr.arr[-self.period:]) / self.period
-        else:
-            ind_val = (self.arr[-1] * (self.period - 1) + tr_val) / self.period
-        return ind_val
+        return self._rma(tr_val)
 
 
 def ATR(arr, period: int) -> np.ndarray:
     arr = _to_nparr(arr)
     assert isinstance(arr, np.ndarray) and len(arr.shape) == 2 and arr.shape[1] >= 5, f'{arr.shape} invalid'
     tr = TR(arr)
-    result = _nan_array(arr)
-    old_val = sum(tr[:period]) / period
-    result[period] = old_val
-    for i in range(period + 1, result.shape[0]):
-        old_val = (tr[i] + old_val * (period - 1)) / period
-        result[i] = old_val
-    return result
+    return RMA(tr, period, init_type=0)
 
 
 class StaNATR(BaseInd):
@@ -237,12 +241,15 @@ class StaNVol(BaseInd):
 
 
 class StaMACD(BaseInd):
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9,
+    def __init__(self, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9, init_type=0,
                  cache_key: str = ''):
+        '''
+        带状态计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
+        '''
         super(StaMACD, self).__init__(cache_key)
-        self.ema_short = StaEMA(fast_period, cache_key=cache_key)
-        self.ema_long = StaEMA(slow_period, cache_key=cache_key)
-        self.ema_sgl = StaEMA(smooth_period, cache_key=cache_key + 'macd')
+        self.ema_short = StaEMA(fast_period, init_type=init_type, cache_key=cache_key)
+        self.ema_long = StaEMA(slow_period, init_type=init_type, cache_key=cache_key)
+        self.ema_sgl = StaEMA(smooth_period, init_type=init_type, cache_key=cache_key + 'macd')
 
     def _compute(self, val):
         macd = self.ema_short(val) - self.ema_long(val)
@@ -250,12 +257,15 @@ class StaMACD(BaseInd):
         return macd, singal
 
 
-def MACD(arr: np.ndarray, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9)\
+def MACD(arr: np.ndarray, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9, init_type=0)\
         -> Tuple[np.ndarray, np.ndarray]:
+    '''
+    计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
+    '''
     arr = _to_nparr(arr)
-    ema_fast, ema_slow = EMA(arr, fast_period), EMA(arr, slow_period)
+    ema_fast, ema_slow = EMA(arr, fast_period, init_type=init_type), EMA(arr, slow_period, init_type=init_type)
     macd = ema_fast - ema_slow
-    signal = EMA(macd, smooth_period)
+    signal = EMA(macd, smooth_period, init_type=init_type)
     return macd, signal
 
 
@@ -268,7 +278,7 @@ class StaRSI(BaseInd):
         self.last_input = np.nan
 
     def _compute(self, val):
-        if np.isnan(self.last_input):
+        if not np.isfinite(self.last_input):
             self.last_input = val
             return np.nan
         val_delta = val - self.last_input
@@ -322,8 +332,8 @@ class StaKDJ(BaseInd):
     def __init__(self, period: int = 9, sm1: int = 3, sm2: int = 3, cache_key: str = ''):
         super(StaKDJ, self).__init__(cache_key)
         self.period = period
-        self._k = StaRMA(sm1, cache_key=cache_key+'kdj_k')
-        self._d = StaRMA(sm2, cache_key=cache_key+'kdj_d')
+        self._k = StaRMA(sm1, init_val=50., cache_key=cache_key+'kdj_k')
+        self._d = StaRMA(sm2, init_val=50., cache_key=cache_key+'kdj_d')
 
     def _compute(self, val):
         if len(val) < self.period:
@@ -346,11 +356,11 @@ def KDJ(arr: np.ndarray, period: int = 9, m1: int = 3, m2: int = 3):
     rlow = min_rolling(arr[:, lcol], period)
     rsv = (clo - rlow) * 100 / (rhigh - rlow)
     # 计算K、D值
-    k = RMA(rsv, m1)
-    d = RMA(k, m2)
+    k = RMA(rsv, m1, init_val=50.)
+    d = RMA(k, m2, init_val=50.)
     # 计算J值
     # j = 3 * k - 2 * d
-    return k.tolist(), d.tolist()
+    return k, d
 
 
 def _make_sub_malong():

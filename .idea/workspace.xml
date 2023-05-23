@@ -8,13 +8,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bugs">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/ctx.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/ctx.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/compute/tainds.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tainds.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/num_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/num_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/restart_ban.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/restart_ban.sh" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/common.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/test/tainds/test_rsi.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/tainds/test_rsi.py" afterDir="false" />
     </list>
@@ -90,7 +86,7 @@
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python tests.Python tests for test_rsi.test_sma">
+  <component name="RunManager" selected="Python tests.Python tests for test_rsi.test_macd">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -201,7 +197,7 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_ema" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="Python tests for test_rsi.test_atr" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -212,7 +208,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_ema&quot;" />
+      <option name="_new_target" value="&quot;test_rsi.test_atr&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
@@ -231,7 +227,7 @@
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_rma" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="Python tests for test_rsi.test_macd" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -242,7 +238,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_rma&quot;" />
+      <option name="_new_target" value="&quot;test_rsi.test_macd&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
@@ -261,7 +257,7 @@
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_sma" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="Python tests for test_rsi.test_tr" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
@@ -272,7 +268,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_sma&quot;" />
+      <option name="_new_target" value="&quot;test_rsi.test_tr&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
@@ -282,19 +278,19 @@
       <item itemvalue="Python.ban_backtest" />
       <item itemvalue="Python.ban_trade" />
       <item itemvalue="Python.ban_od_compare" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
+      <item itemvalue="Python tests.Python tests for test_rsi.test_atr" />
+      <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
+      <item itemvalue="Python tests.Python tests for test_rsi.test_tr" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_rsi" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_ema" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_sma" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python tests.Python tests for test_rsi.test_sma" />
-        <item itemvalue="Python tests.Python tests for test_rsi.test_ema" />
-        <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
+        <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_rsi" />
+        <item itemvalue="Python tests.Python tests for test_rsi.test_atr" />
+        <item itemvalue="Python tests.Python tests for test_rsi.test_tr" />
       </list>
     </recent_temporary>
   </component>
@@ -338,14 +334,8 @@
       <workItem from="1684459815830" duration="27966000" />
       <workItem from="1684547859105" duration="18945000" />
       <workItem from="1684639091253" duration="25132000" />
-      <workItem from="1684719269019" duration="30899000" />
-    </task>
-    <task id="LOCAL-00021" summary="超表存储1m和1h，其他维度聚合得到">
-      <created>1683804035666</created>
-      <option name="number" value="00021" />
-      <option name="presentableId" value="LOCAL-00021" />
-      <option name="project" value="LOCAL" />
-      <updated>1683804035666</updated>
+      <workItem from="1684719269019" duration="32422000" />
+      <workItem from="1684809529005" duration="13531000" />
     </task>
     <task id="LOCAL-00022" summary="直接使用多个超表存储不同维度，手动聚合更新。">
       <created>1683883816592</created>
@@ -683,7 +673,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684650744953</updated>
     </task>
-    <option name="localTasksCounter" value="70" />
+    <task id="LOCAL-00070" summary="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标">
+      <created>1684756951924</created>
+      <option name="number" value="00070" />
+      <option name="presentableId" value="LOCAL-00070" />
+      <option name="project" value="LOCAL" />
+      <updated>1684756951925</updated>
+    </task>
+    <option name="localTasksCounter" value="71" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -712,7 +709,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="支持回测中使用pairlist" />
     <MESSAGE value="下载ohlcv时检查并记录空洞" />
     <MESSAGE value="回测时允许自动下载数据，fix bugs" />
     <MESSAGE value="自动计算交易周期" />
@@ -737,7 +733,8 @@
     <MESSAGE value="fix order not save" />
     <MESSAGE value="update script" />
     <MESSAGE value="fix bugs" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bugs" />
+    <MESSAGE value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
+    <option name="LAST_COMMIT_MESSAGE" value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -764,12 +761,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/compute/tainds.py</url>
-          <line>348</line>
+          <line>352</line>
           <option name="timeStamp" value="139" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/compute/tainds.py</url>
-          <line>332</line>
+          <line>336</line>
           <option name="timeStamp" value="142" />
         </line-breakpoint>
       </breakpoints>
@@ -779,7 +776,7 @@
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1684505849929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1684756689134" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test/tainds" />
+    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1684825065991" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test/tainds" />
     <SUITE FILE_PATH="coverage/banbot$test_util.coverage" NAME="test_util Coverage Results" MODIFIED="1684391451728" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1684464398964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
