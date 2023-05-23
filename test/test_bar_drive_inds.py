@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/2
 
-from banbot.compute.tainds import *
+from banbot.compute.sta_inds import *
 import pandas as pd
 import os
 

@@ -5,7 +5,7 @@
 # Date  : 2023/5/14
 from typing import List, Tuple, Dict
 
-from banbot.compute.tainds import ocol, hcol, lcol, ccol
+from banbot.compute.sta_inds import ocol, hcol, lcol, ccol
 from banbot.data.tools import bulk_ohlcv_do
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.storage import KLine

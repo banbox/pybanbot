@@ -7,6 +7,7 @@ import talib as ta
 import pandas_ta as pta
 from test.common import *
 from banbot.compute import mytt
+from banbot.compute.vec_inds import *
 '''
 比较自行实现的指标和talib、pandas_ta、MyTT等结果异同
 SMA  EMA  RMA  TR  ATR  MACD  RSI  KDJ

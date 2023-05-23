@@ -6,7 +6,7 @@
 import numpy as np
 from cachetools import TTLCache
 
-from banbot.compute.tainds import hcol, lcol, ccol, vcol
+from banbot.compute.sta_inds import hcol, lcol, ccol, vcol
 from banbot.symbols.pairlist.base import *
 
 SORT_VALUES = ['quoteVolume']

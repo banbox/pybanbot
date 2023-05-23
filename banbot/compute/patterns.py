@@ -6,7 +6,7 @@
 import math
 import os
 
-from banbot.compute.tainds import *
+from banbot.compute.sta_inds import *
 
 '''
 K线形态参考：

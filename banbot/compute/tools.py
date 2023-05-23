@@ -3,7 +3,7 @@
 # File  : ts_tools.py
 # Author: anyongjin
 # Date  : 2023/3/16
-from banbot.compute.tainds import *
+from banbot.compute.sta_inds import *
 from banbot.util import btime
 from banbot.util.common import logger
 

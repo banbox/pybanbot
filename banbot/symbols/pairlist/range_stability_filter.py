@@ -6,7 +6,7 @@
 import numpy as np
 from cachetools import TTLCache
 
-from banbot.compute.tainds import hcol, lcol
+from banbot.compute.sta_inds import hcol, lcol
 from banbot.symbols.pairlist.base import *
 
 

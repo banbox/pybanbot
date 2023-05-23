@@ -5,7 +5,7 @@
 # Date  : 2023/4/12
 import pandas as pd
 
-from banbot.compute.tainds import *
+from banbot.compute.sta_inds import *
 candles = [
     [0, 26891.67, 26962.98, 26834.81, 26914.97, 10247.46713],
     [0, 26832.77, 27192, 26629, 26890.67, 53157.73523],
