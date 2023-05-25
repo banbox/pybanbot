@@ -47,17 +47,17 @@ class PairManager:
     async def refresh_pairlist(self):
         if self.config.get('pairs'):
             # 回测模式传入pairs
-            self._whitelist = self.config['pairs']
-            return
-        tickers = self.ticker_cache.get('tickers') or dict()
-        if not tickers and self.need_tickers and btime.run_mode in LIVE_MODES:
-            ava_symbols = list(self.avaiable_symbols)
-            tickers = await self.exchange.fetch_tickers(ava_symbols)
-            self.ticker_cache['tickers'] = tickers
+            pairlist = self.config['pairs']
+        else:
+            tickers = self.ticker_cache.get('tickers') or dict()
+            if not tickers and self.need_tickers and btime.run_mode in LIVE_MODES:
+                ava_symbols = list(self.avaiable_symbols)
+                tickers = await self.exchange.fetch_tickers(ava_symbols)
+                self.ticker_cache['tickers'] = tickers
 
-        pairlist = await self.handlers[0].gen_pairlist(tickers)
-        for handler in self.handlers[1:]:
-            pairlist = await handler.filter_pairlist(pairlist, tickers)
+            pairlist = await self.handlers[0].gen_pairlist(tickers)
+            for handler in self.handlers[1:]:
+                pairlist = await handler.filter_pairlist(pairlist, tickers)
 
         # 计算交易对各维度K线质量分数
         back_num = 300

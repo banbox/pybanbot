@@ -8,9 +8,21 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="完成MACD、ATR等测试和纠正">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="向量指标和状态指标分开维护">
+      <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/banbot.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/banbot.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/compute/tainds.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tainds.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/util/num_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/num_utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/tainds/test_rsi.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/tainds/test_rsi.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -44,7 +56,7 @@
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../NostalgiaForInfinity" />
   </component>
   <component name="NamedScopeManager">
     <scope name="banbot" pattern="file[banbot]:*/" />
@@ -65,7 +77,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/trade/banbot/banbot/compute&quot;,
+    &quot;last_opened_file_path&quot;: &quot;E:/trade/NostalgiaForInfinity&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;run.code.analysis.last.selected.profile&quot;: &quot;ppython&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyDependenciesConfigurable&quot;,
@@ -84,7 +96,7 @@
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python tests.Python tests for test_rsi.test_macd">
+  <component name="RunManager" selected="Python.simplify_NFIX">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -99,7 +111,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="backtest --timerange=20230501- -c E:\trade\banbot\banbot\config\config.json" />
+      <option name="PARAMETERS" value="backtest --pairs RNDR/USDT --timerange=20230501-20230520 -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -187,7 +199,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="trade --pairs BTC/TUSD -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
+      <option name="PARAMETERS" value="trade -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -195,19 +207,26 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_atr" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="banbot" />
+    <configuration name="simplify_NFIX" type="PythonConfigurationType" factoryName="Python" temporary="true">
+      <module name="NostalgiaForInfinity" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/test/tainds" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../NostalgiaForInfinity" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_atr&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
     <configuration name="Python tests for test_rsi.test_kdj" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
@@ -240,6 +259,21 @@
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
+    <configuration name="Python tests for test_rsi.test_rma" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+      <module name="banbot" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/test/tainds" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;test_rsi.test_rma&quot;" />
+      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
+      <method v="2" />
+    </configuration>
     <configuration name="Python tests for test_rsi.test_rsi" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -255,40 +289,25 @@
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_tr" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
-      <module name="banbot" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/test/tainds" />
-      <option name="IS_MODULE_SDK" value="true" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_tr&quot;" />
-      <option name="_new_targetType" value="&quot;PYTHON&quot;" />
-      <method v="2" />
-    </configuration>
     <list>
       <item itemvalue="Python.ban_dbcmd" />
       <item itemvalue="Python.ban_down" />
       <item itemvalue="Python.ban_backtest" />
       <item itemvalue="Python.ban_trade" />
       <item itemvalue="Python.ban_od_compare" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_atr" />
+      <item itemvalue="Python.simplify_NFIX" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_tr" />
+      <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_rsi" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.simplify_NFIX" />
+        <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_rsi" />
-        <item itemvalue="Python tests.Python tests for test_rsi.test_atr" />
-        <item itemvalue="Python tests.Python tests for test_rsi.test_tr" />
       </list>
     </recent_temporary>
   </component>
@@ -333,14 +352,9 @@
       <workItem from="1684547859105" duration="18945000" />
       <workItem from="1684639091253" duration="25132000" />
       <workItem from="1684719269019" duration="32422000" />
-      <workItem from="1684809529005" duration="16071000" />
-    </task>
-    <task id="LOCAL-00023" summary="fix bugs">
-      <created>1683903560682</created>
-      <option name="number" value="00023" />
-      <option name="presentableId" value="LOCAL-00023" />
-      <option name="project" value="LOCAL" />
-      <updated>1683903560682</updated>
+      <workItem from="1684809529005" duration="31885000" />
+      <workItem from="1684903195936" duration="2580000" />
+      <workItem from="1684981614383" duration="1346000" />
     </task>
     <task id="LOCAL-00024" summary="优化交易对生成，过滤无效的">
       <created>1683961549353</created>
@@ -678,7 +692,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684826229577</updated>
     </task>
-    <option name="localTasksCounter" value="72" />
+    <task id="LOCAL-00072" summary="向量指标和状态指标分开维护">
+      <created>1684828728515</created>
+      <option name="number" value="00072" />
+      <option name="presentableId" value="LOCAL-00072" />
+      <option name="project" value="LOCAL" />
+      <updated>1684828728515</updated>
+    </task>
+    <option name="localTasksCounter" value="73" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -707,7 +728,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="回测时允许自动下载数据，fix bugs" />
     <MESSAGE value="自动计算交易周期" />
     <MESSAGE value="解决太多对同时请求k线导致卡死问题" />
     <MESSAGE value="计算K线质量时，批量下载交易对，提升效率" />
@@ -732,7 +752,8 @@
     <MESSAGE value="fix bugs" />
     <MESSAGE value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
     <MESSAGE value="完成MACD、ATR等测试和纠正" />
-    <option name="LAST_COMMIT_MESSAGE" value="完成MACD、ATR等测试和纠正" />
+    <MESSAGE value="向量指标和状态指标分开维护" />
+    <option name="LAST_COMMIT_MESSAGE" value="向量指标和状态指标分开维护" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -757,11 +778,6 @@
           <line>716</line>
           <option name="timeStamp" value="134" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/banbot/compute/tainds.py</url>
-          <line>228</line>
-          <option name="timeStamp" value="142" />
-        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
@@ -769,7 +785,7 @@
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1684505849929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1684826114916" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test/tainds" />
+    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1684828825924" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test/tainds" />
     <SUITE FILE_PATH="coverage/banbot$test_util.coverage" NAME="test_util Coverage Results" MODIFIED="1684391451728" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1684464398964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
@@ -777,8 +793,9 @@
     <SUITE FILE_PATH="coverage/banbot$plot.coverage" NAME="plot Coverage Results" MODIFIED="1683542689405" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
-    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684645239019" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684833654874" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684407968128" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684849664486" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$scripts.coverage" NAME="simplify_NFIX Coverage Results" MODIFIED="1684904378852" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../NostalgiaForInfinity" />
   </component>
 </project>

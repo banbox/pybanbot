@@ -16,7 +16,7 @@ class MACDCross(BaseStrategy):
     最近3个bar的2个是星线，或者大阳线，且处于下降趋势，则退场
     '''
     warmup_num = 600
-    version = 3
+    version = 4
 
     def __init__(self, config: dict):
         super(MACDCross, self).__init__(config)
@@ -25,10 +25,7 @@ class MACDCross(BaseStrategy):
         self.atr = StaATR(5)
 
     def on_bar(self, arr: np.ndarray):
-        ccolse = arr[-1, ccol]
-        self.ma5(ccolse)
-        self.macd(ccolse)
-        self.atr(arr)
+        self._update_inds(arr, self.ma5, self.macd, self.atr)
 
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         long_bar_len = LongVar.get(LongVar.bar_len).val

@@ -67,6 +67,20 @@ class BaseStrategy:
         '''
         pass
 
+    def _update_inds(self, arr: np.ndarray, *args):
+        cur_close, cur_row = arr[-1, ccol], arr[-1]
+        for ind in args:
+            dim_sub = arr.ndim - ind.input_dim
+            if dim_sub == 1:
+                in_val = cur_row
+            elif dim_sub == 0:
+                in_val = arr
+            elif dim_sub == 2:
+                in_val = cur_close
+            else:
+                raise ValueError(f'unsupport dim sub: {dim_sub} from {type(ind)}')
+            ind(in_val)
+
     def on_entry(self, arr: np.ndarray) -> Optional[str]:
         '''
         时间升序，最近的是最后一个

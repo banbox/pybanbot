@@ -86,8 +86,7 @@ def arg_valid_id(a):
     '''
     返回第一个非Nan或Inf的索引
     '''
-    bool_arr = np.logical_or(np.isnan(a), np.isinf(a))
-    return np.argmax(~bool_arr)
+    return np.argmax(np.isfinite(a))
 
 
 def np_rolling(a, window: int, axis=1, pad='nan', calc_fn=None):

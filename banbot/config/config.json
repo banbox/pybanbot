@@ -28,7 +28,7 @@
     {"name": "OffsetFilter", "limit": 90}
   ],
   "run_policy": [
-    {"name": "Demo"}
+    {"name": "Alpha"}
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

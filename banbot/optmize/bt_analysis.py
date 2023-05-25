@@ -15,12 +15,14 @@ import pandas as pd
 from banbot.storage.orders import *
 
 
-def order_plot_ind(task_id: int, in_color=None, out_color=None, line_color=None) -> dict:
+def order_plot_ind(task_id: int, symbol: str, in_color=None, out_color=None, line_color=None) -> dict:
     from banbot.storage import db, InOutOrder
     from banbot.exchange.exchange_utils import tf_to_secs
     from itertools import groupby
-    orders: List[InOutOrder] = db.session.query(InOutOrder).filter(InOutOrder.task_id == task_id).all()
-    exods: List[Order] = db.session.query(Order).filter(Order.task_id == task_id).all()
+    io_where = [InOutOrder.task_id == task_id, InOutOrder.symbol == symbol]
+    orders: List[InOutOrder] = db.session.query(InOutOrder).filter(*io_where).all()
+    ex_where = [Order.task_id == task_id, Order.symbol == symbol]
+    exods: List[Order] = db.session.query(Order).filter(*ex_where).all()
     exods = sorted(exods, key=lambda x: x.inout_id)
     exod_gps = groupby(exods, key=lambda x: x.inout_id)
     exgp_dic = dict()
@@ -28,6 +30,8 @@ def order_plot_ind(task_id: int, in_color=None, out_color=None, line_color=None)
         exgp_dic[key] = list(gp)
     enter_at, exit_at, enter_tag, exit_tag, enter_price, exit_price = [], [], [], [], [], []
     for od in orders:
+        if not od.exit_at:
+            continue
         tf_ms = tf_to_secs(od.timeframe) * 1000
         # enter_at和exit_at都是发出信号时的13位时间戳。这里近似取整，确保和bar的13位时间戳一致，方便显示到K线图上。
         # 这里实际对应的应是下一个bar，因为基于上一个bar完成后才计算和发出信号。
@@ -84,10 +88,10 @@ class BTAnalysis:
         df['date'] = df['date'].astype(np.int64)
         return df
 
-    def to_plot(self) -> List[dict]:
+    def to_plot(self, symbol: str) -> List[dict]:
         from banbot.storage import db
         with db():
-            result = [order_plot_ind(self.result['task_id'])]
+            result = [order_plot_ind(self.result['task_id'], symbol)]
         if self.result.get('enters'):
             enter_ind = self.result['enters']
             enter_ind.update(type='mark', symbol='triangle-up-dot')

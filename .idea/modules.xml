@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../NostalgiaForInfinity/.idea/NostalgiaForInfinity.iml" filepath="$PROJECT_DIR$/../NostalgiaForInfinity/.idea/NostalgiaForInfinity.iml" />
       <module fileurl="file://$PROJECT_DIR$/../ban-strategies/.idea/ban-strategies.iml" filepath="$PROJECT_DIR$/../ban-strategies/.idea/ban-strategies.iml" />
       <module fileurl="file://$PROJECT_DIR$/../ban_data/.idea/ban_data.iml" filepath="$PROJECT_DIR$/../ban_data/.idea/ban_data.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/banbot.iml" filepath="$PROJECT_DIR$/.idea/banbot.iml" />
