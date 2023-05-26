@@ -11,13 +11,14 @@ class StaSMA(BaseInd):
     def __init__(self, period: int, cache_key: str = ''):
         super(StaSMA, self).__init__(cache_key)
         self.period = period
-        self.dep_vals: List[Number] = []
+        self.dep_vals: List[float] = []
 
-    def _compute(self, val):
+    def _compute_val(self, val: float):
         self.dep_vals.append(val / self.period)
         if len(self.dep_vals) < self.period:
             return np.nan
-        self.dep_vals = self.dep_vals[-self.period:]
+        while len(self.dep_vals) > self.period:
+            self.dep_vals.pop(0)
         return sum(self.dep_vals)
 
 
@@ -30,7 +31,7 @@ class _StaEWMA(BaseInd):
         self._init_first = init_val
         self._init_vals = []
 
-    def _compute(self, val):
+    def _compute_val(self, val: float):
         if not np.isfinite(val):
             return val
         if not self.arr or not np.isfinite(self.arr[-1]):
@@ -75,7 +76,7 @@ class StaTR(BaseInd):
     def __init__(self, cache_key: str = ''):
         super(StaTR, self).__init__(cache_key)
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         crow = val[-1, :]
         if val.shape[0] < 2:
             cur_tr = np.nan  # crow[hcol] - crow[lcol]
@@ -93,7 +94,7 @@ class StaATR(BaseInd):
         self.tr = StaTR(cache_key)
         self._rma = StaRMA(period, init_type=0, cache_key=cache_key + 'tr')
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         tr_val = self.tr(val)
         return self._rma(tr_val)
 
@@ -106,7 +107,7 @@ class StaNATR(BaseInd):
         self.period = period
         self.atr = StaATR(period, cache_key)
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         ind_val = self.atr(val)
         long_price_range = LongVar.get(LongVar.price_range)
         if val.shape[0] < long_price_range.roll_len:
@@ -121,7 +122,7 @@ class StaTRRoll(BaseInd):
         super(StaTRRoll, self).__init__(cache_key)
         self.period = period
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         high_col, low_col = val[-self.period:, hcol], val[-self.period:, lcol]
         max_id = np.argmax(high_col)
         roll_max = high_col[max_id]
@@ -147,7 +148,7 @@ class StaNTRRoll(BaseInd):
         self.tr_roll = StaTRRoll(period, cache_key)
         self.roll_len = roll_len
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         tr_val = self.tr_roll(val)
         return tr_val / LongVar.get(LongVar.price_range).val
 
@@ -158,7 +159,7 @@ class StaNVol(BaseInd):
     def __init__(self, cache_key: str = ''):
         super(StaNVol, self).__init__(cache_key)
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         return val[-1, vcol] / LongVar.get(LongVar.vol_avg).val
 
 
@@ -173,7 +174,7 @@ class StaMACD(BaseInd):
         self.ema_long = StaEMA(slow_period, init_type=init_type, cache_key=cache_key)
         self.ema_sgl = StaEMA(smooth_period, init_type=init_type, cache_key=cache_key + 'macd')
 
-    def _compute(self, val):
+    def _compute_val(self, val: float):
         macd = self.ema_short(val) - self.ema_long(val)
         singal = self.ema_sgl(macd)
         return macd, singal
@@ -187,7 +188,7 @@ class StaRSI(BaseInd):
         self.loss_avg = 0
         self.last_input = np.nan
 
-    def _compute(self, val):
+    def _compute_val(self, val: float):
         if not np.isfinite(self.last_input):
             self.last_input = val
             return np.nan
@@ -221,7 +222,7 @@ class StaKDJ(BaseInd):
         self._k = StaRMA(sm1, init_val=50., cache_key=cache_key+'kdj_k')
         self._d = StaRMA(sm2, init_val=50., cache_key=cache_key+'kdj_d')
 
-    def _compute(self, val):
+    def _compute_arr(self, val: np.ndarray):
         if len(val) < self.period:
             return np.nan, np.nan
         hhigh = np.max(val[-self.period:, hcol])

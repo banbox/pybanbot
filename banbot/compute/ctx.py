@@ -14,7 +14,6 @@ wait
 gather
 '''
 from contextvars import Context, ContextVar, copy_context
-from numbers import Number
 from typing import *
 
 import numpy as np
@@ -204,28 +203,27 @@ class BaseInd(metaclass=CachedInd):
     def __len__(self):
         return len(self.arr)
 
-    def __call__(self, *args, **kwargs):
-        if self.calc_bar >= bar_num.get():
+    def __call__(self, in_val: Union[np.ndarray, float]):
+        cur_bar_no = bar_num.get()
+        if self.calc_bar >= cur_bar_no:
             return self.arr[-1]
-        in_val = args[0]
         # 检查输入数据的有效性
-        if hasattr(in_val, 'ndim'):
+        if isinstance(in_val, np.ndarray):
             if self.input_dim != in_val.ndim:
                 raise ValueError(f'input val dim error: {in_val.ndim}, require: {self.input_dim}')
-        elif self.input_dim == 0:
-            assert isinstance(in_val, Number)
-        elif self.input_dim == 1:
-            assert isinstance(in_val, (Tuple, List)) and isinstance(in_val[0], Number)
-        elif self.input_dim == 2:
-            assert isinstance(in_val, (Tuple, List)) and isinstance(in_val[0], (Tuple, List))
+            ind_val = self._compute_arr(in_val)
         else:
-            raise ValueError(f'unsupport input_dim: {self.input_dim}')
-        ind_val = self._compute(in_val)
+            if self.input_dim:
+                raise ValueError(f'input val dim error: 0, require: {self.input_dim}')
+            ind_val = self._compute_val(in_val)
         self.arr.append(ind_val)
-        self.arr = self.arr[-self.keep_num:]
-        self.calc_bar = bar_num.get()
+        if len(self.arr) > self.keep_num * 1.5:
+            self.arr = self.arr[-self.keep_num:]
+        self.calc_bar = cur_bar_no
         return ind_val
 
-    def _compute(self, val):
+    def _compute_val(self, val: float):
         raise NotImplementedError(f'_compute in {self.__class__.__name__}')
 
+    def _compute_arr(self, val: np.ndarray):
+        raise NotImplementedError(f'_compute in {self.__class__.__name__}')

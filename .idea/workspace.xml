@@ -8,12 +8,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bt analysis bug">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="format ta-inds">
+      <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/ctx.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/ctx.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/old_big_trend_up.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/old_big_trend_up.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/compute/sta_inds.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/sta_inds.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/tools.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/feeder.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/feeder.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -103,7 +107,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="backtest --timerange=20230513-20230520 -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
+      <option name="PARAMETERS" value="backtest --cprofile --timerange=20230513-20230520 -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -347,13 +351,7 @@
       <workItem from="1684809529005" duration="31885000" />
       <workItem from="1684903195936" duration="2580000" />
       <workItem from="1684981614383" duration="13111000" />
-    </task>
-    <task id="LOCAL-00025" summary="支持回测中使用pairlist">
-      <created>1683972450874</created>
-      <option name="number" value="00025" />
-      <option name="presentableId" value="LOCAL-00025" />
-      <option name="project" value="LOCAL" />
-      <updated>1683972450874</updated>
+      <workItem from="1685070752266" duration="19120000" />
     </task>
     <task id="LOCAL-00026" summary="下载ohlcv时检查并记录空洞">
       <created>1684048493332</created>
@@ -691,7 +689,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684986762691</updated>
     </task>
-    <option name="localTasksCounter" value="74" />
+    <task id="LOCAL-00074" summary="format ta-inds">
+      <created>1685072113711</created>
+      <option name="number" value="00074" />
+      <option name="presentableId" value="LOCAL-00074" />
+      <option name="project" value="LOCAL" />
+      <updated>1685072113711</updated>
+    </task>
+    <option name="localTasksCounter" value="75" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -720,7 +725,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="解决太多对同时请求k线导致卡死问题" />
     <MESSAGE value="计算K线质量时，批量下载交易对，提升效率" />
     <MESSAGE value="所有K线下载均批量执行，提升效率" />
     <MESSAGE value="解决交易所初始化关闭开仓订单很慢问题" />
@@ -745,7 +749,8 @@
     <MESSAGE value="完成MACD、ATR等测试和纠正" />
     <MESSAGE value="向量指标和状态指标分开维护" />
     <MESSAGE value="fix bt analysis bug" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bt analysis bug" />
+    <MESSAGE value="format ta-inds" />
+    <option name="LAST_COMMIT_MESSAGE" value="format ta-inds" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -770,6 +775,12 @@
           <line>716</line>
           <option name="timeStamp" value="134" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <condition expression="not isinstance(row, list)" language="Python" />
+          <url>file://$PROJECT_DIR$/banbot/optmize/backtest.py</url>
+          <line>34</line>
+          <option name="timeStamp" value="140" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
@@ -788,6 +799,6 @@
     <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684833654874" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$scripts.coverage" NAME="simplify_NFIX Coverage Results" MODIFIED="1684904378852" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../NostalgiaForInfinity" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1685003686494" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1685112535461" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

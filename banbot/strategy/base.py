@@ -3,6 +3,8 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
+import sys
+
 from banbot.strategy.common import *
 
 
@@ -19,7 +21,8 @@ class BaseStrategy:
 
     def __init__(self, config: dict):
         self.config = config
-        self._cross: Dict[str, List[int]] = dict()  # 记录信号交叉点
+        self._cross_up: Dict[str, List[int]] = dict()  # 记录信号向上交叉，由负变正
+        self._cross_down: Dict[str, List[int]] = dict()  # 记录信号向下交叉，由正变负
         self._cross_last: Dict[str, float] = dict()  # 记录信号交叉点
         self.state = dict()  # 尽在当前bar生效的临时缓存
         self._state_fn = dict()
@@ -30,6 +33,9 @@ class BaseStrategy:
         return self.state[key]
 
     def _log_cross(self, tag: str, value: float):
+        '''
+        记录指定标签的每一次交叉。
+        '''
         if not np.isfinite(value) or value == 0:
             return
         prev_val = self._cross_last.get(tag)
@@ -37,11 +43,28 @@ class BaseStrategy:
         if prev_val is None:
             return
         if prev_val * value < 0:
-            if tag not in self._cross:
-                self._cross[tag] = []
-            self._cross[tag].append(bar_num.get())
-            if len(self._cross[tag]) > 200:
-                self._cross[tag] = self._cross[tag][-100:]
+            cross_dic = self._cross_up if value > 0 else self._cross_down
+            if tag not in cross_dic:
+                cross_dic[tag] = []
+            cross_dic[tag].append(bar_num.get())
+            if len(cross_dic[tag]) > 200:
+                cross_dic[tag] = cross_dic[tag][-100:]
+
+    def _cross_dist(self, tag: str, dirt=0):
+        '''
+        获取指定标签，与上次交叉的距离。如果尚未发生交叉，返回一个极大值
+        dirt：0表示不限制；1上穿；-1下穿
+        '''
+        up_dist, down_dist = sys.maxsize, sys.maxsize
+        if dirt >= 0:
+            pos = self._cross_up.get(tag)
+            if pos:
+                up_dist = bar_num.get() - pos[-1]
+        if dirt <= 0:
+            pos = self._cross_down.get(tag)
+            if pos:
+                down_dist = bar_num.get() - pos[-1]
+        return min(up_dist, down_dist)
 
     def on_bar(self, arr: np.ndarray):
         '''

@@ -80,7 +80,7 @@ class DataFeeder(Watcher):
             ohlcvs = [state.wait_bar] if state.wait_bar else []
             ohlcvs, last_finish = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
         elif fetch_intv == state.tf_secs:
-            ohlcvs, last_finish = details, True
+            ohlcvs, last_finish = [list(row) for row in details], True
         else:
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
@@ -178,7 +178,7 @@ class DBDataFeeder(HistDataFeeder):
         super(DBDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self._offset_ts = int(self.timerange.startts * 1000)
         self.exg_name = AppConfig.get()['exchange']['name']
-        self._batch_size = 300
+        self._batch_size = 3000
         self._row_id = 0
         self._cache_arr = []
         self._calc_total()

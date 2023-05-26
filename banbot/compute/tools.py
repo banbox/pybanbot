@@ -8,7 +8,7 @@ from banbot.util import btime
 from banbot.util.common import logger
 
 
-def append_new_bar(row, tf_secs: int) -> np.ndarray:
+def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
     result = bar_arr.get()
     copen, chigh, clow, close = row[ocol:vcol]
     dust = min(0.00001, max(close, 0.001) * 0.0001)
@@ -20,13 +20,16 @@ def append_new_bar(row, tf_secs: int) -> np.ndarray:
     bar_num.set(bar_num.get() + 1)
     bar_start_time = int(row[0])
     bar_time.set((bar_start_time, bar_start_time + tf_secs * 1000))
-    crow = np.concatenate([row, [max_chg, real, solid_rate, hline_rate, lline_rate]], axis=0)
-    exp_crow = np.expand_dims(crow, axis=0)
+    ext_row = row + [max_chg, real, solid_rate, hline_rate, lline_rate]
     if not len(result):
         fea_col_start.set(len(row))
-        result = exp_crow
+        result = np.array(ext_row).reshape((1, -1))
     else:
-        result = np.append(result, exp_crow, axis=0)[-1000:]
+        osp = result.shape
+        result = np.resize(result, (osp[0] + 1, osp[1]))
+        result[-1, :] = ext_row
+        if osp[0] > 1500:
+            result = result[-1000:]
     if len(result) >= 2:
         sub_diff = round((result[-1][0] - result[-2][0]) / tf_secs / 1000)
         if sub_diff > 1:
