@@ -226,7 +226,12 @@ class StaKDJ(BaseInd):
             return np.nan, np.nan
         hhigh = np.max(val[-self.period:, hcol])
         llow = np.min(val[-self.period:, lcol])
-        rsv = (val[-1, ccol] - llow) / (hhigh - llow) * 100
+        max_chg = hhigh - llow
+        if not max_chg:
+            # 四价相同，RSV定为50
+            rsv = 50
+        else:
+            rsv = (val[-1, ccol] - llow) / max_chg * 100
         self._k(rsv)
         self._d(self._k[-1])
         return self._k[-1], self._d[-1]

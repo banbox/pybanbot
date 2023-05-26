@@ -8,21 +8,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="向量指标和状态指标分开维护">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bt analysis bug">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/banbot.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/banbot.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/compute/sta_inds.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/compute/sta_inds.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/num_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/num_utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/tainds/test_rsi.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/tainds/test_rsi.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -56,7 +48,7 @@
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../NostalgiaForInfinity" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
   <component name="NamedScopeManager">
     <scope name="banbot" pattern="file[banbot]:*/" />
@@ -96,7 +88,7 @@
       <recent name="E:\trade\banbot\banbot\data\models" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.simplify_NFIX">
+  <component name="RunManager" selected="Python.ban_backtest">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -111,7 +103,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="backtest --pairs RNDR/USDT --timerange=20230501-20230520 -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
+      <option name="PARAMETERS" value="backtest --timerange=20230513-20230520 -c E:\trade\banbot\banbot\config\config.json --stg_dir E:\trade\ban-strategies" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -354,14 +346,7 @@
       <workItem from="1684719269019" duration="32422000" />
       <workItem from="1684809529005" duration="31885000" />
       <workItem from="1684903195936" duration="2580000" />
-      <workItem from="1684981614383" duration="1346000" />
-    </task>
-    <task id="LOCAL-00024" summary="优化交易对生成，过滤无效的">
-      <created>1683961549353</created>
-      <option name="number" value="00024" />
-      <option name="presentableId" value="LOCAL-00024" />
-      <option name="project" value="LOCAL" />
-      <updated>1683961549353</updated>
+      <workItem from="1684981614383" duration="13111000" />
     </task>
     <task id="LOCAL-00025" summary="支持回测中使用pairlist">
       <created>1683972450874</created>
@@ -699,7 +684,14 @@
       <option name="project" value="LOCAL" />
       <updated>1684828728515</updated>
     </task>
-    <option name="localTasksCounter" value="73" />
+    <task id="LOCAL-00073" summary="fix bt analysis bug">
+      <created>1684986762691</created>
+      <option name="number" value="00073" />
+      <option name="presentableId" value="LOCAL-00073" />
+      <option name="project" value="LOCAL" />
+      <updated>1684986762691</updated>
+    </task>
+    <option name="localTasksCounter" value="74" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -728,7 +720,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="自动计算交易周期" />
     <MESSAGE value="解决太多对同时请求k线导致卡死问题" />
     <MESSAGE value="计算K线质量时，批量下载交易对，提升效率" />
     <MESSAGE value="所有K线下载均批量执行，提升效率" />
@@ -753,7 +744,8 @@
     <MESSAGE value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
     <MESSAGE value="完成MACD、ATR等测试和纠正" />
     <MESSAGE value="向量指标和状态指标分开维护" />
-    <option name="LAST_COMMIT_MESSAGE" value="向量指标和状态指标分开维护" />
+    <MESSAGE value="fix bt analysis bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix bt analysis bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -795,7 +787,7 @@
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1684833654874" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1684849664486" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$scripts.coverage" NAME="simplify_NFIX Coverage Results" MODIFIED="1684904378852" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../NostalgiaForInfinity" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1685003686494" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>
