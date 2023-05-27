@@ -27,8 +27,9 @@
     {"name": "AgeFilter", "min": 5},
     {"name": "OffsetFilter", "limit": 30}
   ],
+  "nofee_tfscore": 0.6,
   "run_policy": [
-    {"name": "Alpha"}
+    {"name": "MACDCross"}
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

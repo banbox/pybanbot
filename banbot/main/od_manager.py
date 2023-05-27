@@ -305,47 +305,49 @@ class LocalOrderManager(OrderManager):
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
         enter_price = self.exchange.pres_price(od.symbol, enter_price)
-        if not od.enter.amount:
-            od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
-        quote_amount = enter_price * od.enter.amount
+        sub_od = od.enter
+        if not sub_od.amount:
+            sub_od.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
+        quote_amount = enter_price * sub_od.amount
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        fees = self.exchange.calc_funding_fee(od.enter)
+        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
-            od.enter.fee = fees['rate']
-            od.enter.fee_type = fees['currency']
-        base_amt = od.enter.amount * (1 - od.enter.fee)
+            sub_od.fee = fees['rate']
+            sub_od.fee_type = fees['currency']
+        base_amt = sub_od.amount * (1 - sub_od.fee)
         self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
-        od.enter.update_at = update_time
-        od.enter.filled = od.enter.amount
-        od.enter.average = enter_price
-        od.enter.status = OrderStatus.Close
-        if not od.enter.price:
-            od.enter.price = enter_price
+        sub_od.update_at = update_time
+        sub_od.filled = sub_od.amount
+        sub_od.average = enter_price
+        sub_od.status = OrderStatus.Close
+        if not sub_od.price:
+            sub_od.price = enter_price
         self._fire(od, True)
 
     def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        quote_amount = exit_price * od.exit.amount
-        fees = self.exchange.calc_funding_fee(od.exit)
+        sub_od = od.exit
+        quote_amount = exit_price * sub_od.amount
+        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
-            od.exit.fee = fees['rate']
-            od.exit.fee_type = fees['currency']
+            sub_od.fee = fees['rate']
+            sub_od.fee_type = fees['currency']
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        quote_amt = quote_amount * (1 - od.exit.fee)
-        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -od.exit.amount})
+        quote_amt = quote_amount * (1 - sub_od.fee)
+        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -sub_od.amount})
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
-        od.exit.update_at = update_time
+        sub_od.update_at = update_time
         od.update_exit(
             status=OrderStatus.Close,
             price=exit_price,
-            filled=od.exit.amount,
+            filled=sub_od.amount,
             average=exit_price,
         )
         self._finish_order(od)
@@ -453,7 +455,7 @@ class LiveOrderManager(OrderManager):
         candle = self.data_mgr.get_latest_ohlcv(pair)
         high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
         od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
-        fees = self.exchange.calc_funding_fee(od)
+        fees = self.exchange.calc_fee(od.symbol, od.order_type, od.side, od.amount, od.price)
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
             # 取过去5m数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)

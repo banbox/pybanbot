@@ -238,21 +238,21 @@ class CryptoExchange:
         self.markets = self.api_async.markets
         self.markets_at = time.time()
 
-    def calc_funding_fee(self, od: Order):
+    def calc_fee(self, symbol: str, order_type: str, side: str = 'buy', amount=None, price=None):
         '''
-        {'type': 'taker', 'currency': 'USDT', 'rate': 0.001, 'cost': 0.029733297910755734}
-        :param od:
-        :return:
+        计算交易费用。
+        返回值目前只用到：rate + currency
+        返回：{'type': 'taker', 'currency': 'USDT', 'rate': 0.001, 'cost': 0.029733297910755734}
         '''
-        taker_maker = 'maker' if od.order_type == 'limit' else 'taker'
-        cache = self.pair_fees.get(f'{od.symbol}_{taker_maker}')
+        taker_maker = 'maker' if order_type == 'limit' else 'taker'
+        cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
         if cache:
-            return dict(rate=cache[1], currency=od.symbol.split('/')[0])
+            return dict(rate=cache[1], currency=symbol.split('/')[0])
         if self.pair_fee_limits and btime.run_mode != RunMode.PROD:
-            fee_rate = self.pair_fee_limits.get(od.symbol)
+            fee_rate = self.pair_fee_limits.get(symbol)
             if fee_rate is not None:
-                return dict(rate=fee_rate, currency=od.symbol.split('/')[0])
-        return self.api_async.calculate_fee(od.symbol, od.order_type, od.side, od.amount, od.price, taker_maker)
+                return dict(rate=fee_rate, currency=symbol.split('/')[0])
+        return self.api_async.calculate_fee(symbol, order_type, side, amount, price, taker_maker)
 
     def market_tradable(self, market: Dict[str, Any]) -> bool:
         return (

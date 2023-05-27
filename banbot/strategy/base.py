@@ -118,6 +118,11 @@ class BaseStrategy:
     def pick_timeframe(cls, exg_name: str, symbol: str, tfscores: List[Tuple[str, float]]) -> Optional[str]:
         if not tfscores:
             return None
+        from banbot.exchange.crypto_exchange import get_exchange
+        fee_rate = get_exchange(exg_name).calc_fee(symbol, 'market')['rate']
+        min_score = cls.min_tfscore
+        if not fee_rate:
+            min_score = AppConfig.get().get('nofee_tfscore', 0.6)
         for tf, score in tfscores:
-            if score >= cls.min_tfscore:
+            if score >= min_score:
                 return tf
