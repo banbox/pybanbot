@@ -15,6 +15,7 @@ class BaseStrategy:
     '''
     warmup_num = 600
     min_tfscore = 0.8
+    nofee_tfscore = 0.6
     skip_exit_on_enter = True
     skip_enter_on_exit = True
     version = 1
@@ -120,9 +121,7 @@ class BaseStrategy:
             return None
         from banbot.exchange.crypto_exchange import get_exchange
         fee_rate = get_exchange(exg_name).calc_fee(symbol, 'market')['rate']
-        min_score = cls.min_tfscore
-        if not fee_rate:
-            min_score = AppConfig.get().get('nofee_tfscore', 0.6)
+        min_score = cls.min_tfscore if fee_rate else cls.nofee_tfscore
         for tf, score in tfscores:
             if score >= min_score:
                 return tf

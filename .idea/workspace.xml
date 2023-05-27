@@ -8,16 +8,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="性能优化">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="MACDCross调优">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/macd_cross.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -351,14 +348,8 @@
       <workItem from="1684903195936" duration="2580000" />
       <workItem from="1684981614383" duration="13111000" />
       <workItem from="1685070752266" duration="20685000" />
-      <workItem from="1685152473057" duration="7801000" />
-    </task>
-    <task id="LOCAL-00027" summary="回测时允许自动下载数据，fix bugs">
-      <created>1684058473286</created>
-      <option name="number" value="00027" />
-      <option name="presentableId" value="LOCAL-00027" />
-      <option name="project" value="LOCAL" />
-      <updated>1684058473286</updated>
+      <workItem from="1685152473057" duration="10124000" />
+      <workItem from="1685182992290" duration="2048000" />
     </task>
     <task id="LOCAL-00028" summary="自动计算交易周期">
       <created>1684138556437</created>
@@ -696,7 +687,14 @@
       <option name="project" value="LOCAL" />
       <updated>1685113748611</updated>
     </task>
-    <option name="localTasksCounter" value="76" />
+    <task id="LOCAL-00076" summary="MACDCross调优">
+      <created>1685161845184</created>
+      <option name="number" value="00076" />
+      <option name="presentableId" value="LOCAL-00076" />
+      <option name="project" value="LOCAL" />
+      <updated>1685161845184</updated>
+    </task>
+    <option name="localTasksCounter" value="77" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -725,7 +723,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="所有K线下载均批量执行，提升效率" />
     <MESSAGE value="解决交易所初始化关闭开仓订单很慢问题" />
     <MESSAGE value="解决预热处理订单导致比较慢问题" />
     <MESSAGE value="支持定期刷新交易对，默认12小时" />
@@ -750,7 +747,8 @@
     <MESSAGE value="fix bt analysis bug" />
     <MESSAGE value="format ta-inds" />
     <MESSAGE value="性能优化" />
-    <option name="LAST_COMMIT_MESSAGE" value="性能优化" />
+    <MESSAGE value="MACDCross调优" />
+    <option name="LAST_COMMIT_MESSAGE" value="MACDCross调优" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
