@@ -28,7 +28,7 @@
     {"name": "OffsetFilter", "limit": 30}
   ],
   "run_policy": [
-    {"name": "NoFee", "max_pair": 1, "max_fee": 0.0}
+    {"name": "NoFeeDown", "max_pair": 1, "max_fee": 0.0}
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",
