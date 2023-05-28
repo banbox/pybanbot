@@ -80,7 +80,7 @@ class DataFeeder(Watcher):
             ohlcvs = [state.wait_bar] if state.wait_bar else []
             ohlcvs, last_finish = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
         elif fetch_intv == state.tf_secs:
-            ohlcvs, last_finish = [list(row) for row in details], True
+            ohlcvs, last_finish = details, True
         else:
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs

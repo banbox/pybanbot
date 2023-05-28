@@ -203,6 +203,7 @@ order by time'''
 
         sid = cls._get_sid(exg_name, pair)
         rows = cls._query_hyper(sid, timeframe, dct_sql, gen_gp_sql).fetchall()
+        rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_secs * 1000:
             rows = cls.query(exg_name, pair, timeframe, end_ms, max_end_ms, limit)
         return rows
