@@ -82,7 +82,7 @@ def compare_orders(task_ids: List[int], task_hash: str):
     sess = db.session
     if not task_ids:
         if not task_hash:
-            StrategyResolver.load_run_jobs(config, ['BTC/USDT'])
+            StrategyResolver.load_run_jobs(config, [])
             task_hash = BotGlobal.stg_hash
             logger.info(f'use current task hash: {task_hash}')
         where_list = [BotTask.stg_hash == task_hash]

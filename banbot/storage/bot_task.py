@@ -17,7 +17,7 @@ class BotTask(BaseDbModel):
 
     id = Column(sa.Integer, primary_key=True)
     mode = Column(sa.String(10))  # run mode
-    stg_hash = Column(sa.String(64))
+    stg_hash = Column(sa.String(32))
     create_at = Column(sa.DateTime)
     start_at = Column(sa.DateTime)
     stop_at = Column(sa.DateTime)
@@ -28,14 +28,23 @@ class BotTask(BaseDbModel):
             return
         live_mode = btime.run_mode in btime.LIVE_MODES
         from banbot.strategy.resolver import StrategyResolver
-        run_jobs = StrategyResolver.load_run_jobs(AppConfig.get(), ['BTC/USDT'])
+        config = AppConfig.get()
+        run_jobs = StrategyResolver.load_run_jobs(config, [])
+        rmode = btime.run_mode.value
         if not live_mode:
             # 非实时模式，需要设置初始模拟时钟
             warm_secs = max([tfsecs(warm_num, timeframe) for _, timeframe, warm_num, _ in run_jobs])
-            start_at = AppConfig.get().get('timerange').startts - warm_secs
+            start_at = config.get('timerange').startts - warm_secs
             btime.cur_timestamp = start_at
+        if config.get('no_db'):
+            assert not live_mode, '`no_db` not avaiable in live mode!'
+            # 数据不写入到数据库
+            ctime = btime.to_datetime(time.time())
+            task = BotTask(id=-1, mode=rmode, create_at=ctime, stg_hash=BotGlobal.stg_hash)
+            cls.obj = task
+            cls.cur_id = -1
+            return
         sess = db.session
-        rmode = btime.run_mode.value
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]
         task = sess.query(BotTask).filter(*where_list).order_by(BotTask.create_at.desc()).first()
         if not task or not live_mode:
@@ -57,7 +66,7 @@ class BotTask(BaseDbModel):
 
     @classmethod
     def update(cls, **kwargs):
-        if not cls.obj:
+        if not cls.obj or cls.cur_id < 0:
             return
         sess = db.session
         sess.refresh(cls.obj)

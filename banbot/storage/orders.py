@@ -332,7 +332,9 @@ class InOutOrder(BaseDbModel):
 
     @classmethod
     def dump_to_db(cls):
-        insert_orders_to_db(cls._his_ods + list(cls._open_ods.values()))
+        save_ods = cls._his_ods + list(cls._open_ods.values())
+        logger.info(f'dump {len(save_ods)} orders to db...')
+        insert_orders_to_db(save_ods)
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'

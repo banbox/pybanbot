@@ -94,6 +94,10 @@ class StrategyResolver(IResolver):
         '''
         PTFJob.reset()
         exg_name = config['exchange']['name']
+        allow_filter = True
+        if not pairlist:
+            pairlist = ['BTC/USDT']
+            allow_filter = False
         if not pair_tfscores:
             pair_tfscores = dict()
             for pair in pairlist:
@@ -102,11 +106,21 @@ class StrategyResolver(IResolver):
             strategy_cls = get_strategy(policy['name'])
             if not strategy_cls:
                 raise RuntimeError(f'unknown Strategy: {policy["name"]}')
+            if policy.get('max_fee') is not None:
+                strategy_cls.max_fee = policy.get('max_fee')
+            max_num = policy.get('max_pair') or 999  # 默认一个策略最多999个交易对
+            stg_process = 0
             for pair in pairlist:
                 timeframe = strategy_cls.pick_timeframe(exg_name, pair, pair_tfscores.get(pair))
                 if not timeframe:
-                    continue
+                    if allow_filter:
+                        continue
+                    else:
+                        timeframe = '1m'
+                stg_process += 1
                 PTFJob.add(pair, timeframe, strategy_cls)
+                if stg_process >= max_num:
+                    break
         # 记录此次任务的策略哈希值。
         BotGlobal.stg_hash = PTFJob.strategy_hash()
         return PTFJob.tojobs()

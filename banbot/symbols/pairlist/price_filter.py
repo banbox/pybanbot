@@ -24,9 +24,8 @@ class PriceFilter(PairList):
         self.precision = handler_cfg.get('precision', 0.001)
         self.min_price = handler_cfg.get('min_price', 0)
         self.max_price = handler_cfg.get('max_price', 0)
+        self.max_fee = handler_cfg.get('max_fee', 0.002)
         self.max_unit_value = handler_cfg.get('max_unit_value', 0)
-        self.enable = self.enable and (self.precision > 0 or self.min_price > 0
-                                       or self.max_price > 0 or self.max_unit_value > 0)
         self.stoploss = 0.95
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
@@ -71,6 +70,12 @@ class PriceFilter(PairList):
                 if unit_value > self.max_unit_value:
                     logger.info(f"Removed {pair} because min value change of {unit_value} > {self.max_unit_value}.")
                     return False
+
+        if self.max_fee:
+            fee_rate = self.exchange.calc_fee(pair, 'market')['rate']
+            if fee_rate > self.max_fee:
+                logger.info(f'Removed {pair} as fee rate {fee_rate} > {self.max_fee}')
+                return False
 
         if self.min_price > 0 and price < self.min_price:
             logger.info(f'remove {pair} because last price < {self.min_price:.8f}')

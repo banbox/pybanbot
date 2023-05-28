@@ -130,20 +130,19 @@ class AppConfig(metaclass=Singleton):
     @classmethod
     def init_by_args(cls, args: dict) -> Config:
         from banbot.util.misc import deep_merge_dicts
-        config = AppConfig(args, None).get_config()
+        config = AppConfig(args).get_config()
         deep_merge_dicts(args, config, False)
         if 'timerange' in config:
             from banbot.config.timerange import TimeRange
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
-        if not args.get('no_db'):
-            # 测试数据库连接
-            from banbot.storage.base import init_db, db, sa
-            init_db()
-            with db():
-                conn = db.session.connection()
-                db_tz = conn.execute(sa.text('show timezone;')).scalar()
-                if str(db_tz).lower() != 'utc':
-                    raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
-                                       'and exec `select pg_reload_conf();` to apply; then re-download all data')
-                logger.info(f'Connect DataBase Success')
+        # 测试数据库连接
+        from banbot.storage.base import init_db, db, sa
+        init_db()
+        with db():
+            conn = db.session.connection()
+            db_tz = conn.execute(sa.text('show timezone;')).scalar()
+            if str(db_tz).lower() != 'utc':
+                raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
+                                   'and exec `select pg_reload_conf();` to apply; then re-download all data')
+            logger.info(f'Connect DataBase Success')
         return config

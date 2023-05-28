@@ -416,7 +416,8 @@ class LocalOrderManager(OrderManager):
     def cleanup(self):
         self.exit_open_orders('bot_stop', 0)
         self.fill_pending_orders()
-        InOutOrder.dump_to_db()
+        if not self.config.get('no_db'):
+            InOutOrder.dump_to_db()
 
 
 class LiveOrderManager(OrderManager):

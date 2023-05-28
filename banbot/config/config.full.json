@@ -1,0 +1,84 @@
+{
+  "name": "ayj",
+  "env": "prod",
+  "run_mode": "dry_run",
+  "trade_mode": "spot",
+  "prefire": false,
+  "quote_base": "USDT",
+  "stake_amount": 1000,
+  "stake_currency": ["USDT", "TUSD"],
+  "max_market_rate": 0.0001,
+  "odbook_ttl": 1000,
+  "limit_vol_secs": 5,
+  "fatal_stop": {
+    "30": 0.3,
+    "180": 0.2,
+    "1440": 0.1
+  },
+  "paircfg": {
+    "refresh_mins": 720
+  },
+  "pairlists": [
+    {"name": "VolumePairList"},
+    {"name": "PriceFilter", "precision": 0.0015, "max_unit_value": 100, "max_fee": 0.002},
+    {"name": "RangeStabilityFilter", "back_days": 5, "min_chg_rate": 0.03},
+    {"name": "SpreadFilter", "max_ratio": 0.005},
+    {"name": "VolatilityFilter", "max": 1, "min": 0.05},
+    {"name": "AgeFilter", "min": 5},
+    {"name": "OffsetFilter", "limit": 30}
+  ],
+  "run_policy": [
+    {"name": "NoFee", "max_pair": 1, "max_fee": 0.0}
+  ],
+  "add_config_files": [],
+  "data_dir": "E:\\trade\\ban_data",
+  "database": {
+    "url": "postgresql://postgres:123@[127.0.0.1]:5432/bantd",
+    "retention": "all"
+  },
+  "redis_url": "redis://:Fwe9G32gvV@zhizi-pub.redis.rds.aliyuncs.com:6379/2",
+  "exchange": {
+    "name": "binance",
+    "binance": {
+      "proxies": {
+        "http": "http://127.0.0.1:10808",
+        "https": "http://127.0.0.1:10808"
+      },
+      "pair_fee_limits": {
+        "BTC/TUSD": 0.0
+      },
+      "credit_prod": {
+        "api_key": "H3OzezemPSWh6m7K5oVjQy2qCx3aLxsVVofaTjvZqkecvny6S8h2sYURjb03LzCs",
+        "api_secret": "ZGPWcTzSrbA4ZbMy4mBc53gTeh343VevCtO1ibqA1KiAViGoQDXLjgPw8lDrgDzV",
+        "timeout": 3
+      },
+      "credit_test": {
+        "api_key": "mxOX0YVR08CannOz7fybulf7fCERMH6YnH3H5ugBZ4IngJ8U7gkU2yueGM0tMNzh",
+        "api_secret": "GTl6YLfmdwwNvRn9WB4hoscutMBomEh3azwz9kGFNiXKiwEH2zFIblglArsa1uRR",
+        "base_url": "https://testnet.binance.vision",
+        "stream_url": "wss://testnet.binance.vision",
+        "timeout": 3
+      },
+      "options": {
+        "adjustForTimeDifference": true
+      }
+    }
+  },
+  "wework": {
+    "enabled": true,
+    "corpid": "ww0f524655066bfb7f",
+    "agentid": "1000004",
+    "corpsecret": "hbXBhPn5Kgv_bjg01RIA2ufFHryQ_hONzPiJZ-gmouA"
+  },
+  "webhook": {
+    "entry": {
+      "content": "{name}[{enter_tag}] {side} {pair} at {price:.5f} with {value:.2f}"
+    },
+    "exit": {
+      "content": "{name}[{exit_tag}] {side} {pair} at {price:.5f} with {value:.2f}, profit: {profit:.2f}"
+    },
+    "status": {
+      "content": "{name}: {status}"
+    }
+  }
+}
