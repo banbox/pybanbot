@@ -28,6 +28,7 @@ class Trader:
             -> Dict[str, Dict[str, int]]:
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
         pair_tfs = dict()
+        stg_pairs = []
         for pair, timeframe, warm_num, stg_set in run_jobs:
             if pair not in pair_tfs:
                 pair_tfs[pair] = dict()
@@ -35,6 +36,13 @@ class Trader:
             symbol = f'{pair}/{timeframe}'
             with TempContext(symbol):
                 self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
+                stg_pairs.extend([(cls.__name__, pair, timeframe) for cls in stg_set])
+        from itertools import groupby
+        stg_pairs = sorted(stg_pairs, key=lambda x: x[:2])
+        sp_groups = groupby(stg_pairs, key=lambda x: x[0])
+        for key, gp in sp_groups:
+            items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
+            print(f'{key}: {items}')
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):
