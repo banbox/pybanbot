@@ -43,6 +43,7 @@ class BotTask(BaseDbModel):
             task = BotTask(id=-1, mode=rmode, create_at=ctime, stg_hash=BotGlobal.stg_hash)
             cls.obj = task
             cls.cur_id = -1
+            logger.info(f"init task ok, id: {task.id} hash: {task.stg_hash}")
             return
         sess = db.session
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]

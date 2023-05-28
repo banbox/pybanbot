@@ -89,4 +89,5 @@ class ExSymbol(BaseDbModel):
                 continue
             await obj.init_list_dt()
         cost = time.monotonic() - start
-        logger.info(f'fill_list_dts cost: {cost:.2f} s')
+        if cost > 0.5:
+            logger.info(f'fill_list_dts cost: {cost:.2f} s')

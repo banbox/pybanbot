@@ -83,6 +83,7 @@ ORDER BY sid, 2'''
     @classmethod
     def _init_hypertbl(cls, conn: sa.Connection, tbl: BarAgg):
         statements = [
+            f'CREATE INDEX "{tbl.tbl}_sid" ON "{tbl.tbl}" USING btree ("sid");',
             f"SELECT create_hypertable('{tbl.tbl}','time');",
             f'''ALTER TABLE {tbl.tbl} SET (
               timescaledb.compress,
@@ -601,7 +602,8 @@ ORDER BY sid, 2'''
             tf_ranges[it[1]] = (tf_to_secs(it[1]), *it[2:])
         call_sync()
         cost = time.monotonic() - start
-        logger.info(f'sync timeframes cost: {cost:.2f} s')
+        if cost > 2:
+            logger.info(f'sync timeframes cost: {cost:.2f} s')
 
     @classmethod
     def _sync_kline_sid(cls, sid: int, tf_list: List[Tuple[str, int, int, int]]):
