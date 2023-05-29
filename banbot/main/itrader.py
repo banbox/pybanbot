@@ -27,6 +27,8 @@ class Trader:
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
             -> Dict[str, Dict[str, int]]:
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
+        if not run_jobs:
+            raise ValueError('no run jobs found')
         pair_tfs = dict()
         stg_pairs = []
         for pair, timeframe, warm_num, stg_set in run_jobs:

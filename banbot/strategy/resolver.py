@@ -110,16 +110,22 @@ class StrategyResolver(IResolver):
                 strategy_cls.max_fee = policy.get('max_fee')
             max_num = policy.get('max_pair') or 999  # 默认一个策略最多999个交易对
             stg_process = 0
-            for pair in pairlist:
-                timeframe = strategy_cls.pick_timeframe(exg_name, pair, pair_tfscores.get(pair))
+            stg_name = strategy_cls.__name__
+            for i, pair in enumerate(pairlist):
+                tfscores = pair_tfscores.get(pair)
+                timeframe = strategy_cls.pick_timeframe(exg_name, pair, tfscores)
                 if not timeframe:
                     if allow_filter:
+                        logger.warning(f'{exg_name}/{pair} filtered by {stg_name}, {tfscores}')
                         continue
                     else:
                         timeframe = '1m'
                 stg_process += 1
                 PTFJob.add(pair, timeframe, strategy_cls)
                 if stg_process >= max_num:
+                    skip_num = len(pairlist) - max_num
+                    if skip_num:
+                        logger.warning(f'{skip_num} pairs skipped by {stg_name}, as max_num: {max_num} reached')
                     break
         # 记录此次任务的策略哈希值。
         BotGlobal.stg_hash = PTFJob.strategy_hash()
