@@ -124,7 +124,8 @@ class LiveTrader(Trader):
         while True:
             await asyncio.sleep(refresh_intv)
             try:
-                await self.refresh_pairs()
+                with db():
+                    await self.refresh_pairs()
             except Exception:
                 logger.exception('loop refresh pairs error')
 
