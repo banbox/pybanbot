@@ -642,7 +642,11 @@ class LiveOrderManager(OrderManager):
 
     @loop_forever
     async def listen_orders_forever(self):
-        trades = await self.exchange.watch_my_trades()
+        try:
+            trades = await self.exchange.watch_my_trades()
+        except ccxt.NetworkError as e:
+            logger.error(f'watch_my_trades net error: {e}')
+            return
         logger.debug('get my trades: %s', trades)
         with db():
             sess = db.session

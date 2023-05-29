@@ -7,6 +7,8 @@
 from numbers import Number
 from typing import List
 
+import ccxt
+
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
 from banbot.util import btime
@@ -125,7 +127,11 @@ class CryptoWallet(WalletsLocal):
 
     @loop_forever
     async def update_forever(self):
-        balances = await self.exchange.watch_balance()
+        try:
+            balances = await self.exchange.watch_balance()
+        except ccxt.NetworkError as e:
+            logger.error(f'watch balance net error: {e}')
+            return
         self.update_at = btime.time()
         logger.info('update balances: %s', self._update_local(balances))
 

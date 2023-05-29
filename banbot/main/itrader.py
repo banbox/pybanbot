@@ -42,7 +42,7 @@ class Trader:
         sp_groups = groupby(stg_pairs, key=lambda x: x[0])
         for key, gp in sp_groups:
             items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
-            print(f'{key}: {items}')
+            logger.info(f'{key}: {items}')
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):
