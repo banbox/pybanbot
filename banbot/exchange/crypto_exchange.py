@@ -203,13 +203,14 @@ class CryptoExchange:
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.time() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
-        self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits')
+        self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits') or dict()
         self.conti_error = 0
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
 
     async def init(self, pairs: List[str]):
         await self.update_quote_price()
+        await self._check_fee_limits()
         await self.cancel_open_orders(pairs)
 
     @net_retry
@@ -217,11 +218,11 @@ class CryptoExchange:
         if time.time() - self.markets_at < 1800:
             logger.warning('load_markets too freq, skip')
             return
-        restore_ts, markets = 0, []
-        if btime.run_mode not in LIVE_MODES:
-            restore_ts = _restore_markets(self.api_async, self.market_dir)
-            markets = self.api_async.markets or []
-        if time.time() - restore_ts > 604800:
+        restore_ts = _restore_markets(self.api_async, self.market_dir)
+        markets = self.api_async.markets or []
+        # 市场信息非Prod模式7天有效，Prod模式1天有效
+        exp_secs = 604800 if btime.run_mode != RunMode.PROD else 86400
+        if time.time() - restore_ts > exp_secs:
             # 非实时模式，缓存的交易对7天有效
             if restore_ts:
                 logger.warning('exchange markets expired, renew...')
@@ -238,6 +239,25 @@ class CryptoExchange:
         self.markets = self.api_async.markets
         self.markets_at = time.time()
 
+    async def _check_fee_limits(self):
+        exg_fees = await self.api_async.fetch_trading_fees()
+        for symbol, fee in exg_fees.items():
+            currency = symbol.split('/')[-1]
+            if currency not in self.quote_symbols:
+                continue
+            if 'maker' in fee:
+                self.pair_fees[f'{symbol}_maker'] = currency, fee['maker']
+            if 'taker' in fee:
+                self.pair_fees[f'{symbol}_taker'] = currency, fee['taker']
+        if not self.pair_fee_limits:
+            return
+        for symbol, limit in self.pair_fee_limits.items():
+            fee_rate = self.pair_fees.get(f'{symbol}_taker') or self.pair_fees.get(f'{symbol}_maker')
+            if not fee_rate:
+                raise ValueError(f'no fee found for {symbol}, limit: {limit}')
+            if fee_rate[1] > limit:
+                raise ValueError(f'fee {fee_rate[1]} exceed limit {limit}, symbol: {symbol}')
+
     def calc_fee(self, symbol: str, order_type: str, side: str = 'buy', amount=None, price=None):
         '''
         计算交易费用。
@@ -247,12 +267,16 @@ class CryptoExchange:
         taker_maker = 'maker' if order_type == 'limit' else 'taker'
         cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
         if cache:
-            return dict(rate=cache[1], currency=symbol.split('/')[0])
-        if self.pair_fee_limits and btime.run_mode != RunMode.PROD:
-            fee_rate = self.pair_fee_limits.get(symbol)
-            if fee_rate is not None:
-                return dict(rate=fee_rate, currency=symbol.split('/')[0])
-        return self.api_async.calculate_fee(symbol, order_type, side, amount, price, taker_maker)
+            return dict(rate=cache[1], currency=cache[0])
+        fee_limit = self.pair_fee_limits.get(symbol)
+        if fee_limit is not None and btime.run_mode != RunMode.PROD:
+            # 非生产模式，直接使用指定手续费限制作为手续费率
+            return dict(rate=fee_limit, currency=symbol.split('/')[0])
+        calc_fee = self.api_async.calculate_fee(symbol, order_type, side, amount, price, taker_maker)
+        if fee_limit is not None and calc_fee['rate'] > fee_limit:
+            # 有手续费限制，且计算的手续费超过限制。
+            raise ValueError(f'{self.name}/{symbol} fee rate exceed limit {fee_limit}')
+        return calc_fee
 
     def market_tradable(self, market: Dict[str, Any]) -> bool:
         return (
