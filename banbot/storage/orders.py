@@ -163,7 +163,7 @@ class InOutOrder(BaseDbModel):
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
         if not kwargs.get('lock_key'):
-            kwargs['lock_key'] = self.enter_tag
+            kwargs['lock_key'] = kwargs['enter_tag']
         super(InOutOrder, self).__init__(**kwargs)
         live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:

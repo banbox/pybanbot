@@ -91,17 +91,14 @@ class OrderManager(metaclass=SingletonArg):
             return [], []
         ctx = get_context(pair_tf)
         pair, _, _, _ = get_cur_symbol(ctx)
-        allow_enter = self.allow_pair(pair)
-        if not allow_enter and not (exits or exit_keys):
-            logger.debug('pair enter disable: %s', [pair, enters])
-            return [], []
         enter_ods, exit_ods = [], []
-        if enters and btime.allow_order_enter(ctx):
-            if allow_enter:
+        if enters:
+            if btime.allow_order_enter(ctx) and self.allow_pair(pair):
                 for stg_name, sigin in enters:
-                    enter_ods.append(self.enter_order(ctx, stg_name, sigin))
+                    enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                enter_ods = [od for od in enter_ods if od]
             else:
-                logger.debug('pair enter not allow: %s', enters)
+                logger.debug('pair %s enter not allow: %s', pair, enters)
         if exits:
             for stg_name, sigout in exits:
                 exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, pair))
@@ -109,25 +106,27 @@ class OrderManager(metaclass=SingletonArg):
             for od_id, sigout in exit_keys.items():
                 od = InOutOrder.get(od_id)
                 exit_ods.append(self.exit_order(ctx, od, sigout))
-        enter_ods = [od for od in enter_ods if od]
         exit_ods = [od for od in exit_ods if od]
         return enter_ods, exit_ods
 
-    def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None
-                    ) -> Optional[InOutOrder]:
+    def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None,
+                    do_check=True) -> Optional[InOutOrder]:
         '''
         策略产生入场信号，执行入场订单。（目前仅支持做多）
         :param ctx:
         :param strategy:
         :param sigin:
         :param price:
+        :param do_check: 是否执行入场检查
         :return:
         '''
-        if not btime.allow_order_enter(ctx):
-            return
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(pair)):
+            logger.debug('pair %s enter not allowed', pair)
+            return
         tag = sigin.pop('tag')
-        if lock_od := InOutOrder.get_order(pair, strategy, tag):
+        lock_key = sigin.get('lock_key') or tag
+        if lock_od := InOutOrder.get_order(pair, strategy, lock_key):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
@@ -135,8 +134,8 @@ class OrderManager(metaclass=SingletonArg):
             return
         legal_cost = sigin.pop('legal_cost')
         quote_cost = self.wallets.get_avaiable_by_cost(quote_s, legal_cost, self.last_ts)
-        if not quote_cost or not self.allow_pair(pair):
-            logger.debug('wallet empty or pair disable: %f', quote_cost)
+        if not quote_cost:
+            logger.debug('wallet %s empty: %f', pair, quote_cost)
             return
         od = InOutOrder(
             **sigin,
