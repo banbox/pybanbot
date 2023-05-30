@@ -74,8 +74,8 @@ class OrderManager(metaclass=SingletonArg):
     async def try_dump(self):
         pass
 
-    def process_orders(self, pair_tf: str, enters: List[Tuple[str, str, float]],
-                       exits: List[Tuple[str, str]], exit_keys: Dict[int, str])\
+    def process_orders(self, pair_tf: str, enters: List[Tuple[str, dict]],
+                       exits: List[Tuple[str, dict]], exit_keys: Dict[int, dict])\
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -98,46 +98,48 @@ class OrderManager(metaclass=SingletonArg):
         enter_ods, exit_ods = [], []
         if enters and btime.allow_order_enter(ctx):
             if allow_enter:
-                for stg_name, enter_tag, cost in enters:
-                    enter_ods.append(self.enter_order(ctx, stg_name, enter_tag, cost))
+                for stg_name, sigin in enters:
+                    enter_ods.append(self.enter_order(ctx, stg_name, sigin))
             else:
                 logger.debug('pair enter not allow: %s', enters)
         if exits:
-            for stg_name, exit_tag in exits:
-                exit_ods.extend(self.exit_open_orders(exit_tag, None, stg_name, pair))
+            for stg_name, sigout in exits:
+                exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, pair))
         if exit_keys:
-            for od_id, ext_tag in exit_keys.items():
+            for od_id, sigout in exit_keys.items():
                 od = InOutOrder.get(od_id)
-                exit_ods.append(self.exit_order(ctx, od, ext_tag))
+                exit_ods.append(self.exit_order(ctx, od, sigout))
         enter_ods = [od for od in enter_ods if od]
         exit_ods = [od for od in exit_ods if od]
         return enter_ods, exit_ods
 
-    def enter_order(self, ctx: Context, strategy: str, tag: str, cost: float, price: Optional[float] = None
+    def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None
                     ) -> Optional[InOutOrder]:
         '''
         策略产生入场信号，执行入场订单。（目前仅支持做多）
         :param ctx:
         :param strategy:
-        :param tag:
-        :param cost: 对应的法币价值。当定价币不是USD时，会计算其对应花费数量
+        :param sigin:
         :param price:
         :return:
         '''
         if not btime.allow_order_enter(ctx):
             return
         pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        tag = sigin.pop('tag')
         if lock_od := InOutOrder.get_order(pair, strategy, tag):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
                 logger.error('lock order exit timeout: %s, exit bar: %d', lock_od, lock_od.elp_num_exit)
             return
-        quote_cost = self.wallets.get_avaiable_by_cost(quote_s, cost, self.last_ts)
+        legal_cost = sigin.pop('legal_cost')
+        quote_cost = self.wallets.get_avaiable_by_cost(quote_s, legal_cost, self.last_ts)
         if not quote_cost or not self.allow_pair(pair):
             logger.debug('wallet empty or pair disable: %f', quote_cost)
             return
         od = InOutOrder(
+            **sigin,
             symbol=pair,
             timeframe=timeframe,
             quote_cost=quote_cost,
@@ -148,14 +150,14 @@ class OrderManager(metaclass=SingletonArg):
             strategy=strategy
         )
         if btime.run_mode in LIVE_MODES:
-            logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, cost)
+            logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
         self._put_order(od, True)
         return od
 
     def _put_order(self, od: InOutOrder, is_enter: bool):
         pass
 
-    def exit_open_orders(self, exit_tag: str, price: Optional[float] = None, strategy: str = None,
+    def exit_open_orders(self, sigout: Union[str, dict], price: Optional[float] = None, strategy: str = None,
                          pairs: Union[str, List[str]] = None, is_force=False) -> List[InOutOrder]:
         order_list = InOutOrder.open_orders(strategy, pairs)
         result = []
@@ -166,15 +168,17 @@ class OrderManager(metaclass=SingletonArg):
                     continue
                 # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
             ctx = get_context(f'{od.symbol}/{od.timeframe}')
-            if self.exit_order(ctx, od, exit_tag, price):
+            if self.exit_order(ctx, od, sigout, price):
                 result.append(od)
         return result
 
-    def exit_order(self, ctx: Context, od: InOutOrder, exit_tag: str, price: Optional[float] = None
+    def exit_order(self, ctx: Context, od: InOutOrder, sigout: Union[str, dict], price: Optional[float] = None
                    ) -> Optional[InOutOrder]:
         if od.exit_tag:
             return
-        od.exit_tag = exit_tag
+        if isinstance(sigout, six.string_types):
+            sigout = dict(tag=sigout)
+        od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
         _, base_s, quote_s, _ = get_cur_symbol(ctx)
         if od.enter.filled:
@@ -185,7 +189,7 @@ class OrderManager(metaclass=SingletonArg):
                 exit_amount = ava_amt
         else:
             exit_amount = 0
-        od.update_exit(price=price, amount=exit_amount)
+        od.update_exit(**sigout, price=price, amount=exit_amount)
         od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od.symbol, od.exit_tag)
@@ -214,7 +218,7 @@ class OrderManager(metaclass=SingletonArg):
         if quote_s.find('USD') >= 0:
             self.prices[base_s] = float(row[ccol])
 
-    def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, str]:
+    def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, dict]:
         result = dict()
         pair, _, _, _ = get_cur_symbol()
         op_orders = InOutOrder.open_orders(strategy.name, pair)
@@ -224,8 +228,8 @@ class OrderManager(metaclass=SingletonArg):
         for od in op_orders:
             if not od.can_close():
                 continue
-            if ext_tag := strategy.custom_exit(pair_arr, od):
-                result[od.id] = ext_tag
+            if sigout := strategy.custom_exit(pair_arr, od):
+                result[od.id] = sigout
         return result
 
     def check_fatal_stop(self):

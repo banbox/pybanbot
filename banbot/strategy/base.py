@@ -26,7 +26,7 @@ class BaseStrategy:
         self._cross_up: Dict[str, List[int]] = dict()  # 记录信号向上交叉，由负变正
         self._cross_down: Dict[str, List[int]] = dict()  # 记录信号向下交叉，由正变负
         self._cross_last: Dict[str, float] = dict()  # 记录信号交叉点
-        self.state = dict()  # 尽在当前bar生效的临时缓存
+        self.state = dict()  # 仅在当前bar生效的临时缓存
         self._state_fn = dict()
 
     def _calc_state(self, key: str, *args, **kwargs):
@@ -90,7 +90,7 @@ class BaseStrategy:
                 raise ValueError(f'unsupport dim sub: {dim_sub} from {type(ind)}')
             ind(in_val)
 
-    def on_entry(self, arr: np.ndarray) -> Optional[str]:
+    def on_entry(self, arr: np.ndarray) -> Optional[dict]:
         '''
         时间升序，最近的是最后一个
         :param arr:
@@ -98,18 +98,18 @@ class BaseStrategy:
         '''
         pass
 
-    def custom_cost(self, enter_tag: str) -> float:
+    def custom_cost(self, sigin: dict) -> float:
         '''
-        返回自定义的此次订单金额
-        :param enter_tag:
+        返回自定义的此次订单花费金额（基于法定币，如USDT、RMB）
+        :param sigin:
         :return:
         '''
         return self.config.get('stake_amount', 1000)
 
-    def on_exit(self, arr: np.ndarray) -> Optional[str]:
+    def on_exit(self, arr: np.ndarray) -> Optional[dict]:
         pass
 
-    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[str]:
+    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[dict]:
         return None
 
     @property

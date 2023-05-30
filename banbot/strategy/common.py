@@ -41,7 +41,7 @@ def trail_stop_loss_core(elp_num: int, max_up: float, loss_val: float, back_rate
 
 
 def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, loss_thres: List[float],
-                    odlens: List[int] = None, back_rates: List[float] = None) -> Optional[str]:
+                    odlens: List[int] = None, back_rates: List[float] = None) -> Optional[dict]:
     '''
     跟踪止损。
     3周期内，价格跌破bar_len出场
@@ -58,4 +58,5 @@ def trail_stop_loss(arr: np.ndarray, enter_price: float, elp_num: int, loss_thre
     :return:
     '''
     loss_val, max_up, back_rate = trail_info(arr, elp_num, enter_price)
-    return trail_stop_loss_core(elp_num, max_up, loss_val, back_rate, loss_thres, odlens, back_rates)
+    exit_tag = trail_stop_loss_core(elp_num, max_up, loss_val, back_rate, loss_thres, odlens, back_rates)
+    return dict(tag=exit_tag) if exit_tag else None

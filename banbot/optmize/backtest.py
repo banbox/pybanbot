@@ -48,7 +48,7 @@ class BackTest(Trader):
         if enter_list:
             ctx = get_context(f'{pair}/{timeframe}')
             price = to_pytypes(row[ccol])
-            enter_text = ','.join([v[1] for v in enter_list])
+            enter_text = ','.join([str(v[1]) for v in enter_list])
             self.enter_list.append((ctx[bar_num], enter_text, price))
 
     async def init(self):

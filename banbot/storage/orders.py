@@ -134,6 +134,7 @@ class InOutOrder(BaseDbModel):
     symbol = Column(sa.String(50))
     timeframe = Column(sa.String(5))
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
+    lock_key = Column(sa.String(30))  # 交易加锁的键，阻止相同键同时下单
     enter_tag = Column(sa.String(30))
     init_price = Column(sa.Float)  # 发出信号时入场价格，仅用于策略后续计算
     quote_cost = Column(sa.Float)  # 花费定价币金额，当价格不确定时，可先不设置amount，后续通过此字段计算amount
@@ -161,6 +162,8 @@ class InOutOrder(BaseDbModel):
         if stg:
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
+        if not kwargs.get('lock_key'):
+            kwargs['lock_key'] = self.enter_tag
         super(InOutOrder, self).__init__(**kwargs)
         live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:
@@ -177,7 +180,7 @@ class InOutOrder(BaseDbModel):
 
     @property
     def key(self):
-        return f'{self.symbol}_{self.enter_tag}_{self.strategy}'
+        return f'{self.symbol}_{self.strategy}_{self.lock_key}'
 
     def _elp_num_offset(self, time_ms: int):
         ctx = get_context(f'{self.symbol}/{self.timeframe}')
@@ -307,8 +310,8 @@ class InOutOrder(BaseDbModel):
         return cls.get_orders(status='his')
 
     @classmethod
-    def get_order(cls, symbol: str, strategy: str, enter_tag: str):
-        key = f'{symbol}_{enter_tag}_{strategy}'
+    def get_order(cls, symbol: str, strategy: str, lock_key: str):
+        key = f'{symbol}_{strategy}_{lock_key}'
         lock_id = TradeLock.get_lock(key)
         if not lock_id:
             return

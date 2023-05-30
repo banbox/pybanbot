@@ -8,14 +8,24 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="add log">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix filtered by fee">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-strategies/demo.py" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-strategies/demo.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../ban-strategies/nofee_down.py" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-strategies/nofee_down.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-strategies/nofee_up.py" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-strategies/nofee_up.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/config/config.full.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.full.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/itrader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/itrader.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/wallets.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/wallets.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/optmize/backtest.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/backtest.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/orders.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/orders.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/strategy/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/strategy/common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/util/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/common.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -90,7 +100,7 @@
       <recent name="E:\trade\banbot\banbot\main" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.ban_trade">
+  <component name="RunManager" selected="Python.ban_backtest">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -353,14 +363,9 @@
       <workItem from="1685152473057" duration="10124000" />
       <workItem from="1685182992290" duration="3547000" />
       <workItem from="1685237953665" duration="35187000" />
-      <workItem from="1685327837742" duration="9891000" />
-    </task>
-    <task id="LOCAL-00037" summary="fix order trail bug">
-      <created>1684396481452</created>
-      <option name="number" value="00037" />
-      <option name="presentableId" value="LOCAL-00037" />
-      <option name="project" value="LOCAL" />
-      <updated>1684396481452</updated>
+      <workItem from="1685327837742" duration="14170000" />
+      <workItem from="1685425564462" duration="75000" />
+      <workItem from="1685435400593" duration="6493000" />
     </task>
     <task id="LOCAL-00038" summary="order market price change">
       <created>1684397065755</created>
@@ -698,7 +703,14 @@
       <option name="project" value="LOCAL" />
       <updated>1685353457345</updated>
     </task>
-    <option name="localTasksCounter" value="86" />
+    <task id="LOCAL-00086" summary="fix filtered by fee">
+      <created>1685362202556</created>
+      <option name="number" value="00086" />
+      <option name="presentableId" value="LOCAL-00086" />
+      <option name="project" value="LOCAL" />
+      <updated>1685362202556</updated>
+    </task>
+    <option name="localTasksCounter" value="87" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -727,7 +739,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="order market price change" />
     <MESSAGE value="调整依赖类库" />
     <MESSAGE value="fix pandas dependence" />
     <MESSAGE value="fix import" />
@@ -752,7 +763,8 @@
     <MESSAGE value="add log info" />
     <MESSAGE value="fix bug" />
     <MESSAGE value="add log" />
-    <option name="LAST_COMMIT_MESSAGE" value="add log" />
+    <MESSAGE value="fix filtered by fee" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix filtered by fee" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -769,12 +781,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/main/od_manager.py</url>
-          <line>649</line>
+          <line>654</line>
           <option name="timeStamp" value="132" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/main/od_manager.py</url>
-          <line>723</line>
+          <line>728</line>
           <option name="timeStamp" value="134" />
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
@@ -794,11 +806,6 @@
           <line>22</line>
           <option name="timeStamp" value="140" />
         </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/banbot/exchange/crypto_exchange.py</url>
-          <line>242</line>
-          <option name="timeStamp" value="145" />
-        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
@@ -814,9 +821,9 @@
     <SUITE FILE_PATH="coverage/banbot$plot.coverage" NAME="plot Coverage Results" MODIFIED="1683542689405" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
-    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1685361061249" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1685362087139" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$scripts.coverage" NAME="simplify_NFIX Coverage Results" MODIFIED="1684904378852" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../NostalgiaForInfinity" />
-    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1685284321557" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_backtest.coverage" NAME="ban_backtest Coverage Results" MODIFIED="1685442217057" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
   </component>
 </project>

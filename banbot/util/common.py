@@ -240,4 +240,4 @@ def get_logger(level=logging.INFO):
 
 
 logging.setLogRecordFactory(StrFormatLogRecord)
-logger = get_logger(logging.DEBUG)
+logger = get_logger()

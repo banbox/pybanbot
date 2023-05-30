@@ -65,7 +65,7 @@ class Trader:
             if not BotGlobal.is_wramup:
                 self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
-            ext_tags: Dict[int, str] = dict()
+            ext_tags: Dict[int, dict] = dict()
             enter_list, exit_list = [], []
             for strategy in strategy_list:
                 stg_name = strategy.name
@@ -73,14 +73,14 @@ class Trader:
                 strategy.on_bar(pair_arr)
                 if not BotGlobal.is_wramup:
                     # 调用策略生成入场和出场信号
-                    entry_tag = strategy.on_entry(pair_arr)
-                    exit_tag = strategy.on_exit(pair_arr)
-                    if entry_tag and not bar_expired and (not strategy.skip_enter_on_exit or not exit_tag):
-                        cost = strategy.custom_cost(entry_tag)
-                        enter_list.append((stg_name, entry_tag, cost))
-                    if not strategy.skip_exit_on_enter or not entry_tag:
-                        if exit_tag:
-                            exit_list.append((stg_name, exit_tag))
+                    sigin = strategy.on_entry(pair_arr)
+                    sigout = strategy.on_exit(pair_arr)
+                    if sigin and not bar_expired and (not strategy.skip_enter_on_exit or not sigout):
+                        sigin['legal_cost'] = strategy.custom_cost(sigin)
+                        enter_list.append((stg_name, sigin))
+                    if not strategy.skip_exit_on_enter or not sigin:
+                        if sigout:
+                            exit_list.append((stg_name, sigout))
                         ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_cost = (time.monotonic() - start_time) * 1000
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:

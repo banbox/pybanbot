@@ -74,11 +74,11 @@ class WalletsLocal:
     def _get_symbol_price(self, symbol: str):
         raise ValueError(f'unsupport quote symbol: {symbol}')
 
-    def get_avaiable_by_cost(self, symbol: str, cost: float, after_ts: float = 0):
+    def get_avaiable_by_cost(self, symbol: str, legal_cost: float, after_ts: float = 0):
         '''
         根据花费的USDT计算需要的数量，并返回可用数量
-        :param symbol:
-        :param cost:
+        :param symbol: 产品，不是交易对。如：USDT
+        :param legal_cost: 花费法币金额（一般是USDT）
         :param after_ts:
         :return:
         '''
@@ -87,7 +87,7 @@ class WalletsLocal:
             price = 1
         else:
             price = self._get_symbol_price(symbol)
-        req_amount = (cost * 0.99) / price
+        req_amount = (legal_cost * 0.99) / price
         ava_val, frz_val = self.get(symbol)
         fin_amount = min(req_amount, ava_val)
         if fin_amount < MIN_STAKE_AMOUNT:
