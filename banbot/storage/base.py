@@ -72,12 +72,6 @@ class DBSessionMeta(type):
 
 
 class DBSession(metaclass=DBSessionMeta):
-    _sess = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._sess:
-            cls._sess = super().__new__(cls, *args, **kwargs)
-        return cls._sess
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
         self.token = None
@@ -87,7 +81,6 @@ class DBSession(metaclass=DBSessionMeta):
     def __enter__(self):
         if _db_sess.get() is None:
             self.token = _db_sess.set(_DbSession(**self.session_args))
-            DBSession._sess = self
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -102,11 +95,28 @@ class DBSession(metaclass=DBSessionMeta):
 
         sess.close()
         _db_sess.reset(self.token)
-        DBSession._sess = None
         self.token = None
 
 
-db: DBSessionMeta = DBSession
+class DBSessionOne(DBSession):
+    _sess = None
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._sess:
+            cls._sess = super().__new__(cls, *args, **kwargs)
+        return cls._sess
+
+    def __enter__(self):
+        super(DBSessionOne, self).__enter__()
+        DBSessionOne._sess = self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        super(DBSessionOne, self).__exit__(exc_type, exc_val, exc_tb)
+        DBSessionOne._sess = None
+
+
+# 默认使用单例的DBSessionOne，在Web应用中需要切换为DBSession
+db: DBSessionMeta = DBSessionOne
 
 
 class IntEnum(TypeDecorator):

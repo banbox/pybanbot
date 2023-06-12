@@ -52,6 +52,14 @@ class ExSymbol(BaseDbModel):
         return cls.get(exg_name, symbol).id
 
     @classmethod
+    def search(cls, keyword: str) -> List['ExSymbol']:
+        if not cls._object_map:
+            sess = db.session
+            cls._load_objects(sess)
+        upp_text = keyword.upper()
+        return [item for key, item in cls._object_map.items() if key.find(upp_text) >= 0]
+
+    @classmethod
     async def get_valid_start(cls, exg_name: str, symbol: str, start_ms: int):
         obj = cls.get(exg_name, symbol)
         if not obj.list_dt:

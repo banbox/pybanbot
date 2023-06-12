@@ -6,6 +6,8 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="ban-strategies" />
     <orderEntry type="module" module-name="NostalgiaForInfinity" />
+    <orderEntry type="module" module-name="ban-ui" />
+    <orderEntry type="module" module-name="banweb" />
   </component>
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />

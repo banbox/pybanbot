@@ -19,6 +19,33 @@ def utime(secs: int = 0, as_ms: bool = True):
     return round((time.time() + secs) * multipler)
 
 
+def hash_text(text: str, method: str = None):
+    '''
+    生成文本的哈希值
+    :param text:
+    :param method:
+    :return:
+    '''
+    return hash_data(text.encode(), method)
+
+
+def hash_data(data, method=None):
+    '''
+    生成文件的哈希值
+    :param data:
+    :param method: 计算哈希的方法, md5, sha1(默认)
+    :return:
+    '''
+    import hashlib
+    file_hash = hashlib.new(method if method else 'sha1')
+    step = 4096
+    if hasattr(data, 'encode'):
+        data = data.encode()
+    for i in range(0, len(data), step):
+        file_hash.update(data[i: i + step])
+    return file_hash.hexdigest()
+
+
 async def run_async(func, *args, **kwargs):
     if asyncio.iscoroutinefunction(func):
         return await func(*args, **kwargs)
