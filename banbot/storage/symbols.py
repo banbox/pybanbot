@@ -56,6 +56,8 @@ class ExSymbol(BaseDbModel):
         if not cls._object_map:
             sess = db.session
             cls._load_objects(sess)
+        if not keyword:
+            return [item for key, item in cls._object_map.items()]
         upp_text = keyword.upper()
         return [item for key, item in cls._object_map.items() if key.find(upp_text) >= 0]
 
