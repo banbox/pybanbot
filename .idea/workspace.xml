@@ -13,8 +13,7 @@
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/doc/timescale.md" beforeDir="false" afterPath="$PROJECT_DIR$/doc/timescale.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/readme.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,7 +49,7 @@
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../ban-ui" />
   </component>
   <component name="NamedScopeManager">
     <scope name="banbot" pattern="file[banbot]:*/" />
@@ -396,13 +395,7 @@
       <workItem from="1687310851753" duration="27328000" />
       <workItem from="1687599280575" duration="32000" />
       <workItem from="1687744778191" duration="11464000" />
-    </task>
-    <task id="LOCAL-00046" summary="update">
-      <created>1684420044443</created>
-      <option name="number" value="00046" />
-      <option name="presentableId" value="LOCAL-00046" />
-      <option name="project" value="LOCAL" />
-      <updated>1684420044443</updated>
+      <workItem from="1687759620125" duration="788000" />
     </task>
     <task id="LOCAL-00047" summary="fix bug">
       <created>1684420637150</created>
@@ -740,7 +733,14 @@
       <option name="project" value="LOCAL" />
       <updated>1687753172992</updated>
     </task>
-    <option name="localTasksCounter" value="95" />
+    <task id="LOCAL-00095" summary="update readme">
+      <created>1687759961650</created>
+      <option name="number" value="00095" />
+      <option name="presentableId" value="LOCAL-00095" />
+      <option name="project" value="LOCAL" />
+      <updated>1687759961650</updated>
+    </task>
+    <option name="localTasksCounter" value="96" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
