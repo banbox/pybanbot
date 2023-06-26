@@ -41,17 +41,21 @@ def loop_forever(func):
     return wrap
 
 
+def _fill_credits(exg_args: dict, exg_cfg: dict, run_env: str) -> dict:
+    credit = exg_cfg.get(f'credit_{run_env}')
+    if credit:
+        exg_args['apiKey'] = credit['api_key']
+        exg_args['secret'] = credit['api_secret']
+    return exg_args
+
+
 def _create_exchange(module, cfg: dict):
     exg_cfg = AppConfig.get_exchange(cfg)
     exg_class = getattr(module, exg_cfg['name'])
     run_env = cfg["env"]
-    credit = exg_cfg[f'credit_{run_env}']
     has_proxy = bool(exg_cfg.get('proxies'))
-    exg_args = dict(
-        apiKey=credit['api_key'],
-        secret=credit['api_secret'],
-        trust_env=has_proxy,
-    )
+    exg_args = dict(trust_env=has_proxy)
+    _fill_credits(exg_args, exg_cfg, run_env)
     if exg_cfg.get('options'):
         exg_args['options'] = exg_cfg.get('options')
     exchange = exg_class(exg_args)
@@ -78,14 +82,10 @@ def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.
     if not with_ws:
         return exchange, exchange_async, None
     run_env = cfg["env"]
-    credit = exg_cfg[f'credit_{run_env}']
     exg_class = getattr(ccxtpro, exg_cfg['name'])
-    exchange_ws = exg_class(dict(
-        newUpdates=True,
-        apiKey=credit['api_key'],
-        secret=credit['api_secret'],
-        aiohttp_trust_env=has_proxy
-    ))
+    exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
+    _fill_credits(exg_args, exg_cfg, run_env)
+    exchange_ws = exg_class()
     if run_env == 'test':
         exchange_ws.set_sandbox_mode(True)
     if has_proxy:

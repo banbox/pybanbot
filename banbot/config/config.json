@@ -47,11 +47,6 @@
       "pair_fee_limits": {
         "BTC/TUSD": 0.0
       },
-      "credit_prod": {
-        "api_key": "H3OzezemPSWh6m7K5oVjQy2qCx3aLxsVVofaTjvZqkecvny6S8h2sYURjb03LzCs",
-        "api_secret": "ZGPWcTzSrbA4ZbMy4mBc53gTeh343VevCtO1ibqA1KiAViGoQDXLjgPw8lDrgDzV",
-        "timeout": 3
-      },
       "credit_test": {
         "api_key": "mxOX0YVR08CannOz7fybulf7fCERMH6YnH3H5ugBZ4IngJ8U7gkU2yueGM0tMNzh",
         "api_secret": "GTl6YLfmdwwNvRn9WB4hoscutMBomEh3azwz9kGFNiXKiwEH2zFIblglArsa1uRR",
