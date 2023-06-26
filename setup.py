@@ -26,7 +26,8 @@ setup(
         'redis',
         'hiredis',
         'cachetools',
-        'corpwechatbot'
+        'corpwechatbot',
+        'numpy',
     ],
     extras_require={
         "develop": [

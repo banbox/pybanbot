@@ -18,7 +18,11 @@ CREATE database bantd;
 
 # 部署初始化
 ```shell
-vim /var/lib/pgsql/14/data/postgresql.conf
+# 进入数据库容器
+docker exec -it timescaledb /bin/bash
+# 找到postgresql配置文件
+vim /var/lib/postgresql/data/postgresql.conf
+# vim /var/lib/pgsql/14/data/postgresql.conf
 # 找到timezone和log_timezong，将值修改为UTC
 
 # 进入数据库：
