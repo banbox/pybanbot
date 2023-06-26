@@ -3,7 +3,7 @@
 采用逐bar计算，回测和实盘复用一套策略，回测时一秒执行约5K个bar
 
 # 技术架构、安装部署
-[关于架构选项](doc/sys_structure.md)  
+[关于架构选型](doc/sys_structure.md)  
 [安装时序数据库timescaledb](doc/timescale.md)
 
 # 策略和交易对
