@@ -17,20 +17,27 @@ CREATE database bantd;
 ```
 
 # 部署初始化
+## 修改时区为UTC
 ```shell
 # 进入数据库容器
 docker exec -it timescaledb /bin/bash
-# 找到postgresql配置文件
-vim /var/lib/postgresql/data/postgresql.conf
-# vim /var/lib/pgsql/14/data/postgresql.conf
+# 执行下面命令，检查时区是否为UTC
+# 如果不是docker安装，路径可能为： /var/lib/pgsql/14/data/postgresql.conf
+cat /var/lib/postgresql/data/postgresql.conf|grep timezone
+# 这里应该默认为UTC，如果不是UTC，则按下面修改：
+exit  # 退出容器
+docker cp timescaledb:/var/lib/postgresql/data/postgresql.conf ~/download/postgresql.conf
+vim ~/download/postgresql.conf
 # 找到timezone和log_timezong，将值修改为UTC
+# 将文件复制到容器
+docker cp ~/download/postgresql.conf timescaledb:/var/lib/postgresql/data/postgresql.conf
 
-# 进入数据库：
-psql -U postgres -h localhost
+# 重新加载配置：
+docker exec -it timescaledb psql -U postgres -h localhost
 select pg_reload_conf();
 exit
-
-# 初始化数据库表结构
+```
+## 初始化数据库表结构
+```shell
 python -m banbot dbcmd --force --action=rebuild -c /root/bantd/config.json
-
 ```
