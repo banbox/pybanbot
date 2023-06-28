@@ -24,6 +24,9 @@ class ExSymbol(BaseDbModel):
         records = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
         for r in records:
             rkey = f'{r.exchange}:{r.symbol}:{r.market}'
+            if rkey in cls._object_map:
+                logger.error(f'duplicate symbol found {rkey}, id: {cls._object_map[rkey].id} {r.id}')
+                continue
             detach_obj(sess, r)
             cls._object_map[rkey] = r
 

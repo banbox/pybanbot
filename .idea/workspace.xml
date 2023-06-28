@@ -8,27 +8,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="更新文档">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bug">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/components/kline/chart_pro.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/components/kline/chart_pro.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/components/kline/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/components/kline/types.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/coingecko.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/polygon.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/overlays/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/overlays/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/scripts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/data/signals.csv" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -415,35 +400,7 @@
       <workItem from="1687826046945" duration="8627000" />
       <workItem from="1687835094757" duration="1036000" />
       <workItem from="1687861966359" duration="11226000" />
-      <workItem from="1687910161560" duration="12598000" />
-    </task>
-    <task id="LOCAL-00053" summary="update">
-      <created>1684469244879</created>
-      <option name="number" value="00053" />
-      <option name="presentableId" value="LOCAL-00053" />
-      <option name="project" value="LOCAL" />
-      <updated>1684469244879</updated>
-    </task>
-    <task id="LOCAL-00054" summary="update">
-      <created>1684469420087</created>
-      <option name="number" value="00054" />
-      <option name="presentableId" value="LOCAL-00054" />
-      <option name="project" value="LOCAL" />
-      <updated>1684469420087</updated>
-    </task>
-    <task id="LOCAL-00055" summary="update">
-      <created>1684470101363</created>
-      <option name="number" value="00055" />
-      <option name="presentableId" value="LOCAL-00055" />
-      <option name="project" value="LOCAL" />
-      <updated>1684470101363</updated>
-    </task>
-    <task id="LOCAL-00056" summary="update">
-      <created>1684470922746</created>
-      <option name="number" value="00056" />
-      <option name="presentableId" value="LOCAL-00056" />
-      <option name="project" value="LOCAL" />
-      <updated>1684470922746</updated>
+      <workItem from="1687910161560" duration="15714000" />
     </task>
     <task id="LOCAL-00057" summary="fix bugs">
       <created>1684475465695</created>
@@ -760,7 +717,35 @@
       <option name="project" value="LOCAL" />
       <updated>1687835176027</updated>
     </task>
-    <option name="localTasksCounter" value="102" />
+    <task id="LOCAL-00102" summary="支持交易信号显示">
+      <created>1687925136796</created>
+      <option name="number" value="00102" />
+      <option name="presentableId" value="LOCAL-00102" />
+      <option name="project" value="LOCAL" />
+      <updated>1687925136796</updated>
+    </task>
+    <task id="LOCAL-00103" summary="支持交易信号存储和显示">
+      <created>1687925224024</created>
+      <option name="number" value="00103" />
+      <option name="presentableId" value="LOCAL-00103" />
+      <option name="project" value="LOCAL" />
+      <updated>1687925224024</updated>
+    </task>
+    <task id="LOCAL-00104" summary="fix import error">
+      <created>1687925895955</created>
+      <option name="number" value="00104" />
+      <option name="presentableId" value="LOCAL-00104" />
+      <option name="project" value="LOCAL" />
+      <updated>1687925895955</updated>
+    </task>
+    <task id="LOCAL-00105" summary="fix bug">
+      <created>1687926121851</created>
+      <option name="number" value="00105" />
+      <option name="presentableId" value="LOCAL-00105" />
+      <option name="project" value="LOCAL" />
+      <updated>1687926121851</updated>
+    </task>
+    <option name="localTasksCounter" value="106" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -789,9 +774,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="fix bugs" />
-    <MESSAGE value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
-    <MESSAGE value="完成MACD、ATR等测试和纠正" />
     <MESSAGE value="向量指标和状态指标分开维护" />
     <MESSAGE value="fix bt analysis bug" />
     <MESSAGE value="format ta-inds" />
@@ -803,7 +785,6 @@
     <MESSAGE value="add log" />
     <MESSAGE value="fix filtered by fee" />
     <MESSAGE value="策略进出场返回字典" />
-    <MESSAGE value="fix bug" />
     <MESSAGE value="信号改dict" />
     <MESSAGE value="add support for banweb" />
     <MESSAGE value="update storage/user" />
@@ -814,7 +795,11 @@
     <MESSAGE value="update vite config" />
     <MESSAGE value="fix使用KlineCharts内部未正确导出函数bug" />
     <MESSAGE value="更新文档" />
-    <option name="LAST_COMMIT_MESSAGE" value="更新文档" />
+    <MESSAGE value="支持交易信号显示" />
+    <MESSAGE value="支持交易信号存储和显示" />
+    <MESSAGE value="fix import error" />
+    <MESSAGE value="fix bug" />
+    <option name="LAST_COMMIT_MESSAGE" value="fix bug" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
