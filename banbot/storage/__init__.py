@@ -10,3 +10,4 @@ from banbot.storage.klines import KLine, KHole
 from banbot.storage.orders import Order, InOutOrder, InOutStatus, OrderStatus
 from banbot.storage.symbols import ExSymbol
 from banbot.storage.user_ import DbUser, VIPType
+from banbot.storage.tsignals import TdSignal

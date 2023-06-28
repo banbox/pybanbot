@@ -16,19 +16,20 @@ class ExSymbol(BaseDbModel):
     id = Column(sa.Integer, primary_key=True)
     exchange = Column(sa.String(50))
     symbol = Column(sa.String(20))
+    market = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
 
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):
         records = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
         for r in records:
-            rkey = f'{r.exchange}:{r.symbol}'
+            rkey = f'{r.exchange}:{r.symbol}:{r.market}'
             detach_obj(sess, r)
             cls._object_map[rkey] = r
 
     @classmethod
-    def get(cls, exg_name: str, symbol: str) -> 'ExSymbol':
-        key = f'{exg_name}:{symbol}'
+    def get(cls, exg_name: str, symbol: str, market='spot') -> 'ExSymbol':
+        key = f'{exg_name}:{symbol}:{market}'
         cache_val = cls._object_map.get(key)
         if cache_val:
             return cache_val
@@ -39,17 +40,17 @@ class ExSymbol(BaseDbModel):
         cls._load_objects(sess, old_mid)
         if key in cls._object_map:
             return cls._object_map[key]
-        obj = ExSymbol(exchange=exg_name, symbol=symbol)
+        obj = ExSymbol(exchange=exg_name, symbol=symbol, market=market)
         sess.add(obj)
         sess.commit()
-        logger.info(f'create symbol: {exg_name}:{symbol}, id: {obj.id}')
+        logger.info(f'create symbol: {key}, id: {obj.id}')
         detach_obj(sess, obj)
         cls._object_map[key] = obj
         return obj
 
     @classmethod
-    def get_id(cls, exg_name: str, symbol: str) -> int:
-        return cls.get(exg_name, symbol).id
+    def get_id(cls, exg_name: str, symbol: str, market='spot') -> int:
+        return cls.get(exg_name, symbol, market).id
 
     @classmethod
     def search(cls, keyword: str) -> List['ExSymbol']:
@@ -62,8 +63,8 @@ class ExSymbol(BaseDbModel):
         return [item for key, item in cls._object_map.items() if key.find(upp_text) >= 0]
 
     @classmethod
-    async def get_valid_start(cls, exg_name: str, symbol: str, start_ms: int):
-        obj = cls.get(exg_name, symbol)
+    async def get_valid_start(cls, exg_name: str, symbol: str, start_ms: int, market='spot'):
+        obj = cls.get(exg_name, symbol, market)
         if not obj.list_dt:
             await obj.init_list_dt()
         list_ms = btime.to_utcstamp(obj.list_dt, ms=True, round_int=True)

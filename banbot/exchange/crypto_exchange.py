@@ -239,6 +239,12 @@ class CryptoExchange:
         self.markets = self.api_async.markets
         self.markets_at = time.time()
 
+    def get_market_by_id(self, symbol_id: str):
+        '''
+        传入BTCUSDT，不带/
+        '''
+        return self.api.market(symbol_id)
+
     async def _check_fee_limits(self):
         exg_fees = await self.api_async.fetch_trading_fees()
         for symbol, fee in exg_fees.items():

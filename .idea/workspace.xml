@@ -8,14 +8,27 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="update vite config">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="更新文档">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/nuxt.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/nuxt.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/components/kline/chart_pro.vue" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/components/kline/chart_pro.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/components/kline/types.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/components/kline/types.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/coingecko.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/polygon.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/overlays/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/overlays/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/doc/timescale.md" beforeDir="false" afterPath="$PROJECT_DIR$/doc/timescale.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/readme.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/scripts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/data/signals.csv" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,7 +64,7 @@
     </option>
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../ban-ui" />
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../banweb" />
   </component>
   <component name="NamedScopeManager">
     <scope name="banbot" pattern="file[banbot]:*/" />
@@ -72,7 +85,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/trade/ban-ui/composables/kline&quot;,
+    &quot;last_opened_file_path&quot;: &quot;E:/trade/banweb/banweb/data&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;run.code.analysis.last.selected.profile&quot;: &quot;ppython&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;sshConsole&quot;,
@@ -82,11 +95,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\trade\banweb\banweb\data" />
       <recent name="E:\trade\ban-ui\composables\kline" />
       <recent name="E:\trade\banweb" />
       <recent name="E:\trade\ban-ui\assets\klinefonts" />
       <recent name="E:\trade\banbot\banbot\config" />
-      <recent name="E:\trade\banbot\banbot\compute" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="E:\trade\ban-ui\public\fonts" />
@@ -96,7 +109,7 @@
       <recent name="E:\trade\ban-ui\components\kline" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.banweb">
+  <component name="RunManager" selected="Python.ban_dbcmd">
     <configuration name="ban_backtest" type="PythonConfigurationType" factoryName="Python">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -133,7 +146,7 @@
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="SCRIPT_NAME" value="banbot" />
-      <option name="PARAMETERS" value="dbcmd --table=khole --force --action=rebuild -c E:\trade\banbot\banbot\config\config.json" />
+      <option name="PARAMETERS" value="dbcmd --table=tdsignal --force --action=rebuild -c E:\trade\banbot\banbot\config\config.json" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="true" />
@@ -400,20 +413,9 @@
       <workItem from="1687759620125" duration="2916000" />
       <workItem from="1687775779174" duration="1715000" />
       <workItem from="1687826046945" duration="8627000" />
-    </task>
-    <task id="LOCAL-00051" summary="fix 订单和miner bug">
-      <created>1684466434332</created>
-      <option name="number" value="00051" />
-      <option name="presentableId" value="LOCAL-00051" />
-      <option name="project" value="LOCAL" />
-      <updated>1684466434332</updated>
-    </task>
-    <task id="LOCAL-00052" summary="fix bug">
-      <created>1684467614400</created>
-      <option name="number" value="00052" />
-      <option name="presentableId" value="LOCAL-00052" />
-      <option name="project" value="LOCAL" />
-      <updated>1684467614400</updated>
+      <workItem from="1687835094757" duration="1036000" />
+      <workItem from="1687861966359" duration="11226000" />
+      <workItem from="1687910161560" duration="12598000" />
     </task>
     <task id="LOCAL-00053" summary="update">
       <created>1684469244879</created>
@@ -744,7 +746,21 @@
       <option name="project" value="LOCAL" />
       <updated>1687780191268</updated>
     </task>
-    <option name="localTasksCounter" value="100" />
+    <task id="LOCAL-00100" summary="fix使用KlineCharts内部未正确导出函数bug">
+      <created>1687835152365</created>
+      <option name="number" value="00100" />
+      <option name="presentableId" value="LOCAL-00100" />
+      <option name="project" value="LOCAL" />
+      <updated>1687835152366</updated>
+    </task>
+    <task id="LOCAL-00101" summary="更新文档">
+      <created>1687835176027</created>
+      <option name="number" value="00101" />
+      <option name="presentableId" value="LOCAL-00101" />
+      <option name="project" value="LOCAL" />
+      <updated>1687835176027</updated>
+    </task>
+    <option name="localTasksCounter" value="102" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -773,8 +789,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="fix order not save" />
-    <MESSAGE value="update script" />
     <MESSAGE value="fix bugs" />
     <MESSAGE value="状态指标实现优化&#10;引入MyTT作为指标开发对比参考&#10;实现KDJ指标，优化EMA等指标" />
     <MESSAGE value="完成MACD、ATR等测试和纠正" />
@@ -798,7 +812,9 @@
     <MESSAGE value="update config.json" />
     <MESSAGE value="update" />
     <MESSAGE value="update vite config" />
-    <option name="LAST_COMMIT_MESSAGE" value="update vite config" />
+    <MESSAGE value="fix使用KlineCharts内部未正确导出函数bug" />
+    <MESSAGE value="更新文档" />
+    <option name="LAST_COMMIT_MESSAGE" value="更新文档" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -852,7 +868,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/banbot$__main__.coverage" NAME="banweb Coverage Results" MODIFIED="1686542653226" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
-    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1687833312458" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
+    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1687923874676" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1684505849929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
@@ -862,7 +878,7 @@
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$tools.coverage" NAME="tools Coverage Results" MODIFIED="1684329607458" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/data" />
     <SUITE FILE_PATH="coverage/banbot$plot.coverage" NAME="plot Coverage Results" MODIFIED="1683542689405" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
-    <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1683863857336" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
+    <SUITE FILE_PATH="coverage/banbot$ban_dbcmd.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1687923315104" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$bt_analysis.coverage" NAME="bt_analysis Coverage Results" MODIFIED="1683531465427" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/banbot/optmize" />
     <SUITE FILE_PATH="coverage/banbot$ban_trade.coverage" NAME="ban_trade Coverage Results" MODIFIED="1685362087139" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$test_redis_pub.coverage" NAME="test_redis_pub Coverage Results" MODIFIED="1683008758714" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
