@@ -31,7 +31,9 @@ class ExSymbol(BaseDbModel):
         for r in records:
             rkey = f'{r.exchange}:{r.symbol}:{r.market}'
             if rkey in cls._object_map:
-                logger.error(f'duplicate symbol found {rkey}, id: {cls._object_map[rkey].id} {r.id}')
+                old_id = cls._object_map[rkey].id
+                if old_id != r.id:
+                    logger.error(f'duplicate symbol found {rkey}, id: {old_id} {r.id}')
                 continue
             detach_obj(sess, r)
             cls._object_map[rkey] = r
@@ -42,13 +44,11 @@ class ExSymbol(BaseDbModel):
         cache_val = cls._object_map.get(key)
         if cache_val:
             return cache_val
-        old_mid = 0
-        if cls._object_map:
-            old_mid = max(list(map(lambda x: x.id, cls._object_map.values())))
         sess = db.session
-        cls._load_objects(sess, old_mid)
+        cls._load_objects(sess)
         if key in cls._object_map:
             return cls._object_map[key]
+        logger.info(f'{key} not found in cache, create new, cache: {cls._object_map.keys()}')
         obj = ExSymbol(exchange=exg_name, symbol=symbol, market=market)
         sess.add(obj)
         sess.commit()

@@ -8,31 +8,12 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bug">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="print signal">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../ban-ui/composables/kline/datafeeds/my.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../ban_data/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/../ban_data/config.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/appconfig.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/config.full.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.full.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/feeder.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/feeder.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/data/tools.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/tools.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/main/od_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/od_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/optmize/bt_analysis.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pair_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/symbols/pairlist/static_pairlist.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/symbols/pairlist/static_pairlist.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/readme.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/test_ohlcvs.py" beforeDir="false" afterPath="$PROJECT_DIR$/test/test_ohlcvs.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/kline.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/business/kline_biz.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -421,28 +402,7 @@
       <workItem from="1687861966359" duration="11226000" />
       <workItem from="1687910161560" duration="16479000" />
       <workItem from="1687949165988" duration="7530000" />
-      <workItem from="1687997210610" duration="6567000" />
-    </task>
-    <task id="LOCAL-00058" summary="fix bugs">
-      <created>1684476612804</created>
-      <option name="number" value="00058" />
-      <option name="presentableId" value="LOCAL-00058" />
-      <option name="project" value="LOCAL" />
-      <updated>1684476612804</updated>
-    </task>
-    <task id="LOCAL-00059" summary="fix bugs">
-      <created>1684479638111</created>
-      <option name="number" value="00059" />
-      <option name="presentableId" value="LOCAL-00059" />
-      <option name="project" value="LOCAL" />
-      <updated>1684479638111</updated>
-    </task>
-    <task id="LOCAL-00060" summary="fix bugs">
-      <created>1684486829564</created>
-      <option name="number" value="00060" />
-      <option name="presentableId" value="LOCAL-00060" />
-      <option name="project" value="LOCAL" />
-      <updated>1684486829564</updated>
+      <workItem from="1687997210610" duration="8481000" />
     </task>
     <task id="LOCAL-00061" summary="fix bugs">
       <created>1684490403684</created>
@@ -766,7 +726,28 @@
       <option name="project" value="LOCAL" />
       <updated>1687927831882</updated>
     </task>
-    <option name="localTasksCounter" value="107" />
+    <task id="LOCAL-00107" summary="支持单币种多市场数据管理、下载">
+      <created>1688003965098</created>
+      <option name="number" value="00107" />
+      <option name="presentableId" value="LOCAL-00107" />
+      <option name="project" value="LOCAL" />
+      <updated>1688003965098</updated>
+    </task>
+    <task id="LOCAL-00108" summary="change default symbol for future">
+      <created>1688004001514</created>
+      <option name="number" value="00108" />
+      <option name="presentableId" value="LOCAL-00108" />
+      <option name="project" value="LOCAL" />
+      <updated>1688004001514</updated>
+    </task>
+    <task id="LOCAL-00109" summary="print signal">
+      <created>1688005768349</created>
+      <option name="number" value="00109" />
+      <option name="presentableId" value="LOCAL-00109" />
+      <option name="project" value="LOCAL" />
+      <updated>1688005768349</updated>
+    </task>
+    <option name="localTasksCounter" value="110" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -795,9 +776,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="向量指标和状态指标分开维护" />
-    <MESSAGE value="fix bt analysis bug" />
-    <MESSAGE value="format ta-inds" />
     <MESSAGE value="性能优化" />
     <MESSAGE value="MACDCross调优" />
     <MESSAGE value="支持回测时不记录到数据库" />
@@ -820,7 +798,10 @@
     <MESSAGE value="支持交易信号存储和显示" />
     <MESSAGE value="fix import error" />
     <MESSAGE value="fix bug" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bug" />
+    <MESSAGE value="支持单币种多市场数据管理、下载" />
+    <MESSAGE value="change default symbol for future" />
+    <MESSAGE value="print signal" />
+    <option name="LAST_COMMIT_MESSAGE" value="print signal" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
