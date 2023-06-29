@@ -76,14 +76,15 @@ class BTAnalysis:
             return BTAnalysis(**data)
 
     def load_df(self, start_ms: int = None, stop_ms: int = None):
-        from banbot.storage import KLine
+        from banbot.storage import KLine, ExSymbol
         from banbot.data import KCols
         pair, timeframe = self.result['pair'], self.result['timeframe']
         if not start_ms:
             start_ms = self.result['ts_from']
         if not stop_ms:
             stop_ms = self.result['ts_to']
-        candles = KLine.query('binance', pair, timeframe, start_ms, stop_ms + 1)
+        exs = ExSymbol.get('binance', pair)
+        candles = KLine.query(exs, timeframe, start_ms, stop_ms + 1)
         df = pd.DataFrame(candles, columns=KCols)
         df['date'] = df['date'].astype(np.int64)
         return df

@@ -463,7 +463,8 @@ class LiveOrderManager(OrderManager):
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
             # 取过去5m数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
-            his_ohlcvs = await auto_fetch_ohlcv(self.exchange, pair, '1m', limit=5)
+            exs = ExSymbol.get(self.exchange.name, pair, self.exchange.market_type)
+            his_ohlcvs = await auto_fetch_ohlcv(self.exchange, exs, '1m', limit=5)
             vol_arr = np.array(his_ohlcvs)[:, vcol]
             if not vol_secs:
                 vol_secs = self.limit_vol_secs

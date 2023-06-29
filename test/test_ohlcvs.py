@@ -16,7 +16,8 @@ async def test_down():
     start_ms, stop_ms = 1684490340000, 1684490400000
     symbol, timeframe = 'BTC/TUSD', '1m'
     arr = await fetch_api_ohlcv(exg, symbol, timeframe, start_ms, stop_ms)
-    KLine.insert(exg.name, symbol, timeframe, arr)
+    sid = ExSymbol.get_id(exg.name, symbol, exg.market_type)
+    KLine.insert(sid, timeframe, arr)
     print(arr)
 
 

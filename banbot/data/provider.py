@@ -184,12 +184,13 @@ class LiveDataProvider(DataProvider):
                 arg_list = tf_arg_list[tf]
                 await bulk_ohlcv_do(exg, pairs, tf, arg_list, ohlcv_cb)
         if new_holds:
+            market = self.config['market_type']
             for hold in new_holds:
                 sub_tf = hold.states[0].timeframe
                 since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
-                args = [self.exg_name, hold.pair, sub_tf, since]
+                args = [self.exg_name, hold.pair, market, sub_tf, since]
                 job_list.append(SpiderJob('watch_ohlcv', *args))
-                await self.conn.subscribe(f'{self.exg_name}_{hold.pair}')
+                await self.conn.subscribe(f'{self.exg_name}_{market}_{hold.pair}')
         # 发送消息给爬虫，实时抓取数据
         await LiveSpider.send(*job_list)
 
@@ -201,9 +202,10 @@ class LiveDataProvider(DataProvider):
         removed = super(LiveDataProvider, self).unsub_pairs(pairs)
         if not removed:
             return
+        market = self.config['market_type']
         for hold in removed:
-            await self.conn.unsubscribe(f'{self.exg_name}_{hold.pair}')
-        await LiveSpider.send(SpiderJob('unwatch_pairs', self.exg_name, pairs))
+            await self.conn.unsubscribe(f'{self.exg_name}_{market}_{hold.pair}')
+        await LiveSpider.send(SpiderJob('unwatch_pairs', self.exg_name, market, pairs))
 
     @classmethod
     def _on_ohlcv_msg(cls, msg: dict):

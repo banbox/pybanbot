@@ -114,9 +114,10 @@ class AppConfig(metaclass=Singleton):
         return AppConfig.get_exchange(self.config)
 
     @classmethod
-    def get_exchange(cls, config: Config):
+    def get_exchange(cls, config: Config, exg_name: str = None):
         exchange_all = config['exchange']
-        exg_name = exchange_all['name']
+        if not exg_name:
+            exg_name = exchange_all['name']
         result = exchange_all[exg_name]
         result['name'] = exg_name
         result.update(exchange_all.get('common', dict()))

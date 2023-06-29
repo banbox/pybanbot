@@ -10,7 +10,7 @@ class StaticPairList(PairList):
     def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
         super(StaticPairList, self).__init__(manager, exchange, config, handler_cfg)
-        self.exg_pairs = AppConfig.get_exchange(config).get('pair_whitelist')
+        self.exg_pairs = exchange.exg_config.get('pair_whitelist')
         assert self.exg_pairs, '`pair_whitelist` is requied in exchange for StaticPairList'
 
     async def gen_pairlist(self, tickers: Tickers) -> List[str]:

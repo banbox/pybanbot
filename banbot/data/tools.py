@@ -10,6 +10,8 @@ from banbot.config.consts import *
 from banbot.config.timerange import TimeRange
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
+from banbot.exchange.crypto_exchange import CryptoExchange
+from banbot.storage.symbols import ExSymbol
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
@@ -196,7 +198,8 @@ def load_data_range_from_bt(btres: dict):
     )
 
 
-async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, show_info: bool = True):
+async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, start_ms: int, end_ms: int,
+                          show_info: bool = True):
     '''
     按给定时间段下载交易对的K线数据。
     :param exchange:
@@ -238,7 +241,7 @@ async def fetch_api_ohlcv(exchange, pair: str, timeframe: str, start_ms: int, en
     return result[:end_pos + 1]
 
 
-async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
+async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
                          allow_lack: float = 0.):
     '''
     从交易所下载K线数据到数据库。
@@ -246,37 +249,36 @@ async def download_to_db(exchange, pair: str, timeframe: str, start_ms: int, end
     '''
     if timeframe not in {'1m', '1h'}:
         raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
-    exg_name = exchange.name
-    from banbot.storage import KLine, ExSymbol, KHole
-    start_ms = await ExSymbol.get_valid_start(exg_name, pair, start_ms)
-    start_ms, end_ms = KHole.get_down_range(exg_name, pair, timeframe, start_ms, end_ms)
+    from banbot.storage import KLine, KHole
+    start_ms = await exs.get_valid_start(start_ms)
+    start_ms, end_ms = KHole.get_down_range(exs, timeframe, start_ms, end_ms)
     if not start_ms:
         return
     if check_exist:
-        old_start, old_end = KLine.query_range(exg_name, pair, timeframe)
+        old_start, old_end = KLine.query_range(exs.id, timeframe)
         if old_start and old_end > old_start:
             if start_ms < old_start:
                 # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
                 cur_end = round(old_start)
-                predata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, cur_end)
-                KLine.insert(exg_name, pair, timeframe, predata)
-                KLine.log_candles_conts(exg_name, pair, timeframe, start_ms, cur_end, predata)
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end)
+                KLine.insert(exs.id, timeframe, predata)
+                KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
                 if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
                     # 最新部分缺失的较少，不再请求交易所，节省时间
                     return
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-                predata = await fetch_api_ohlcv(exchange, pair, timeframe, old_end, end_ms)
-                KLine.insert(exg_name, pair, timeframe, predata)
-                KLine.log_candles_conts(exg_name, pair, timeframe, old_end, end_ms, predata)
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms)
+                KLine.insert(exs.id, timeframe, predata)
+                KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
                 return
             else:
                 # 要下载的数据全部存在，直接退出
                 return
-    newdata = await fetch_api_ohlcv(exchange, pair, timeframe, start_ms, end_ms)
-    KLine.insert(exg_name, pair, timeframe, newdata, check_exist)
-    KLine.log_candles_conts(exg_name, pair, timeframe, start_ms, end_ms, newdata)
+    newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms)
+    KLine.insert(exs.id, timeframe, newdata, check_exist)
+    KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
@@ -305,14 +307,14 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
     df.to_feather(data_path, compression='lz4')
 
 
-async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Optional[int] = None,
+async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
                            allow_lack: float = 0.):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
     :param exchange:
-    :param pair:
+    :param exs:
     :param timeframe:
     :param start_ms: 毫秒
     :param end_ms: 毫秒
@@ -329,11 +331,11 @@ async def auto_fetch_ohlcv(exchange, pair: str, timeframe: str, start_ms: Option
         start_ms = end_ms - tf_msecs * limit
     start_ms = start_ms // tf_msecs * tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
-    await download_to_db(exchange, pair, down_tf, start_ms, end_ms, allow_lack=allow_lack)
-    return KLine.query(exchange.name, pair, timeframe, start_ms, end_ms)
+    await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack)
+    return KLine.query(exs, timeframe, start_ms, end_ms)
 
 
-async def bulk_ohlcv_do(exg, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],
+async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],
                         callback: Callable):
     '''
     批量下载并处理K线数据。
@@ -344,12 +346,16 @@ async def bulk_ohlcv_do(exg, symbols: List[str], timeframe: str, kwargs: Union[d
     :param callback: 获得K线数据后回调处理函数，接受参数：ohlcv_arr, symbol, timeframe, **kwargs
     '''
     from banbot.util.misc import parallel_jobs
+    from banbot.storage import db
     if isinstance(kwargs, dict):
         kwargs = [kwargs] * len(symbols)
-    for rid in range(0, len(symbols), MAX_CONC_OHLCV):
+    sess = db.session
+    fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
+    exs_list = sess.query(ExSymbol).filter(*fts).all()
+    for rid in range(0, len(exs_list), MAX_CONC_OHLCV):
         # 批量下载，提升效率
-        batch = symbols[rid: rid + MAX_CONC_OHLCV]
-        args_list = [((exg, pair, timeframe), kwargs[rid + i]) for i, pair in enumerate(batch)]
+        batch = exs_list[rid: rid + MAX_CONC_OHLCV]
+        args_list = [((exg, exs, timeframe), kwargs[rid + i]) for i, exs in enumerate(batch)]
         task_iter = parallel_jobs(auto_fetch_ohlcv, args_list)
         for f in task_iter:
             res = await f

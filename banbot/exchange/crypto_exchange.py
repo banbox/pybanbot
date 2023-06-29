@@ -13,12 +13,17 @@ from ccxt import TICK_SIZE
 
 from banbot.config.appconfig import AppConfig
 from banbot.data.tools import *
-from banbot.storage.orders import Order
 from banbot.util.misc import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
 exg_map: Dict[str, 'CryptoExchange'] = dict()
+exg_fut_map: Dict[str, str] = dict(
+    binance='binanceusdm',
+    kraken='krakenfutures',
+    kucoin='kucoinfutures',
+    poloniex='poloniexfutures'
+)
 
 
 def loop_forever(func):
@@ -49,9 +54,14 @@ def _fill_credits(exg_args: dict, exg_cfg: dict, run_env: str) -> dict:
     return exg_args
 
 
-def _create_exchange(module, cfg: dict):
-    exg_cfg = AppConfig.get_exchange(cfg)
-    exg_class = getattr(module, exg_cfg['name'])
+def _create_exchange(module, cfg: dict, exg_name: str = None, market_type: str = None):
+    exg_cfg = AppConfig.get_exchange(cfg, exg_name)
+    exg_name = exg_cfg['name']
+    if not market_type:
+        market_type = cfg['market_type']
+    if market_type == 'future':
+        exg_name = exg_fut_map.get(exg_name) or exg_name
+    exg_class = getattr(module, exg_name)
     run_env = cfg["env"]
     has_proxy = bool(exg_cfg.get('proxies'))
     exg_args = dict(trust_env=has_proxy)
@@ -68,8 +78,10 @@ def _create_exchange(module, cfg: dict):
     return exchange
 
 
-def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
-    exg_cfg = AppConfig.get_exchange(cfg)
+def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
+        -> Tuple[ccxt.Exchange, ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
+    exg_cfg = AppConfig.get_exchange(cfg, exg_name)
+    exg_name = exg_cfg['name']
     has_proxy = bool(exg_cfg.get('proxies'))
     if has_proxy:
         os.environ['HTTP_PROXY'] = exg_cfg['proxies']['http']
@@ -77,12 +89,12 @@ def _init_exchange(cfg: dict, with_ws=False) -> Tuple[ccxt.Exchange, ccxt_async.
         os.environ['WS_PROXY'] = exg_cfg['proxies']['http']
         os.environ['WSS_PROXY'] = exg_cfg['proxies']['http']
         logger.warning("[PROXY] %s", exg_cfg['proxies'])
-    exchange = _create_exchange(ccxt, cfg)
-    exchange_async = _create_exchange(ccxt_async, cfg)
+    exchange = _create_exchange(ccxt, cfg, exg_name, market_type)
+    exchange_async = _create_exchange(ccxt_async, cfg, exg_name, market_type)
     if not with_ws:
         return exchange, exchange_async, None
     run_env = cfg["env"]
-    exg_class = getattr(ccxtpro, exg_cfg['name'])
+    exg_class = getattr(ccxtpro, exg_name)
     exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
     _fill_credits(exg_args, exg_cfg, run_env)
     exchange_ws = exg_class()
@@ -189,12 +201,13 @@ class CryptoExchange:
     }
     _ft_has_futures: Dict = {}
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, exg_name: str = None, market_type: str = None):
         self.config = config
-        self.api, self.api_async, self.api_ws = _init_exchange(config, True)
+        self.api, self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
+        self.exg_config = AppConfig.get_exchange(config, exg_name)
         self.name = self.api.name.lower()
         self.bot_name = config.get('name', 'noname')
-        self.trade_mode = config.get('trade_mode')
+        self.market_type = market_type or config.get('market_type')
         self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
@@ -203,7 +216,7 @@ class CryptoExchange:
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = time.time() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
-        self.pair_fee_limits = AppConfig.get_exchange(config).get('pair_fee_limits') or dict()
+        self.pair_fee_limits = self.exg_config.get('pair_fee_limits') or dict()
         self.conti_error = 0
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
@@ -289,7 +302,7 @@ class CryptoExchange:
             market.get('quote') is not None
             and market.get('base') is not None
             and (self.precisionMode != TICK_SIZE or market.get('precision', {}).get('price', 0) > 1e-11)
-            and bool(market.get(self.trade_mode))
+            and bool(market.get(self.market_type))
         )
 
     def market_is_future(self, market: Dict[str, Any]) -> bool:
@@ -547,19 +560,17 @@ class CryptoExchange:
         return self.name
 
 
-def get_exchange(name: Optional[str] = None) -> CryptoExchange:
+def get_exchange(name: Optional[str] = None, market: str = None) -> CryptoExchange:
     '''
     获取交易所实例，全局缓存
     '''
+    config = AppConfig.get()
     if name is None:
-        config = AppConfig.get()
         name = config['exchange']['name']
-        if name not in exg_map:
-            exg_map[name] = CryptoExchange(config)
-    elif name not in exg_map:
-        config = AppConfig.get()
-        bak_exg_name = config['exchange']['name']
-        config['exchange']['name'] = name
-        exg_map[name] = CryptoExchange(config)
-        config['exchange']['name'] = bak_exg_name
-    return exg_map[name]
+    if not market:
+        market = config['market_type']
+    cache_key = f'{name}.{market}'
+    if cache_key not in exg_map:
+        logger.warning(f'No Cache Exchange, Create For {cache_key}')
+        exg_map[cache_key] = CryptoExchange(config, name, market)
+    return exg_map[cache_key]

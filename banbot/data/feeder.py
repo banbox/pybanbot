@@ -174,10 +174,14 @@ class FileDataFeeder(HistDataFeeder):
 class DBDataFeeder(HistDataFeeder):
 
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
-                 timerange: Optional[TimeRange] = None):
+                 timerange: Optional[TimeRange] = None, market: str = None):
         super(DBDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self._offset_ts = int(self.timerange.startts * 1000)
-        self.exg_name = AppConfig.get()['exchange']['name']
+        app_config = AppConfig.get()
+        exg_name = app_config['exchange']['name']
+        if not market:
+            market = app_config['market_type']
+        self.exs = ExSymbol.get(exg_name, self.pair, market)
         self._batch_size = 3000
         self._row_id = 0
         self._cache_arr = []
@@ -185,16 +189,16 @@ class DBDataFeeder(HistDataFeeder):
 
     async def down_if_need(self):
         from banbot.storage import KLine
-        exg = get_exchange(self.exg_name)
+        exg = get_exchange(self.exs.exchange, self.exs.market)
         down_tf = KLine.get_down_tf(self.states[0].timeframe)
         start_ms = int(self.timerange.startts * 1000)
         end = int(self.timerange.stopts * 1000)
-        await download_to_db(exg, self.pair, down_tf, start_ms, end)
+        await download_to_db(exg, self.exs, down_tf, start_ms, end)
 
     def _calc_total(self):
         from banbot.storage import KLine
         state = self.states[0]
-        start_ts, stop_ts = KLine.query_range(self.exg_name, self.pair, state.timeframe)
+        start_ts, stop_ts = KLine.query_range(self.exs.id, state.timeframe)
         if start_ts and stop_ts:
             vstart = max(start_ts, int(self.timerange.startts * 1000))
             vend = min(stop_ts, int(self.timerange.stopts * 1000))
@@ -211,7 +215,7 @@ class DBDataFeeder(HistDataFeeder):
             from banbot.storage import KLine
             end = int(self.timerange.stopts * 1000)
             min_tf = self.states[0].timeframe
-            self._cache_arr = KLine.query(self.exg_name, self.pair, min_tf, self._offset_ts, end, self._batch_size)
+            self._cache_arr = KLine.query(self.exs, min_tf, self._offset_ts, end, self._batch_size)
             self._row_id = 0
             if not self._cache_arr:
                 self.total_len = self.row_id
@@ -237,9 +241,9 @@ class LiveDataFeader(DBDataFeeder):
     通过redis检查此交易对是否已在监听刷新，如没有则发消息给爬虫监听。
     '''
 
-    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable):
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, market: str = None):
         # 实盘数据的auto_prefire在爬虫端进行。
-        super(LiveDataFeader, self).__init__(pair, tf_warms, callback)
+        super(LiveDataFeader, self).__init__(pair, tf_warms, callback, market=market)
 
 
 

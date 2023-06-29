@@ -10,6 +10,7 @@ from typing import Callable, Tuple, ClassVar
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
 from banbot.util import btime
+from banbot.storage.symbols import ExSymbol
 
 
 class BarAgg:
@@ -142,14 +143,6 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
                 conn.execute(sa.text(f"drop table if exists {tbl.tbl}"))
 
     @classmethod
-    def _get_sid(cls, exg_name: str, symbol: Union[str, int]):
-        sid = symbol
-        if isinstance(symbol, six.string_types):
-            from banbot.storage.symbols import ExSymbol
-            sid = ExSymbol.get_id(exg_name, symbol)
-        return sid
-
-    @classmethod
     def _query_hyper(cls, sid: int, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable]):
         conn = db.session.connection()
         if timeframe in cls.agg_map:
@@ -177,7 +170,7 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             return conn.execute(sa.text(stmt))
 
     @classmethod
-    def query(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
+    def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
               limit: Optional[int] = None):
         tf_secs = tf_to_secs(timeframe)
         max_end_ms = end_ms
@@ -201,11 +194,10 @@ order by time'''
                 group by time
                 order by time'''
 
-        sid = cls._get_sid(exg_name, pair)
-        rows = cls._query_hyper(sid, timeframe, dct_sql, gen_gp_sql).fetchall()
+        rows = cls._query_hyper(exs.id, timeframe, dct_sql, gen_gp_sql).fetchall()
         rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_secs * 1000:
-            rows = cls.query(exg_name, pair, timeframe, end_ms, max_end_ms, limit)
+            rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
         return rows
 
     @classmethod
@@ -243,9 +235,8 @@ group by 1'''
         return min_time, max_time
 
     @classmethod
-    def query_range(cls, exg_name: str, symbol: Union[str, int], timeframe: str)\
+    def query_range(cls, sid: int, timeframe: str)\
             -> Tuple[Optional[int], Optional[int]]:
-        sid = cls._get_sid(exg_name, symbol)
         cache_key = sid, timeframe
         cache_val = cls._sid_range_map.get(cache_key)
         if not cache_val:
@@ -289,7 +280,7 @@ group by 1'''
         return '1m'
 
     @classmethod
-    def insert(cls, exg_name: str, pair: str, timeframe: str, rows: List[Tuple], skip_in_range=True):
+    def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True):
         if not rows:
             return
         if timeframe not in {'1m', '1h'}:
@@ -301,9 +292,8 @@ group by 1'''
             row_intv = rows[1][0] - rows[0][0]
             if row_intv != intv_msecs:
                 raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
-        sid = cls._get_sid(exg_name, pair)
         start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
-        old_start, old_stop = cls.query_range(exg_name, sid, timeframe)
+        old_start, old_stop = cls.query_range(sid, timeframe)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
             if old_stop < start_ms or end_ms < old_start:
@@ -330,7 +320,7 @@ group by 1'''
             sess.execute(sa.text(insert_sql), ins_rows)
         except Exception as e:
             if str(e).find('not supported on compressed chunks') >= 0:
-                logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} {exg_name} {pair} {start_ms}-{end_ms}")
+                logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} sid:{sid} {start_ms}-{end_ms}")
             else:
                 raise
         sess.commit()
@@ -406,7 +396,7 @@ group by 1'''
         # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
         start_ms = (start_ms // tf_msecs - 1) * tf_msecs
         end_ms = end_ms // tf_msecs * tf_msecs
-        old_start, old_end = cls.query_range('bnb', sid, tbl.tf)
+        old_start, old_end = cls.query_range(sid, tbl.tf)
         if old_start and old_end > old_start:
             # 避免出现空洞或数据错误
             start_ms = min(start_ms, old_end)
@@ -435,7 +425,7 @@ ORDER BY sid, 2'''
             logger.error(f'refresh conti agg error: {e}, {tbl.tf}')
 
     @classmethod
-    def log_candles_conts(cls, exg_name: str, pair: str, timeframe: str, start_ms: int, end_ms: int, candles: list):
+    def log_candles_conts(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, candles: list):
         '''
         检查下载的蜡烛数据是否连续，如不连续记录到khole中
         '''
@@ -459,13 +449,13 @@ ORDER BY sid, 2'''
                 if cur_intv > tf_msecs:
                     holes.append((prev_date + tf_msecs, row[0]))
                 elif cur_intv < tf_msecs:
-                    logger.warning(f'invalid kline interval: {cur_intv:.3f}, {exg_name}/{pair}/{timeframe}')
+                    logger.warning(f'invalid kline interval: {cur_intv:.3f}, {exs}/{timeframe}')
                 prev_date = row[0]
             if prev_date != end_ms:
                 holes.append((prev_date + tf_msecs, until_ms))
         if not holes:
             return
-        sid = cls._get_sid(exg_name, pair)
+        sid = exs.id
         holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
         holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
         sess = db.session
@@ -548,20 +538,20 @@ ORDER BY sid, 2'''
             if not res_holes:
                 continue
             stf: ExSymbol = sess.query(ExSymbol).get(sid)
-            exchange = get_exchange(stf.exchange)
+            exchange = get_exchange(stf.exchange, stf.market)
             for hole in res_holes:
                 start_dt, end_dt = btime.to_datestr(hole[0]), btime.to_datestr(hole[1])
                 logger.warning(f'filling hole: {stf.symbol}, {start_dt} - {end_dt}')
                 start_ms = btime.to_utcstamp(hole[0], True, True)
                 end_ms = btime.to_utcstamp(hole[1], True, True)
-                sub_arr = cls.query(exchange.name, stf.symbol, down_tf, start_ms, end_ms)
+                sub_arr = cls.query(stf, down_tf, start_ms, end_ms)
                 true_len = (end_ms - start_ms) // down_tfsecs // 1000
                 if true_len == len(sub_arr):
                     # 子维度周期数据存在，直接归集更新
                     cls._refresh_agg(sess, cls.agg_map[timeframe], sid, start_ms, end_ms, f'kline_{down_tf}')
                 else:
                     logger.info(f'db sub tf {down_tf} not enough {len(sub_arr)} < {true_len}, downloading..')
-                    await download_to_db(exchange, stf.symbol, down_tf, start_ms, end_ms, check_exist=False)
+                    await download_to_db(exchange, stf, down_tf, start_ms, end_ms, check_exist=False)
 
     @classmethod
     async def fill_holes(cls):
@@ -664,13 +654,11 @@ class KHole(BaseDbModel):
     stop = Column(sa.DateTime)  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
 
     @classmethod
-    def get_down_range(cls, exg_name: str, symbol: str, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
-        from banbot.storage.symbols import ExSymbol
-        sid = ExSymbol.get_id(exg_name, symbol)
+    def get_down_range(cls, exs: ExSymbol, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
         sess = db.session
         start = btime.to_datetime(start_ms)
         stop = btime.to_datetime(stop_ms)
-        fts = [KHole.sid == sid, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]
+        fts = [KHole.sid == exs.id, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]
         holes: List[KHole] = sess.query(KHole).filter(*fts).order_by(KHole.start).all()
         start, stop = get_unknown_range(start, stop, holes)
         if start >= stop:

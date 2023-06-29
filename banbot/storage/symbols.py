@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 
-from typing import ClassVar
+from typing import ClassVar,Tuple
 
 from banbot.storage.base import *
 
@@ -18,6 +18,12 @@ class ExSymbol(BaseDbModel):
     symbol = Column(sa.String(20))
     market = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
+
+    def __str__(self):
+        return f'{self.exchange}:{self.symbol}:{self.market}'
+
+    def __repr__(self):
+        return f'{self.exchange}:{self.symbol}:{self.market}'
 
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):
@@ -65,12 +71,10 @@ class ExSymbol(BaseDbModel):
         upp_text = keyword.upper()
         return [item for key, item in cls._object_map.items() if key.find(upp_text) >= 0]
 
-    @classmethod
-    async def get_valid_start(cls, exg_name: str, symbol: str, start_ms: int, market='spot'):
-        obj = cls.get(exg_name, symbol, market)
-        if not obj.list_dt:
-            await obj.init_list_dt()
-        list_ms = btime.to_utcstamp(obj.list_dt, ms=True, round_int=True)
+    async def get_valid_start(self, start_ms: int):
+        if not self.list_dt:
+            await self.init_list_dt()
+        list_ms = btime.to_utcstamp(self.list_dt, ms=True, round_int=True)
         start_ms = max(list_ms, start_ms)
         return start_ms
 
@@ -81,8 +85,8 @@ class ExSymbol(BaseDbModel):
         inst: ExSymbol = sess.query(ExSymbol).get(self.id)
         if not inst.list_dt:
             from banbot.exchange.crypto_exchange import get_exchange
-            exchange = get_exchange(self.exchange)
-            candles = await exchange.fetch_ohlcv(self.symbol, '1s', 1325376000, limit=10)
+            exchange = get_exchange(self.exchange, inst.market)
+            candles = await exchange.fetch_ohlcv(self.symbol, '1m', 1325376000, limit=10)
             if not candles:
                 logger.warning(f'no candles found for {self.exchange}/{self.symbol}')
                 return
@@ -105,3 +109,16 @@ class ExSymbol(BaseDbModel):
         cost = time.monotonic() - start
         if cost > 0.5:
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
+
+
+def get_symbol_market(symbol_com: str) -> Tuple[str, str]:
+    symbol, market = symbol_com, 'spot'
+    split_id = symbol_com.rfind('.')
+    if split_id > 0:
+        market_short = symbol_com[split_id + 1:]
+        if market_short == 'P':
+            market = 'future'
+        elif market_short:
+            logger.error(f'unknown market type: {market_short} {symbol_com}')
+        symbol = symbol_com[:split_id]
+    return symbol, market

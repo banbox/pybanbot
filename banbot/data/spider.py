@@ -47,7 +47,7 @@ async def down_pairs_by_config(config: Config):
     根据配置文件和解析的命令行参数，下载交易对数据（到数据库或文件）
     此方法由命令行调用。
     '''
-    from banbot.storage.klines import KLine
+    from banbot.storage.klines import KLine, db
     await KLine.fill_holes()
     pairs = config['pairs']
     timerange = config['timerange']
@@ -66,9 +66,13 @@ async def down_pairs_by_config(config: Config):
         if tf not in {'1m', '1h'}:
             logger.error(f'can only download kline: 1m or 1h, current: {tf}')
             return
-        for pair in pairs:
-            pair = await download_to_db(exchange, pair, tf, start_ms, end_ms)
-            logger.warning(f'{pair}/{tf} down {tr_text} complete')
+        sess = db.session
+        fts = [ExSymbol.exchange == exchange.name, ExSymbol.symbol.in_(set(pairs)),
+               ExSymbol.market == exchange.market_type]
+        exs_list = sess.query(ExSymbol).filter(*fts).all()
+        for exs in exs_list:
+            await download_to_db(exchange, exs, tf, start_ms, end_ms)
+            logger.warning(f'{exs}/{tf} down {tr_text} complete')
     else:
         data_dir = config['data_dir']
         if not os.path.isdir(data_dir):
@@ -151,9 +155,9 @@ class LiveMiner(Watcher):
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
     一个LiveMiner对应一个交易所。处理此交易所下所有数据的监听
     '''
-    def __init__(self, exg_name):
+    def __init__(self, exg_name: str, market: str):
         super(LiveMiner, self).__init__(self._on_bar_finish)
-        self.exchange = get_exchange(exg_name)
+        self.exchange = get_exchange(exg_name, market)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
 
@@ -194,7 +198,8 @@ class LiveMiner(Watcher):
 
     def _on_bar_finish(self, pair: str, timeframe: str, bar_row: Tuple):
         from banbot.storage import KLine
-        KLine.insert(self.exchange.name, pair, timeframe, [bar_row])
+        sid = ExSymbol.get_id(self.exchange.name, pair, self.exchange.market_type)
+        KLine.insert(sid, timeframe, [bar_row])
 
     async def _try_update(self, job: MinerJob):
         import ccxt
@@ -223,7 +228,7 @@ class LiveMiner(Watcher):
             # 发布小间隔数据到redis订阅方
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
             async with AsyncRedis() as redis:
-                await redis.publish(f'{self.exchange.name}_{job.pair}', sre_data)
+                await redis.publish(f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}', sre_data)
         except ccxt.NetworkError:
             logger.exception(f'get live data exception: {job.pair} {job.tf_secs}')
 
@@ -284,16 +289,18 @@ class LiveSpider:
             await self.redis.set(self._key, expire_time=5)
             await asyncio.sleep(4)
 
-    async def watch_ohlcv(self, exg_name: str, pair: str, timeframe: str, since: Optional[int] = None):
-        miner = self.miners.get(exg_name)
+    async def watch_ohlcv(self, exg_name: str, pair: str, market: str, timeframe: str, since: Optional[int] = None):
+        cache_key = f'{exg_name}:{market}'
+        miner = self.miners.get(cache_key)
         if not miner:
-            miner = LiveMiner(exg_name)
-            self.miners[exg_name] = miner
+            miner = LiveMiner(exg_name, market)
+            self.miners[cache_key] = miner
             asyncio.create_task(miner.run())
         miner.sub_pair(pair, timeframe, since)
 
-    async def unwatch_pairs(self, exg_name: str, pairs: List[str]):
-        miner = self.miners.get(exg_name)
+    async def unwatch_pairs(self, exg_name: str, market: str, pairs: List[str]):
+        cache_key = f'{exg_name}:{market}'
+        miner = self.miners.get(cache_key)
         if not miner or not pairs:
             return
         for p in pairs:

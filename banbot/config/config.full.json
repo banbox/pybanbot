@@ -2,7 +2,7 @@
   "name": "ayj",
   "env": "prod",
   "run_mode": "dry_run",
-  "trade_mode": "spot",
+  "market_type": "future",
   "prefire": false,
   "quote_base": "USDT",
   "stake_amount": 1000,

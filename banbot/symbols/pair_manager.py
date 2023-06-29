@@ -21,11 +21,10 @@ class PairManager:
     def __init__(self, config: Config, exchange: CryptoExchange):
         self.exchange = exchange
         self.config = config
-        self.trade_mode = config.get('trade_mode') or 'spot'
+        self.market_type = config.get('market_type') or 'spot'
         self.stake_currency: Set[str] = set(config.get('stake_currency') or [])
-        exg_cfg = AppConfig.get_exchange(config)
-        self._whitelist = exg_cfg.get('pair_whitelist')
-        self._blacklist = exg_cfg.get('pair_blacklist', [])
+        self._whitelist = exchange.exg_config.get('pair_whitelist')
+        self._blacklist = exchange.exg_config.get('pair_blacklist', [])
         self.handlers = PairResolver.load_handlers(exchange, self, config)
         if not self.handlers:
             raise RuntimeError('no pairlist defined')
@@ -71,7 +70,7 @@ class PairManager:
     def avaiable_symbols(self) -> Set[str]:
         if self._ava_symbols and time.time() - self._ava_at < 300:
             return self._ava_symbols
-        ava_markets = self.exchange.get_markets(quote_currs=self.stake_currency, trade_modes=[self.trade_mode])
+        ava_markets = self.exchange.get_markets(quote_currs=self.stake_currency, trade_modes=[self.market_type])
         all_symbols = list(ava_markets.keys())
         self._ava_symbols = set(self.verify_blacklist(all_symbols))
         self._ava_at = time.time()
