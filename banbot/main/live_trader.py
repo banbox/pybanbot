@@ -77,7 +77,7 @@ class LiveTrader(Trader):
 
     async def _start_tasks(self):
         # 监听实时数据推送
-        self._run_tasks.append(asyncio.create_task(LiveDataProvider.watch_ohlcvs()))
+        self._run_tasks.append(asyncio.create_task(LiveDataProvider.run()))
         # 定期刷新交易对
         self._run_tasks.append(asyncio.create_task(self.loop_refresh_pairs()))
         if btime.prod_mode():

@@ -163,6 +163,9 @@ class LiveMiner(Watcher):
 
     def sub_pair(self, pair: str, timeframe: str, since: int = None):
         save_tf, check_intv = MinerJob.get_tf_intv(timeframe)
+        if self.exchange.market_type == 'future':
+            # 期货市场最低维度是1m
+            check_intv = max(check_intv, 60.)
         job = self.jobs.get(pair)
         if job and job.timeframe == save_tf:
             fmt_args = [self.exchange.name, pair, job.check_intv, check_intv]
@@ -205,14 +208,16 @@ class LiveMiner(Watcher):
         import ccxt
         from banbot.storage import db
         try:
-            job.next_run = time.time() + job.check_intv
-            next_bar = job.next_run // job.tf_secs * job.tf_secs
+            next_time = time.time() + job.check_intv
+            next_bar = next_time // job.tf_secs * job.tf_secs
+            job.next_run = next_bar + job.check_intv * 0.07
             if job.wait_bar and next_bar > job.wait_bar[0] // 1000:
                 # 当下次轮询会有新的完成数据时，尽可能在第一时间更新
                 job.next_run = next_bar
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
+                job.next_run -= job.check_intv * 0.9
                 return
             job.since = ohlcvs_sml[-1][0] + job.fetch_tfsecs * 1000
             if job.tf_secs > job.fetch_tfsecs:
@@ -228,9 +233,10 @@ class LiveMiner(Watcher):
             # 发布小间隔数据到redis订阅方
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
             async with AsyncRedis() as redis:
-                await redis.publish(f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}', sre_data)
-        except ccxt.NetworkError:
-            logger.exception(f'get live data exception: {job.pair} {job.tf_secs}')
+                pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
+                await redis.publish(pub_key, sre_data)
+        except (ccxt.NetworkError, ccxt.BadRequest):
+            logger.exception(f'get live data exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
 
 
 class SpiderJob:

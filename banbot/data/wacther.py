@@ -3,7 +3,7 @@
 # File  : wacther.py
 # Author: anyongjin
 # Date  : 2023/4/30
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Optional
 
 from banbot.storage import BotGlobal
 from banbot.util import btime
@@ -50,3 +50,72 @@ class Watcher:
             if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
                 logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)
+
+
+class WatchParam:
+    def __init__(self, exchange: str, symbol: str, market: str, timeframe: str = None, since: int = None):
+        self.exchange = exchange
+        self.symbol = symbol
+        self.market = market
+        self.timeframe = timeframe
+        self.since = since
+
+
+class KlineLiveConsumer:
+    '''
+    这是通用的从爬虫端监听K线数据的消费者端。
+    用于：
+    机器人的实时数据反馈：LiveDataProvider
+    网站端实时K线推送：KlineMonitor
+    '''
+    _obj: Optional['KlineLiveConsumer'] = None
+
+    def __init__(self):
+        from banbot.util.redis_helper import AsyncRedis
+        self.redis = AsyncRedis()
+        self.conn = self.redis.pubsub()
+
+    async def watch_klines(self, *jobs: WatchParam):
+        from banbot.data.spider import LiveSpider, SpiderJob
+        job_list = []
+        for job in jobs:
+            args = [job.exchange, job.symbol, job.market, job.timeframe, job.since]
+            job_list.append(SpiderJob('watch_ohlcv', *args))
+            await self.conn.subscribe(f'{job.exchange}_{job.market}_{job.symbol}')
+        # 发送消息给爬虫，实时抓取数据
+        await LiveSpider.send(*job_list)
+
+    async def unwatch_klines(self, *jobs: WatchParam):
+        from banbot.data.spider import LiveSpider, SpiderJob
+        cache_key, symbol_list = (None, None), []
+        for job in jobs:
+            await self.conn.unsubscribe(f'{job.exchange}_{job.market}_{job.symbol}')
+            cur_key = job.exchange, job.market
+            if symbol_list and cache_key != cur_key:
+                await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
+                symbol_list = []
+            cache_key = cur_key
+            symbol_list.append(job.symbol)
+        if symbol_list:
+            await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
+
+    @classmethod
+    async def run(cls):
+        import orjson
+        assert cls._obj, '`KlineLiveConsumer` is not initialized yet!'
+        logger.info(f'start watching ohlcvs from {cls.__name__}...')
+        # 监听个假的，防止立刻退出
+        await cls._obj.conn.unsubscribe('fake')
+        async for msg in cls._obj.conn.listen():
+            if msg['type'] != 'message':
+                continue
+            try:
+                exg_name, market, pair = msg['channel'].decode().split('_')
+                ohlc_arr, fetch_tfsecs = orjson.loads(msg['data'])
+                cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs)
+            except Exception:
+                logger.exception(f'handle live ohlcv listen error: {msg}')
+
+    @classmethod
+    def _on_ohlcv_msg(cls, exg_name, market, pair, ohlc_arr, fetch_tfsecs):
+        raise NotImplementedError

@@ -8,12 +8,20 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="print signal">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="更新图标">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/provider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/provider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/spider.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/spider.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/data/wacther.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/data/wacther.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/exchange/crypto_exchange.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/main/live_trader.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/main/live_trader.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/banbot/storage/symbols.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/symbols.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/__main__.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/__main__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/banweb/api/web.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/api/web.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -70,7 +78,7 @@
     &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
-    &quot;last_opened_file_path&quot;: &quot;E:/trade/banweb/banweb/data&quot;,
+    &quot;last_opened_file_path&quot;: &quot;E:/trade/ban-ui/public&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;run.code.analysis.last.selected.profile&quot;: &quot;ppython&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;sshConsole&quot;,
@@ -80,11 +88,11 @@
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="E:\trade\ban-ui\public" />
       <recent name="E:\trade\banweb\banweb\data" />
       <recent name="E:\trade\ban-ui\composables\kline" />
       <recent name="E:\trade\banweb" />
       <recent name="E:\trade\ban-ui\assets\klinefonts" />
-      <recent name="E:\trade\banbot\banbot\config" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
       <recent name="E:\trade\ban-ui\public\fonts" />
@@ -249,18 +257,18 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="Python tests for test_rsi.test_kdj" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
+    <configuration name="Python tests for test_common.test_shapes" type="tests" factoryName="Autodetect" temporary="true" nameIsGenerated="true">
       <module name="banbot" />
       <option name="INTERPRETER_OPTIONS" value="" />
       <option name="PARENT_ENVS" value="true" />
       <option name="SDK_HOME" value="" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/test/tainds" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/test" />
       <option name="IS_MODULE_SDK" value="true" />
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
       <option name="_new_additionalArguments" value="&quot;&quot;" />
-      <option name="_new_target" value="&quot;test_rsi.test_kdj&quot;" />
+      <option name="_new_target" value="&quot;test_common.test_shapes&quot;" />
       <option name="_new_targetType" value="&quot;PYTHON&quot;" />
       <method v="2" />
     </configuration>
@@ -302,17 +310,17 @@
       <item itemvalue="Python.ban_od_compare" />
       <item itemvalue="Python.banweb" />
       <item itemvalue="Python.simplify_NFIX" />
+      <item itemvalue="Python tests.Python tests for test_common.test_shapes" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
       <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
-      <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
     </list>
     <recent_temporary>
       <list>
         <item itemvalue="Python.banweb" />
+        <item itemvalue="Python tests.Python tests for test_common.test_shapes" />
         <item itemvalue="Python.simplify_NFIX" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_rma" />
         <item itemvalue="Python tests.Python tests for test_rsi.test_macd" />
-        <item itemvalue="Python tests.Python tests for test_rsi.test_kdj" />
       </list>
     </recent_temporary>
   </component>
@@ -402,28 +410,9 @@
       <workItem from="1687861966359" duration="11226000" />
       <workItem from="1687910161560" duration="16479000" />
       <workItem from="1687949165988" duration="7530000" />
-      <workItem from="1687997210610" duration="8481000" />
-    </task>
-    <task id="LOCAL-00061" summary="fix bugs">
-      <created>1684490403684</created>
-      <option name="number" value="00061" />
-      <option name="presentableId" value="LOCAL-00061" />
-      <option name="project" value="LOCAL" />
-      <updated>1684490403684</updated>
-    </task>
-    <task id="LOCAL-00062" summary="解决新添加的symbol调用get_id时报错问题。添加后解除关联，回到暂存状态">
-      <created>1684492666507</created>
-      <option name="number" value="00062" />
-      <option name="presentableId" value="LOCAL-00062" />
-      <option name="project" value="LOCAL" />
-      <updated>1684492666507</updated>
-    </task>
-    <task id="LOCAL-00063" summary="fix 数据归集时偶发个别丢失">
-      <created>1684506431949</created>
-      <option name="number" value="00063" />
-      <option name="presentableId" value="LOCAL-00063" />
-      <option name="project" value="LOCAL" />
-      <updated>1684506431949</updated>
+      <workItem from="1687997210610" duration="14123000" />
+      <workItem from="1688034724712" duration="5793000" />
+      <workItem from="1688081837892" duration="17652000" />
     </task>
     <task id="LOCAL-00064" summary="fix bugs">
       <created>1684507315536</created>
@@ -747,7 +736,28 @@
       <option name="project" value="LOCAL" />
       <updated>1688005768349</updated>
     </task>
-    <option name="localTasksCounter" value="110" />
+    <task id="LOCAL-00110" summary="fix bug">
+      <created>1688006446304</created>
+      <option name="number" value="00110" />
+      <option name="presentableId" value="LOCAL-00110" />
+      <option name="project" value="LOCAL" />
+      <updated>1688006446304</updated>
+    </task>
+    <task id="LOCAL-00111" summary="fix：切换周期后覆盖物未删除">
+      <created>1688008016707</created>
+      <option name="number" value="00111" />
+      <option name="presentableId" value="LOCAL-00111" />
+      <option name="project" value="LOCAL" />
+      <updated>1688008016707</updated>
+    </task>
+    <task id="LOCAL-00112" summary="更新图标">
+      <created>1688010340933</created>
+      <option name="number" value="00112" />
+      <option name="presentableId" value="LOCAL-00112" />
+      <option name="project" value="LOCAL" />
+      <updated>1688010340933</updated>
+    </task>
+    <option name="localTasksCounter" value="113" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -776,8 +786,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="性能优化" />
-    <MESSAGE value="MACDCross调优" />
     <MESSAGE value="支持回测时不记录到数据库" />
     <MESSAGE value="启动时输出策略和交易对" />
     <MESSAGE value="add log info" />
@@ -797,11 +805,13 @@
     <MESSAGE value="支持交易信号显示" />
     <MESSAGE value="支持交易信号存储和显示" />
     <MESSAGE value="fix import error" />
-    <MESSAGE value="fix bug" />
     <MESSAGE value="支持单币种多市场数据管理、下载" />
     <MESSAGE value="change default symbol for future" />
     <MESSAGE value="print signal" />
-    <option name="LAST_COMMIT_MESSAGE" value="print signal" />
+    <MESSAGE value="fix bug" />
+    <MESSAGE value="fix：切换周期后覆盖物未删除" />
+    <MESSAGE value="更新图标" />
+    <option name="LAST_COMMIT_MESSAGE" value="更新图标" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -852,7 +862,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/banbot/exchange/crypto_exchange.py</url>
-          <line>573</line>
+          <line>577</line>
           <option name="timeStamp" value="146" />
         </line-breakpoint>
       </breakpoints>
@@ -860,11 +870,11 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/banbot$__main__.coverage" NAME="banweb Coverage Results" MODIFIED="1686542653226" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
-    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1688003766004" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
+    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1688099954745" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1684505849929" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
-    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1684828825924" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test/tainds" />
+    <SUITE FILE_PATH="coverage/banbot$.coverage" NAME=" Coverage Results" MODIFIED="1688087053629" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_util.coverage" NAME="test_util Coverage Results" MODIFIED="1684391451728" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$ban_down.coverage" NAME="ban_down Coverage Results" MODIFIED="1684464398964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$ban_od_compare.coverage" NAME="ban_od_compare Coverage Results" MODIFIED="1683516142217" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />

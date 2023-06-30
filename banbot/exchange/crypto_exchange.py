@@ -9,11 +9,14 @@ import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import orjson
 import six
+import os
 from ccxt import TICK_SIZE
 
 from banbot.config.appconfig import AppConfig
-from banbot.data.tools import *
 from banbot.util.misc import *
+from banbot.util.common import logger
+from banbot.config.consts import *
+from banbot.exchange.exchange_utils import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
@@ -205,7 +208,7 @@ class CryptoExchange:
         self.config = config
         self.api, self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
         self.exg_config = AppConfig.get_exchange(config, exg_name)
-        self.name = self.api.name.lower()
+        self.name = self.exg_config['name']
         self.bot_name = config.get('name', 'noname')
         self.market_type = market_type or config.get('market_type')
         self.quote_prices: Dict[str, float] = dict()
@@ -468,6 +471,7 @@ class CryptoExchange:
         :param force_sub: 是否强制使用更细粒度的时间帧，即使当前时间帧支持
         :return:
         '''
+        from banbot.data.tools import build_ohlcvc
         if (not force_sub or timeframe == '1s') and timeframe in self.api.timeframes:
             return await self.api_async.fetch_ohlcv(pair, timeframe, since=since, limit=limit)
         sub_tf, sub_tf_secs = max_sub_timeframe(self.api.timeframes.keys(), timeframe, force_sub)

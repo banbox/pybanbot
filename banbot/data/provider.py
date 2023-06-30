@@ -140,23 +140,25 @@ class DBDataProvider(HistDataProvider):
         )
 
 
-class LiveDataProvider(DataProvider):
+class LiveDataProvider(DataProvider, KlineLiveConsumer):
+    '''
+    这是用于交易机器人的实时数据提供器。
+    会根据需要预热一部分数据。
+    '''
     feed_cls = LiveDataFeader
     _obj: Optional['LiveDataProvider'] = None
 
     def __init__(self, config: Config, callback: Callable):
-        super(LiveDataProvider, self).__init__(config, callback)
-        from banbot.util.redis_helper import AsyncRedis
-        self.redis = AsyncRedis()
-        self.conn = self.redis.pubsub()
+        DataProvider.__init__(self, config, callback)
+        KlineLiveConsumer.__init__(self)
         LiveDataProvider._obj = self
 
     async def sub_warm_pairs(self, pairs: Dict[str, Dict[str, int]]):
+        from banbot.data.tools import bulk_ohlcv_do
         new_holds, warm_jobs = super(LiveDataProvider, self).sub_pairs(pairs)
         if not new_holds and not warm_jobs:
             return
-        from banbot.data.spider import LiveSpider, SpiderJob
-        job_list, since_map = [], dict()
+        since_map = dict()
         if warm_jobs:
             tf_symbols: Dict[str, List[str]] = dict()
             tf_arg_list: Dict[str, List[dict]] = dict()
@@ -185,50 +187,32 @@ class LiveDataProvider(DataProvider):
                 await bulk_ohlcv_do(exg, pairs, tf, arg_list, ohlcv_cb)
         if new_holds:
             market = self.config['market_type']
+            watch_jobs = []
             for hold in new_holds:
                 sub_tf = hold.states[0].timeframe
                 since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
-                args = [self.exg_name, hold.pair, market, sub_tf, since]
-                job_list.append(SpiderJob('watch_ohlcv', *args))
-                await self.conn.subscribe(f'{self.exg_name}_{market}_{hold.pair}')
-        # 发送消息给爬虫，实时抓取数据
-        await LiveSpider.send(*job_list)
+                watch_jobs.append(WatchParam(self.exg_name, hold.pair, market, sub_tf, since))
+            # 发送消息给爬虫，实时抓取数据
+            await self.watch_klines(*watch_jobs)
 
     async def unsub_pairs(self, pairs: List[str]):
         '''
         取消订阅交易对数据
         '''
-        from banbot.data.spider import LiveSpider, SpiderJob
         removed = super(LiveDataProvider, self).unsub_pairs(pairs)
         if not removed:
             return
         market = self.config['market_type']
-        for hold in removed:
-            await self.conn.unsubscribe(f'{self.exg_name}_{market}_{hold.pair}')
-        await LiveSpider.send(SpiderJob('unwatch_pairs', self.exg_name, market, pairs))
+        jobs = [WatchParam(self.exg_name, market, hold.pair) for hold in removed]
+        await self.unwatch_klines(*jobs)
 
     @classmethod
-    def _on_ohlcv_msg(cls, msg: dict):
-        exg_name, pair = msg['channel'].decode().split('_')
-        # logger.debug('get ohlcv msg: %s', msg)
+    def _on_ohlcv_msg(cls, exg_name, market, pair, ohlc_arr, fetch_tfsecs):
         if exg_name != cls._obj.exg_name:
             logger.error(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
             return
-        ohlc_arr, fetch_tfsecs = orjson.loads(msg['data'])
         hold = next((sta for sta in cls._obj.holders if sta.pair == pair), None)
         if not hold:
             logger.error(f'receive pair ohlcv not found: {pair}')
             return
         hold.on_new_data(ohlc_arr, fetch_tfsecs)
-
-    @classmethod
-    async def watch_ohlcvs(cls):
-        assert cls._obj, '`LiveDataProvider` is not initialized yet!'
-        logger.info('start watching ohlcvs from spider...')
-        async for msg in cls._obj.conn.listen():
-            if msg['type'] != 'message':
-                continue
-            try:
-                cls._on_ohlcv_msg(msg)
-            except Exception:
-                logger.exception(f'handle live ohlcv listen error: {msg}')

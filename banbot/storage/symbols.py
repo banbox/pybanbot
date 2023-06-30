@@ -48,7 +48,7 @@ class ExSymbol(BaseDbModel):
         cls._load_objects(sess)
         if key in cls._object_map:
             return cls._object_map[key]
-        logger.info(f'{key} not found in cache, create new, cache: {cls._object_map.keys()}')
+        # logger.info(f'{key} not found in cache, create new, cache: {cls._object_map.keys()}')
         obj = ExSymbol(exchange=exg_name, symbol=symbol, market=market)
         sess.add(obj)
         sess.commit()
@@ -121,4 +121,8 @@ def get_symbol_market(symbol_com: str) -> Tuple[str, str]:
         elif market_short:
             logger.error(f'unknown market type: {market_short} {symbol_com}')
         symbol = symbol_com[:split_id]
+        if market == 'future':
+            # 期货市场的交易对，都以：结尾控制
+            a, b = symbol.split('/')
+            symbol += ':' + b
     return symbol, market
