@@ -3,10 +3,11 @@
 # File  : symbols.py
 # Author: anyongjin
 # Date  : 2023/4/24
-
+import re
 from typing import ClassVar,Tuple
 
 from banbot.storage.base import *
+re_symbol = re.compile(r'^(\w+)/(\w+)(([:.])(\S+))?')
 
 
 class ExSymbol(BaseDbModel):
@@ -15,9 +16,28 @@ class ExSymbol(BaseDbModel):
 
     id = Column(sa.Integer, primary_key=True)
     exchange = Column(sa.String(50))
-    symbol = Column(sa.String(20))
+    symbol = Column(sa.String(20))  # BTC/USDT  BTC/USDT:USDT  BTC/USDT:USDT-230630
     market = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
+
+    def client_dict(self) -> dict:
+        short_name = self.symbol
+        mat = re_symbol.search(short_name)
+        base_s, quote_s, spliter, suffix = mat.group(1), mat.group(2), mat.group(4), mat.group(5)
+        if suffix and spliter == ':':
+            if quote_s == suffix:
+                # 后缀和定价币相同，是永续合约
+                short_name = f'{base_s}/{quote_s}.P'
+            elif suffix.startswith(quote_s):
+                # 后缀包含定价币，是短时合约  BTC/USDT:USDT-230630
+                clean_sx = suffix[len(quote_s):].strip('-')
+                if clean_sx:
+                    short_name = f'{base_s}/{quote_s}.{clean_sx}'
+            elif suffix:
+                logger.warning(f'unknown symbol format: {self.symbol}')
+        data = self.dict()
+        data['short_name'] = short_name
+        return data
 
     def __str__(self):
         return f'{self.exchange}:{self.symbol}:{self.market}'
@@ -111,18 +131,21 @@ class ExSymbol(BaseDbModel):
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
 
 
-def get_symbol_market(symbol_com: str) -> Tuple[str, str]:
-    symbol, market = symbol_com, 'spot'
-    split_id = symbol_com.rfind('.')
-    if split_id > 0:
-        market_short = symbol_com[split_id + 1:]
-        if market_short == 'P':
-            market = 'future'
-        elif market_short:
-            logger.error(f'unknown market type: {market_short} {symbol_com}')
-        symbol = symbol_com[:split_id]
-        if market == 'future':
-            # 期货市场的交易对，都以：结尾控制
-            a, b = symbol.split('/')
-            symbol += ':' + b
+def get_symbol_market(symbol_short: str) -> Tuple[str, str]:
+    '''
+    根据传入的symbol，解析得到正式使用的symbol和market
+    :param symbol_short: 可以是short_name，也可以是完整的symbol
+    '''
+    symbol, market = symbol_short, 'spot'
+    mat = re_symbol.search(symbol_short)
+    base_s, quote_s, spliter, suffix = mat.group(1), mat.group(2), mat.group(4), mat.group(5)
+    if suffix:
+        # 带后缀的，默认是期货
+        market = 'future'
+    if suffix and spliter == '.':
+        # 分隔符是.表示是short_name
+        symbol = f'{base_s}/{quote_s}:{quote_s}'
+        if suffix != 'P':
+            # 非永续合约，带上后缀
+            symbol += '-' + suffix
     return symbol, market
