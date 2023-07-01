@@ -31,19 +31,9 @@
     {"name": "NoFeeDown", "max_pair": 1, "max_fee": 0.0}
   ],
   "add_config_files": [],
-  "data_dir": "E:\\trade\\ban_data",
-  "database": {
-    "url": "postgresql://postgres:123@[127.0.0.1]:5432/bantd",
-    "retention": "all"
-  },
-  "redis_url": "redis://:Fwe9G32gvV@zhizi-pub.redis.rds.aliyuncs.com:6379/2",
   "exchange": {
     "name": "binance",
     "binance": {
-      "proxies": {
-        "http": "http://127.0.0.1:10808",
-        "https": "http://127.0.0.1:10808"
-      },
       "pair_fee_limits": {
         "BTC/TUSD": 0.0
       },
