@@ -420,7 +420,11 @@ class CryptoExchange:
         if cut_end:
             tf_msecs = tf_to_secs(timeframe) * 1000
             cur_time = btime.utcstamp()
-            params['endTime'] = (cur_time // tf_msecs - 1) * tf_msecs
+            max_end_ts = (cur_time // tf_msecs - 1) * tf_msecs
+            if since and since > max_end_ts:
+                # 避免开始时间>结束时间，接口返回错误
+                return []
+            params['endTime'] = max_end_ts
         return await self.api_async.fetch_ohlcv(symbol, timeframe, since, limit, params)
 
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
