@@ -188,11 +188,11 @@ order by time'''
 
         def gen_gp_sql():
             return f'''
-                select (extract(epoch from time_bucket('{timeframe}', time)) * 1000)::float AS time,
+                select (extract(epoch from time_bucket('{timeframe}', time)) * 1000)::float AS gtime,
                   {cls._candle_agg} from {{tbl}}
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
-                group by time
-                order by time'''
+                group by gtime
+                order by gtime'''
 
         rows = cls._query_hyper(exs.id, timeframe, dct_sql, gen_gp_sql).fetchall()
         rows = [list(r) for r in rows]
