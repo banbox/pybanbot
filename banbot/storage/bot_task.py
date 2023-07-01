@@ -39,7 +39,7 @@ class BotTask(BaseDbModel):
         if config.get('no_db'):
             assert not live_mode, '`no_db` not avaiable in live mode!'
             # 数据不写入到数据库
-            ctime = btime.to_datetime(time.time())
+            ctime = btime.now()
             task = BotTask(id=-1, mode=rmode, create_at=ctime, stg_hash=BotGlobal.stg_hash)
             cls.obj = task
             cls.cur_id = -1
@@ -50,7 +50,7 @@ class BotTask(BaseDbModel):
         task = sess.query(BotTask).filter(*where_list).order_by(BotTask.create_at.desc()).first()
         if not task or not live_mode:
             # 非实盘模式下，不可重复使用一个任务，否则可能同一时刻多个完全相同的订单
-            ctime = btime.to_datetime(time.time())
+            ctime = btime.now()
             task = BotTask(mode=rmode, create_at=ctime, stg_hash=BotGlobal.stg_hash)
             if live_mode:
                 task.start_at = ctime

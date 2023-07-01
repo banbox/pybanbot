@@ -20,14 +20,29 @@ run_mode = RunMode.DRY_RUN
 cur_timestamp = 0
 
 
+def utctime() -> float:
+    '''
+    获取秒级的UTC时间戳，浮点类型。
+    time.time()和datetime.datetime.now(datetime.timezone.utc).timestamp()都可以获取UTC的毫秒时间戳。
+    但后者精度略高些
+    '''
+    return datetime.datetime.now(datetime.timezone.utc).timestamp()
+
+
+def utcstamp() -> int:
+    '''
+    获取毫秒级UTC时间戳，整数类型
+    '''
+    stamp = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    return int(stamp * 1000)
+
+
 def time() -> float:
     global cur_timestamp
     if run_mode in LIVE_MODES:
-        import time
-        return time.time()
+        return utctime()
     elif not cur_timestamp:
-        import time
-        cur_timestamp = time.time()
+        cur_timestamp = utctime()
     return cur_timestamp
 
 
@@ -37,7 +52,7 @@ def time_ms() -> int:
 
 def now():
     if run_mode in LIVE_MODES:
-        return datetime.datetime.now()
+        return datetime.datetime.now(datetime.timezone.utc)
     return datetime.datetime.utcfromtimestamp(cur_timestamp)
 
 
@@ -52,7 +67,9 @@ def to_datetime(timestamp: float = None):
 
 def to_utcstamp(dt, ms=False, round_int=False) -> Union[int, float]:
     if isinstance(dt, datetime.datetime):
-        stamp = dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+        if dt.tzinfo != datetime.timezone.utc:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        stamp = dt.timestamp()
     elif isinstance(dt, (int, float)):
         stamp = dt
     else:

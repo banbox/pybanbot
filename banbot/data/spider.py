@@ -53,7 +53,7 @@ async def down_pairs_by_config(config: Config):
     timerange = config['timerange']
     start_ms = round(timerange.startts * 1000)
     end_ms = round(timerange.stopts * 1000)
-    cur_ms = round(time.time() * 1000)
+    cur_ms = btime.utcstamp()
     end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
     exchange = get_exchange()
     timeframes = config['timeframes']
@@ -135,7 +135,7 @@ class MinerJob(PairTFCache):
         self.check_intv = check_intv
         self.fetch_tf = '1s' if self.check_intv < 60 else '1m'
         self.fetch_tfsecs = tf_to_secs(self.fetch_tf)
-        self.since = int(since) if since else int(time.time() // tf_secs * 1000)
+        self.since = int(since) if since else int(btime.utctime() // tf_secs * 1000)
         self.next_run = self.since / 1000
 
     @classmethod
@@ -189,7 +189,8 @@ class LiveMiner(Watcher):
                 if not self.jobs:
                     await asyncio.sleep(1)
                     continue
-                batch_jobs = [v for k, v in self.jobs.items() if v.next_run <= time.time()]
+                cur_time = btime.utctime()
+                batch_jobs = [v for k, v in self.jobs.items() if v.next_run <= cur_time]
                 if not batch_jobs:
                     await asyncio.sleep(self.loop_intv)
                     continue
@@ -208,7 +209,7 @@ class LiveMiner(Watcher):
         import ccxt
         from banbot.storage import db
         try:
-            next_time = time.time() + job.check_intv
+            next_time = btime.utctime() + job.check_intv
             next_bar = next_time // job.tf_secs * job.tf_secs
             job.next_run = next_bar + job.check_intv * 0.07
             if job.wait_bar and next_bar > job.wait_bar[0] // 1000:

@@ -12,13 +12,17 @@ from banbot.config import AppConfig
 async def test_down():
     from banbot.exchange.crypto_exchange import get_exchange
     from banbot.storage import KLine
-    exg = get_exchange('binance')
-    start_ms, stop_ms = 1684490340000, 1684490400000
-    symbol, timeframe = 'BTC/TUSD', '1m'
+    exg = get_exchange('binance', 'future')
+    symbol, timeframe = 'BTC/USDT:USDT', '1m'
+    tf_msecs = tf_to_secs(timeframe) * 1000
+    stop_ms = btime.utcstamp()
+    start_ms = stop_ms - tf_msecs * 3
     arr = await fetch_api_ohlcv(exg, symbol, timeframe, start_ms, stop_ms)
-    sid = ExSymbol.get_id(exg.name, symbol, exg.market_type)
-    KLine.insert(sid, timeframe, arr)
-    print(arr)
+    # sid = ExSymbol.get_id(exg.name, symbol, exg.market_type)
+    # KLine.insert(sid, timeframe, arr)
+    [print(r) for r in arr]
+    bar_end = stop_ms // tf_msecs * tf_msecs
+    print(bar_end)
 
 
 AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.json']))

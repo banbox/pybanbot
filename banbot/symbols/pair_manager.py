@@ -68,12 +68,12 @@ class PairManager:
 
     @property
     def avaiable_symbols(self) -> Set[str]:
-        if self._ava_symbols and time.time() - self._ava_at < 300:
+        if self._ava_symbols and btime.utctime() - self._ava_at < 300:
             return self._ava_symbols
         ava_markets = self.exchange.get_markets(quote_currs=self.stake_currency, trade_modes=[self.market_type])
         all_symbols = list(ava_markets.keys())
         self._ava_symbols = set(self.verify_blacklist(all_symbols))
-        self._ava_at = time.time()
+        self._ava_at = btime.utctime()
         return self._ava_symbols
 
     def verify_whitelist(self, pairlist: List[str], keep_invalid: bool = False) -> List[str]:

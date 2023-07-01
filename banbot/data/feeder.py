@@ -111,7 +111,7 @@ class HistDataFeeder(DataFeeder):
                  timerange: Optional[TimeRange] = None):
         super(HistDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire)
         # 回测取历史数据，如时间段未指定时，应使用真实的时间
-        creal_time = time.time()
+        creal_time = btime.utctime()
         if not timerange:
             timerange = TimeRange(creal_time, creal_time)
         elif not timerange.stopts:

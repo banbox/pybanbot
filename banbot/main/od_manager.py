@@ -481,12 +481,12 @@ class LiveOrderManager(OrderManager):
     async def _get_pair_prices(self, pair: str, vol_sec=0):
         key = f'{pair}_{round(vol_sec * 1000)}'
         cache_val = self._pair_prices.get(key)
-        if cache_val and cache_val[-1] > time.time():
+        if cache_val and cache_val[-1] > btime.utctime():
             return cache_val[:2]
 
         # 计算后缓存3s有效
         buy_price, sell_price = await self.calc_price(pair, vol_sec)
-        self._pair_prices[key] = (buy_price, sell_price, time.time() + 3)
+        self._pair_prices[key] = (buy_price, sell_price, btime.utctime() + 3)
 
         return buy_price, sell_price
 

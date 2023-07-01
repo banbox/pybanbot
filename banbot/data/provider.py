@@ -105,7 +105,7 @@ class HistDataProvider(DataProvider):
             while BotGlobal.state == BotState.RUNNING:
                 feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
                 bar_time = feeder.next_at
-                if bar_time >= time.time() * 1000:
+                if bar_time >= btime.utcstamp():
                     break
                 btime.cur_timestamp = bar_time / 1000
                 feeder()

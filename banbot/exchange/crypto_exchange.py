@@ -149,7 +149,7 @@ def _save_markets(exg, cache_dir: str):
         if item_val is None:
             continue
         result[key] = item_val
-    result['timestamp'] = time.time()
+    result['timestamp'] = btime.utctime()
     with open(cache_path, 'wb') as fout:
         fout.write(orjson.dumps(result, option=orjson.OPT_INDENT_2))
 
@@ -217,7 +217,7 @@ class CryptoExchange:
         self.markets: Dict = {}
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
-        self.markets_at = time.time() - 7200
+        self.markets_at = btime.utctime() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
         self.pair_fee_limits = self.exg_config.get('pair_fee_limits') or dict()
         self.conti_error = 0
@@ -231,14 +231,14 @@ class CryptoExchange:
 
     @net_retry
     async def load_markets(self):
-        if time.time() - self.markets_at < 1800:
+        if btime.utctime() - self.markets_at < 1800:
             logger.warning('load_markets too freq, skip')
             return
         restore_ts = _restore_markets(self.api_async, self.market_dir)
         markets = self.api_async.markets or []
         # 市场信息非Prod模式7天有效，Prod模式1天有效
         exp_secs = 604800 if btime.run_mode != RunMode.PROD else 86400
-        if time.time() - restore_ts > exp_secs:
+        if btime.utctime() - restore_ts > exp_secs:
             # 非实时模式，缓存的交易对7天有效
             if restore_ts:
                 logger.warning('exchange markets expired, renew...')
@@ -253,7 +253,7 @@ class CryptoExchange:
             from banbot.exchange.exchange_utils import text_markets
             print(text_markets(self.api_async.markets, 30))
         self.markets = self.api_async.markets
-        self.markets_at = time.time()
+        self.markets_at = btime.utctime()
 
     def get_market_by_id(self, symbol_id: str):
         '''
@@ -415,6 +415,12 @@ class CryptoExchange:
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:
             params = {}
+        # 币安期货返回的ohlcv包含未完成的bar，指定时间截取掉
+        cut_end = self.name == 'binance' and self.market_type == 'future'
+        if cut_end:
+            tf_msecs = tf_to_secs(timeframe) * 1000
+            cur_time = btime.utcstamp()
+            params['endTime'] = (cur_time // tf_msecs - 1) * tf_msecs
         return await self.api_async.fetch_ohlcv(symbol, timeframe, since, limit, params)
 
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
@@ -485,7 +491,7 @@ class CryptoExchange:
         fetch_num = limit * round(cur_tf_secs / sub_tf_secs)
         count = 0
         if not since:
-            cur_time = time.time() // cur_tf_secs * cur_tf_secs
+            cur_time = btime.utctime() // cur_tf_secs * cur_tf_secs
             since = (cur_time - fetch_num * sub_tf_secs) * 1000
         result = []
         while count < fetch_num:
