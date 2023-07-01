@@ -11,6 +11,12 @@ from banbot.util import btime
 
 _tfsecs_map = dict()
 _secstf_map = dict()
+secs_min = 60
+secs_hour = secs_min * 60
+sces_day = secs_hour * 24
+secs_week = sces_day * 7
+secs_mon = sces_day * 30
+secs_year = sces_day * 365
 
 
 def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> Tuple[str, int]:
@@ -47,7 +53,24 @@ def tf_to_secs(timeframe: str) -> int:
 
 
 def secs_to_tf(tfsecs: int) -> str:
-    return _secstf_map.get(tfsecs)
+    if tfsecs not in _secstf_map:
+        if tfsecs >= secs_year:
+            _secstf_map[tfsecs] = str(tfsecs // secs_year) + 'y'
+        elif tfsecs >= secs_mon:
+            _secstf_map[tfsecs] = str(tfsecs // secs_mon) + 'M'
+        elif tfsecs >= secs_week:
+            _secstf_map[tfsecs] = str(tfsecs // secs_week) + 'w'
+        elif tfsecs >= sces_day:
+            _secstf_map[tfsecs] = str(tfsecs // sces_day) + 'd'
+        elif tfsecs >= secs_hour:
+            _secstf_map[tfsecs] = str(tfsecs // secs_hour) + 'h'
+        elif tfsecs >= secs_min:
+            _secstf_map[tfsecs] = str(tfsecs // secs_min) + 'm'
+        elif tfsecs >= 1:
+            _secstf_map[tfsecs] = str(tfsecs) + 's'
+        else:
+            raise ValueError(f'unsupport tfsecs: {tfsecs}')
+    return _secstf_map[tfsecs]
 
 
 def tfsecs(num: int, timeframe: str):

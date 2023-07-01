@@ -8,6 +8,7 @@ from typing import ClassVar,Tuple
 
 from banbot.storage.base import *
 re_symbol = re.compile(r'^(\w+)/(\w+)(([:.])(\S+))?')
+re_symbol_tv = re.compile(r'^(\w+)(USDT|TUSD|USDC|BUSD)((\.)(\S+))?')  # TradingView的交易对格式
 
 
 class ExSymbol(BaseDbModel):
@@ -94,7 +95,7 @@ class ExSymbol(BaseDbModel):
     async def get_valid_start(self, start_ms: int):
         if not self.list_dt:
             await self.init_list_dt()
-        list_ms = btime.to_utcstamp(self.list_dt, ms=True, round_int=True)
+        list_ms = btime.to_utcstamp(self.list_dt, ms=True, cut_int=True)
         start_ms = max(list_ms, start_ms)
         return start_ms
 
@@ -138,6 +139,10 @@ def get_symbol_market(symbol_short: str) -> Tuple[str, str]:
     '''
     symbol, market = symbol_short, 'spot'
     mat = re_symbol.search(symbol_short)
+    if not mat:
+        mat = re_symbol_tv.search(symbol_short)
+    if not mat:
+        raise ValueError(f'unsupport symbol format: {symbol_short}')
     base_s, quote_s, spliter, suffix = mat.group(1), mat.group(2), mat.group(4), mat.group(5)
     if suffix:
         # 带后缀的，默认是期货
