@@ -214,6 +214,8 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
     tf_msecs = tf_to_secs(timeframe) * 1000
     assert start_ms > 1000000000000, '`start_ts` must be milli seconds'
     max_end_ts = (end_ms // tf_msecs - 1) * tf_msecs  # 最后一个bar的时间戳，达到此bar时停止，避免额外请求
+    if start_ms > max_end_ts:
+        return []
     fetch_num = (end_ms - start_ms) // tf_msecs
     batch_size = min(1000, fetch_num + 5)
     req_times = fetch_num / batch_size
