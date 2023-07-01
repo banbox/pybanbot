@@ -421,7 +421,7 @@ class CryptoExchange:
             tf_msecs = tf_to_secs(timeframe) * 1000
             cur_time = btime.utcstamp()
             max_end_ts = (cur_time // tf_msecs - 1) * tf_msecs
-            if since and since > max_end_ts:
+            if since and since >= max_end_ts:
                 # 避免开始时间>结束时间，接口返回错误
                 return []
             params['endTime'] = max_end_ts
