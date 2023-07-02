@@ -22,22 +22,8 @@ class ExSymbol(BaseDbModel):
     list_dt = Column(sa.DateTime)
 
     def client_dict(self) -> dict:
-        short_name = self.symbol
-        mat = re_symbol.search(short_name)
-        base_s, quote_s, spliter, suffix = mat.group(1), mat.group(2), mat.group(4), mat.group(5)
-        if suffix and spliter == ':':
-            if quote_s == suffix:
-                # 后缀和定价币相同，是永续合约
-                short_name = f'{base_s}/{quote_s}.P'
-            elif suffix.startswith(quote_s):
-                # 后缀包含定价币，是短时合约  BTC/USDT:USDT-230630
-                clean_sx = suffix[len(quote_s):].strip('-')
-                if clean_sx:
-                    short_name = f'{base_s}/{quote_s}.{clean_sx}'
-            elif suffix:
-                logger.warning(f'unknown symbol format: {self.symbol}')
         data = self.dict()
-        data['short_name'] = short_name
+        data['short_name'] = to_short_symbol(self.symbol)
         return data
 
     def __str__(self):
@@ -130,6 +116,24 @@ class ExSymbol(BaseDbModel):
         cost = time.monotonic() - start
         if cost > 0.5:
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
+
+
+def to_short_symbol(symbol: str) -> str:
+    short_name = symbol
+    mat = re_symbol.search(short_name)
+    base_s, quote_s, spliter, suffix = mat.group(1), mat.group(2), mat.group(4), mat.group(5)
+    if suffix and spliter == ':':
+        if quote_s == suffix:
+            # 后缀和定价币相同，是永续合约
+            short_name = f'{base_s}/{quote_s}.P'
+        elif suffix.startswith(quote_s):
+            # 后缀包含定价币，是短时合约  BTC/USDT:USDT-230630
+            clean_sx = suffix[len(quote_s):].strip('-')
+            if clean_sx:
+                short_name = f'{base_s}/{quote_s}.{clean_sx}'
+        elif suffix:
+            logger.warning(f'unknown symbol format: {symbol}')
+    return short_name
 
 
 def get_symbol_market(symbol_short: str) -> Tuple[str, str]:

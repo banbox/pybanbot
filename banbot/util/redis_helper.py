@@ -418,6 +418,9 @@ class AsyncRedis:
     async def publish(self, channel: str, msg) -> int:
         return await self.redis.publish(channel, msg)
 
+    async def close(self):
+        await self.redis.close()
+
     async def __aenter__(self):
         return self
 
