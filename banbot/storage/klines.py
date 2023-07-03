@@ -398,7 +398,7 @@ ORDER BY sid, "time" desc'''
         agg_keys = {from_level}
         from_secs = tf_to_secs(from_level)
         for item in cls.agg_list:
-            if item.secs <= from_secs or item.agg_from not in agg_keys:
+            if item.secs <= from_secs:
                 # 跳过过小维度；跳过无关的连续聚合
                 continue
             start_align = start_ms // 1000 // item.secs * item.secs
@@ -408,7 +408,7 @@ ORDER BY sid, "time" desc'''
                 # 前2个相等，说明：插入的数据所属bar尚未完成。
                 # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
                 cls._update_unfinish(item, sid, start_align, end_ms)
-            else:
+            elif item.agg_from in agg_keys:
                 agg_keys.add(item.tf)
         agg_keys.remove(from_level)
         if not agg_keys:
