@@ -82,6 +82,8 @@ def to_utcstamp(dt, ms=False, cut_int=False) -> Union[int, float]:
 
 
 def to_datestr(ts_or_dt: Union[float, datetime.datetime] = None, fmt: str = '%Y-%m-%d %H:%M:%S'):
+    if not ts_or_dt:
+        return ''
     if ts_or_dt and not isinstance(ts_or_dt, datetime.datetime):
         dt = to_datetime(ts_or_dt)
     else:
