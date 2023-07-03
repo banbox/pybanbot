@@ -130,6 +130,20 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             conn.commit()
             conn.execute(sa.text(stat_policy))
             conn.commit()
+        # 创建未完成kline表，存储所有币的所有周期未完成bar
+        un_tname = 'kline_un'
+        exc_sqls = [
+            f'CREATE TABLE {un_tname} (LIKE {cls._tname} INCLUDING ALL);',
+            f'alter table {un_tname} add column timeframe varchar(30);',
+            f'CREATE INDEX "{un_tname}_tf" ON "{un_tname}" USING btree ("timeframe");',
+            f"SELECT create_hypertable('{un_tname}','time');",
+            # sqlalchemy创建的表，附带主键默认是类名+"_pkey"后缀
+            f"ALTER TABLE {un_tname} DROP CONSTRAINT kline_un_pkey;",
+            f"ALTER TABLE {un_tname} ADD CONSTRAINT kline_un_pkey PRIMARY KEY (sid, time, timeframe);"
+        ]
+        for stat in exc_sqls:
+            conn.execute(sa.text(stat))
+        conn.commit()
 
     @classmethod
     def drop_tbl(cls, conn: sa.Connection):
@@ -164,14 +178,12 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             return conn.execute(sa.text(stmt))
 
     @classmethod
-    def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: Optional[int] = None,
-              limit: Optional[int] = None):
-        tf_secs = tf_to_secs(timeframe)
+    def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int,
+              limit: Optional[int] = None, with_unfinish: bool = False):
+        tf_msecs = tf_to_secs(timeframe) * 1000
         max_end_ms = end_ms
         if limit:
-            limit_end_ms = start_ms + tf_secs * limit * 1000
-            max_end_ms = end_ms or btime.time() * 1000
-            end_ms = min(limit_end_ms, max_end_ms)
+            end_ms = min(start_ms + tf_msecs * limit, end_ms)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
 
@@ -190,8 +202,19 @@ order by time'''
 
         rows = cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=exs.id).fetchall()
         rows = [list(r) for r in rows]
-        if not len(rows) and max_end_ms - end_ms > tf_secs * 1000:
+        max_finish_ts = (btime.utcstamp() // tf_msecs - 1) * tf_msecs
+        if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
+        elif with_unfinish and rows and rows[-1][0] == max_finish_ts:
+            unfinish_ts = (max_finish_ts + tf_msecs) // 1000
+            dct_sql = f'''
+            select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from kline_un
+            where sid={exs.id} and timeframe='{timeframe}' and time >= to_timestamp({unfinish_ts})
+            order by time limit 1'''
+            conn = db.session.connection()
+            row = conn.execute(sa.text(dct_sql)).fetchone()
+            if row:
+                rows.append(list(row))
         return rows
 
     @classmethod
@@ -380,12 +403,13 @@ ORDER BY sid, "time" desc'''
                 continue
             start_align = start_ms // 1000 // item.secs * item.secs
             end_align = end_ms // 1000 // item.secs * item.secs
-            if start_align == end_align < start_ms:
+            if start_align == end_align < start_ms // 1000:
                 # 没有出现新的bar数据，无需更新
                 # 前2个相等，说明：插入的数据所属bar尚未完成。
                 # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
-                continue
-            agg_keys.add(item.tf)
+                cls._update_unfinish(item, sid, start_align, end_ms)
+            else:
+                agg_keys.add(item.tf)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
@@ -398,6 +422,43 @@ ORDER BY sid, "time" desc'''
                 cls._refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
             conn.commit()
             conn.execution_options(isolation_level=bak_iso_level)
+
+    @classmethod
+    def _update_unfinish(cls, item: BarAgg, sid: int, start_align: int, end_ms: int):
+        sess = db.session
+        sess.execute(sa.text(f"DELETE from kline_un where sid={sid} and timeframe='{item.tf}';"))
+        # 从已完成的子周期中统计筛选数据
+        agg_from = 'kline_' + item.agg_from
+        select_sql = f'''
+                        SELECT sid, time_bucket(INTERVAL '{item.tf}', time) AS time, {cls._candle_agg}
+                        FROM {agg_from}
+                        where sid={sid} and time >= to_timestamp({start_align}) and time < to_timestamp({end_ms / 1000})
+                        GROUP BY sid, 2 
+                        ORDER BY sid, 2 limit 1'''
+        finish_row = sess.execute(sa.text(select_sql)).fetchone()
+        merge_rows = [tuple(finish_row)] if finish_row else []
+        # 从未完成的自周期中查询bar
+        unfinish = sess.execute(sa.text(f'''
+                        SELECT sid,time,open,high,low,close,volume FROM kline_un
+                        where sid={sid} and timeframe='{item.tf}' and time >= to_timestamp({start_align})
+                        limit 1''')).fetchone()
+        if unfinish:
+            merge_rows.append(tuple(unfinish))
+        if not merge_rows:
+            sess.commit()
+            return
+        if len(merge_rows) > 1:
+            mg_cols = list(zip(*merge_rows))
+            cur_bar = (mg_cols[0][0], mg_cols[1][0], mg_cols[2][0], max(mg_cols[3]), min(mg_cols[4]),
+                           mg_cols[5][-1], sum(mg_cols[6]))
+        else:
+            cur_bar = merge_rows[0]
+        ins_cols = "sid, time, open, high, low, close, volume, timeframe"
+        bar_time = btime.to_utcstamp(cur_bar[1])
+        places = f"{cur_bar[0]}, to_timestamp({bar_time}), {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, {cur_bar[6]}, '{item.tf}'"
+        insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
+        sess.execute(sa.text(insert_sql))
+        sess.commit()
 
     @classmethod
     def _refresh_agg(cls, conn: Union[SqlSession, sa.Connection], tbl: BarAgg, sid: int,

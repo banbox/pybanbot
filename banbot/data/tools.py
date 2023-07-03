@@ -314,7 +314,7 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
 
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
-                           allow_lack: float = 0.):
+                           allow_lack: float = 0., with_unfinish: bool = False):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -325,6 +325,7 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     :param end_ms: 毫秒
     :param limit:
     :param allow_lack: 最大允许缺失的最新数据比例。设置此项避免对很小数据缺失时的不必要网络请求
+    :param with_unfinish: 是否附加未完成的数据
     :return:
     '''
     from banbot.storage import KLine
@@ -335,9 +336,11 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     if not start_ms:
         start_ms = end_ms - tf_msecs * limit
     start_ms = start_ms // tf_msecs * tf_msecs
+    if with_unfinish:
+        end_ms += tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack)
-    return KLine.query(exs, timeframe, start_ms, end_ms)
+    return KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
 
 
 async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],
