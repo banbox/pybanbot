@@ -143,13 +143,10 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
                 conn.execute(sa.text(f"drop table if exists {tbl.tbl}"))
 
     @classmethod
-    def _query_hyper(cls, sid: int, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable]):
+    def _query_hyper(cls, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable], **kwargs):
         conn = db.session.connection()
         if timeframe in cls.agg_map:
-            stmt = dct_sql.format(
-                tbl=cls.agg_map[timeframe].tbl,
-                sid=sid
-            )
+            stmt = dct_sql.format(tbl=cls.agg_map[timeframe].tbl, **kwargs)
             return conn.execute(sa.text(stmt))
         else:
             # 时间帧没有直接符合的，从最接近的子timeframe聚合
@@ -163,10 +160,7 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
                 raise RuntimeError(f'unsupport timeframe {timeframe}')
             if callable(gp_sql):
                 gp_sql = gp_sql()
-            stmt = gp_sql.format(
-                tbl=sub_tbl,
-                sid=sid,
-            )
+            stmt = gp_sql.format(tbl=sub_tbl, **kwargs)
             return conn.execute(sa.text(stmt))
 
     @classmethod
@@ -194,7 +188,7 @@ order by time'''
                 group by gtime
                 order by gtime'''
 
-        rows = cls._query_hyper(exs.id, timeframe, dct_sql, gen_gp_sql).fetchall()
+        rows = cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=exs.id).fetchall()
         rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_secs * 1000:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
@@ -225,7 +219,7 @@ group by 1'''
     def _fetch_range(cls, sid: int, timeframe: str):
         dct_sql = 'select (extract(epoch from min(time)) * 1000)::float, ' \
                   '(extract(epoch from max(time)) * 1000)::float from {tbl} where sid={sid}'
-        min_time, max_time = cls._query_hyper(sid, timeframe, dct_sql, '').fetchone()
+        min_time, max_time = cls._query_hyper(timeframe, dct_sql, '', sid=sid).fetchone()
         if max_time:
             # 这里记录蜡烛对应的结束时间
             max_time += tf_to_secs(timeframe) * 1000
@@ -262,6 +256,22 @@ group by 1'''
                 cls._sid_range_map[cache_key] = min(start_ms, old_start), max(end_ms, old_stop)
             else:
                 cls._sid_range_map[cache_key] = start_ms, end_ms
+
+    @classmethod
+    def get_latest_stamps(cls, timeframe: str, max_off: int = 100) -> Dict[int, float]:
+        '''
+        获取某个时间周期，所以交易对的最新一个时间戳。只查询前max_off * timeframe段时间，避免数据太多性能太差
+        '''
+        conn = db.session.connection()
+        stop_ts = btime.utcstamp() / 1000
+        start_ts = stop_ts - tf_to_secs(timeframe) * max_off
+        tbl = cls.agg_map[timeframe].tbl
+        dct_sql = f'''
+select distinct on(sid) sid, (extract(epoch from time) * 1000)::float from {tbl}
+where "time" > to_timestamp({start_ts}) and "time" < to_timestamp({stop_ts}) 
+ORDER BY sid, "time" desc'''
+        rows = conn.execute(sa.text(dct_sql)).fetchall()
+        return {r[0]: r[1] for r in rows}
 
     @classmethod
     def get_down_tf(cls, tf: str):
