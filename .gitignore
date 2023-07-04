@@ -1,5 +1,6 @@
 #本项目忽略
 banbot/config/config.local.json
+banbot/core/async_plugin.py
 .idea
 
 **/__pycache__

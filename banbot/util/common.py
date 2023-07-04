@@ -110,7 +110,7 @@ class MeasureTime:
             return
         self.history.append((self.prefix + name, time.monotonic()))
 
-    def print_all(self, top_n: int = 0):
+    def print_all(self, top_n: int = 0, min_cost: float = 0):
         if self.disable or not self.history:
             return False
         self.history.append((self.prefix + 'end', time.monotonic()))
@@ -142,14 +142,18 @@ class MeasureTime:
         head_text = f'{title:<{max_name_len}}{cost_t:<{time_len}}'
         if tag_repeat:
             head_text += 'count'
-        print(head_text)
+        result = [head_text]
         for i, item in enumerate(cost_list):
             if top_n and i >= top_n:
                 break
+            if item[1] < min_cost:
+                continue
             msg = f'{item[0]:<{max_name_len}}{item[1]:<{time_len}.5f}'
             if tag_repeat:
                 msg += str(item[2])
-            print(msg)
+            result.append(msg)
+        if len(result) > 1:
+            print('\n'.join(result))
         return True
 
     def total_secs(self):

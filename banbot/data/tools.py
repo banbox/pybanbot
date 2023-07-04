@@ -255,18 +255,26 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     if timeframe not in {'1m', '1h'}:
         raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
     from banbot.storage import KLine, KHole
+    from banbot.util.common import MeasureTime
+    measure = MeasureTime()
+    measure.start_for('valid_start')
     start_ms = await exs.get_valid_start(start_ms)
+    measure.start_for('down_range')
     start_ms, end_ms = KHole.get_down_range(exs, timeframe, start_ms, end_ms)
     if not start_ms:
         return
     if check_exist:
+        measure.start_for('query_range')
         old_start, old_end = KLine.query_range(exs.id, timeframe)
         if old_start and old_end > old_start:
             if start_ms < old_start:
                 # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
                 cur_end = round(old_start)
+                measure.start_for('fetch_start')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end)
+                measure.start_for('insert_start')
                 KLine.insert(exs.id, timeframe, predata)
+                measure.start_for('candle_conts_start')
                 KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
@@ -274,16 +282,23 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                     # 最新部分缺失的较少，不再请求交易所，节省时间
                     return
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+                measure.start_for('fetch_end')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms)
+                measure.start_for('insert_end')
                 KLine.insert(exs.id, timeframe, predata)
+                measure.start_for('candle_conts_end')
                 KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
                 return
             else:
                 # 要下载的数据全部存在，直接退出
                 return
+    measure.start_for('fetch_all')
     newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms)
+    measure.start_for('insert_all')
     KLine.insert(exs.id, timeframe, newdata, check_exist)
+    measure.start_for('candle_conts_all')
     KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
+    measure.print_all(min_cost=0.01)
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
