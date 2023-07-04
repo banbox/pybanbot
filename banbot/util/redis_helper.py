@@ -204,7 +204,11 @@ class SyncRedis:
     如果在循环中长期使用，请在sleep前调用del释放连接到连接池
     '''
     def __init__(self, serializer=None, deserializer=None, connect_timeout=10):
+        start = time.monotonic()
         self.redis = get_native_redis(False, connect_timeout=connect_timeout)
+        cost = time.monotonic() - start
+        if cost > 0.01:
+            print(f'get redis cost: {cost:.3f}, time: {time.time()}')
         self.serializer = serializer or def_serializer
         self.deserializer = deserializer or def_deserializer
 
@@ -246,8 +250,13 @@ class SyncRedis:
         key = self.get_key(key)
         if not key:
             return default_val
+        from banbot.util.common import MeasureTime
+        measure = MeasureTime()
+        measure.start_for('redis get')
         val = self.redis.get(key)
+        measure.start_for('deserializer')
         decode_val = self.deserializer(val)
+        measure.print_all(min_cost=0.01)
         if decode_val is None:
             return default_val
         return decode_val
