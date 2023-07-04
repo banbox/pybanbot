@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import time
+import threading
 from contextvars import ContextVar
 from typing import Optional, List, Union, Type, Dict
 
@@ -72,21 +73,31 @@ class DBSessionMeta(type):
 
 
 class DBSession(metaclass=DBSessionMeta):
+    _sess = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._sess and cls._sess.token and cls._sess.fetch_tid == threading.get_ident():
+            return cls._sess
+        cls._sess = super().__new__(cls)
+        return cls._sess
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
         self.token = None
         self.session_args = session_args or {}
         self.commit_on_exit = commit_on_exit
+        self.fetch_tid = 0
 
     def __enter__(self):
         if _db_sess.get() is None:
             self.token = _db_sess.set(_DbSession(**self.session_args))
+            self.fetch_tid = threading.get_ident()
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if not self.token:
-            return
         sess = _db_sess.get()
+        if not sess:
+            return
+
         if exc_type is not None:
             sess.rollback()
 
@@ -94,29 +105,13 @@ class DBSession(metaclass=DBSessionMeta):
             sess.commit()
 
         sess.close()
-        _db_sess.reset(self.token)
-        self.token = None
+
+        if self.token and self.fetch_tid == threading.get_ident():
+            _db_sess.set(None)
+            self.token = None
 
 
-class DBSessionOne(DBSession):
-    _sess = None
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._sess:
-            cls._sess = super().__new__(cls, *args, **kwargs)
-        return cls._sess
-
-    def __enter__(self):
-        super(DBSessionOne, self).__enter__()
-        DBSessionOne._sess = self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        super(DBSessionOne, self).__exit__(exc_type, exc_val, exc_tb)
-        DBSessionOne._sess = None
-
-
-# 默认使用单例的DBSessionOne，在Web应用中需要切换为DBSession
-db: DBSessionMeta = DBSessionOne
+db: DBSessionMeta = DBSession
 
 
 class IntEnum(TypeDecorator):
