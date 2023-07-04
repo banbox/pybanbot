@@ -55,6 +55,8 @@ class KLine(BaseDbModel):
         BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h', '3 years', '20 years'),
     ]
 
+    down_tfs = {'1m', '1h', '1d'}
+
     agg_map: Dict[str, BarAgg] = {v.tf: v for v in agg_list}
 
     _insert_conflict = '''
@@ -302,13 +304,17 @@ ORDER BY sid, "time" desc'''
         获取指定周期对应的下载的时间周期。
         只有1m和1h允许下载并写入超表。其他维度都是由这两个维度聚合得到。
         '''
+        from banbot.exchange.exchange_utils import secs_min, secs_hour, secs_day
         tf_secs = tf_to_secs(tf)
-        m1_secs, h1_secs = 60, 3600
-        if tf_secs >= h1_secs:
-            if tf_secs % h1_secs > 0:
+        if tf_secs >= secs_day:
+            if tf_secs % secs_day:
+                raise RuntimeError(f'unsupport timeframe: {tf}')
+            return '1d'
+        if tf_secs >= secs_hour:
+            if tf_secs % secs_hour > 0:
                 raise RuntimeError(f'unsupport timeframe: {tf}')
             return '1h'
-        if tf_secs < m1_secs or tf_secs % m1_secs > 0:
+        if tf_secs < secs_min or tf_secs % secs_min > 0:
             raise RuntimeError(f'unsupport timeframe: {tf}')
         return '1m'
 
@@ -316,8 +322,8 @@ ORDER BY sid, "time" desc'''
     def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True):
         if not rows:
             return
-        if timeframe not in {'1m', '1h'}:
-            raise RuntimeError(f'can only insert kline: 1m or 1h, current: {timeframe}')
+        if timeframe not in cls.down_tfs:
+            raise RuntimeError(f'can only insert kline: {cls.down_tfs}, current: {timeframe}')
         intv_msecs = tf_to_secs(timeframe) * 1000
         rows = sorted(rows, key=lambda x: x[0])
         if len(rows) > 1:

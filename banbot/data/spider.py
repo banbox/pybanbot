@@ -14,6 +14,7 @@ from banbot.data.tools import *
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.util.redis_helper import AsyncRedis
+from banbot.storage import KLine
 
 
 def get_check_interval(tf_secs: int) -> float:
@@ -63,8 +64,8 @@ async def down_pairs_by_config(config: Config):
         if len(timeframes) > 1:
             logger.error('only one timeframe should be given to download into db')
             return
-        if tf not in {'1m', '1h'}:
-            logger.error(f'can only download kline: 1m or 1h, current: {tf}')
+        if tf not in KLine.down_tfs:
+            logger.error(f'can only download kline: {KLine.down_tfs}, current: {tf}')
             return
         sess = db.session
         fts = [ExSymbol.exchange == exchange.name, ExSymbol.symbol.in_(set(pairs)),
@@ -128,7 +129,7 @@ class MinerJob(PairTFCache):
         :param check_intv: 检查更新间隔。秒。需要根据实际使用维度计算。此值可能更新
         :param since: 抓取的开始时间，未提供默认从当前时间所属bar开始抓取
         '''
-        assert save_tf in {'1m', '1h'}, f'MinerJob save_tf must be 1m/1h, given: {save_tf}'
+        assert save_tf in KLine.down_tfs, f'MinerJob save_tf must in {KLine.down_tfs}, given: {save_tf}'
         tf_secs = tf_to_secs(save_tf)
         super(MinerJob, self).__init__(save_tf, tf_secs)
         self.pair: str = pair
@@ -144,7 +145,7 @@ class MinerJob(PairTFCache):
         从需要使用的分析维度，计算应该保存的维度和更新间隔。
         '''
         cur_tfsecs = tf_to_secs(timeframe)
-        save_tf = '1h' if cur_tfsecs >= 3600 else '1m'
+        save_tf = KLine.get_down_tf(timeframe)
         check_intv = get_check_interval(cur_tfsecs)
         return save_tf, check_intv
 

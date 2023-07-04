@@ -11,7 +11,7 @@ from banbot.config.timerange import TimeRange
 from banbot.exchange.exchange_utils import *
 from banbot.util.common import logger
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.storage.symbols import ExSymbol
+from banbot.storage import ExSymbol, KLine, KHole
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
@@ -252,9 +252,8 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
     '''
-    if timeframe not in {'1m', '1h'}:
-        raise RuntimeError(f'can only download kline: 1m or 1h, current: {timeframe}')
-    from banbot.storage import KLine, KHole
+    if timeframe not in KLine.down_tfs:
+        raise RuntimeError(f'can only download kline: {KLine.down_tfs}, current: {timeframe}')
     from banbot.util.common import MeasureTime
     measure = MeasureTime()
     measure.start_for('valid_start')

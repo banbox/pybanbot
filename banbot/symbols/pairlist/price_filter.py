@@ -29,6 +29,7 @@ class PriceFilter(PairList):
         self.stoploss = 0.95
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
+        from banbot.data.tools import bulk_ohlcv_do
         if not self.enable:
             return pairlist
         res_pairs = []
