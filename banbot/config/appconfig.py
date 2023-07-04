@@ -114,7 +114,10 @@ class AppConfig(metaclass=Singleton):
         run_env = get_run_env()
         if run_env != 'prod':
             logger.info(f'Running in {run_env}, Please set `ban_run_env=prod` in production running')
-        return load_from_files(self.args.get("config", []))
+        path_list = self.args.get("config")
+        if not path_list:
+            path_list = self._get_def_config_paths()
+        return load_from_files(path_list)
 
     @property
     def exchange_cfg(self):
@@ -154,3 +157,21 @@ class AppConfig(metaclass=Singleton):
                                    'and exec `select pg_reload_conf();` to apply; then re-download all data')
             logger.info(f'Connect DataBase Success')
         return config
+
+    @classmethod
+    def _get_def_config_paths(cls) -> List[str]:
+        import os
+        data_dir = os.environ.get('ban_data_dir')
+        if not data_dir:
+            raise ValueError('`ban_data_dir` not configured, config load fail')
+        if not os.path.isdir(data_dir):
+            raise ValueError(f'`ban_data_dir`:{data_dir} not exits, config load fail')
+        result = []
+        try_names = ['config.json', 'config.local.json']
+        for name in try_names:
+            full_path = os.path.join(data_dir, name)
+            if os.path.isfile(full_path):
+                result.append(full_path)
+        if not result:
+            raise ValueError(f'no config.json found in {data_dir}!')
+        return result
