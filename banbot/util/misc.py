@@ -18,7 +18,7 @@ def get_run_env():
     global _run_env
     if not _run_env:
         import os
-        _run_env = os.environ.get('ban_run_mode') or 'dev'
+        _run_env = os.environ.get('ban_run_env') or 'dev'
     return _run_env
 
 

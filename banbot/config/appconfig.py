@@ -113,7 +113,7 @@ class AppConfig(metaclass=Singleton):
         from banbot.util import get_run_env
         run_env = get_run_env()
         if run_env != 'prod':
-            logger.info(f'Running in {run_env}, Please set `ban_run_mode=prod` in production running')
+            logger.info(f'Running in {run_env}, Please set `ban_run_env=prod` in production running')
         return load_from_files(self.args.get("config", []))
 
     @property
