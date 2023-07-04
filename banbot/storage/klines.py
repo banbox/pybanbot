@@ -434,7 +434,7 @@ ORDER BY sid, "time" desc'''
                         FROM {agg_from}
                         where sid={sid} and time >= to_timestamp({start_align}) and time < to_timestamp({end_ms / 1000})
                         GROUP BY sid, 2 
-                        ORDER BY sid, 2 limit 1'''
+                        ORDER BY sid, 2'''
         finish_row = sess.execute(sa.text(select_sql)).fetchone()
         merge_rows = [tuple(finish_row)] if finish_row else []
         # 从未完成的自周期中查询bar
