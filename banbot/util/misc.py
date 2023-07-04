@@ -5,13 +5,25 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-import time
 from typing import List
+_run_env = None
 
 
 def is_debug():
     gettrace = getattr(sys, 'gettrace', None)
     return gettrace and gettrace()
+
+
+def get_run_env():
+    global _run_env
+    if not _run_env:
+        import os
+        _run_env = os.environ.get('ban_run_mode') or 'dev'
+    return _run_env
+
+
+def is_prod_run():
+    return get_run_env() == 'prod'
 
 
 def hash_text(text: str, method: str = None):

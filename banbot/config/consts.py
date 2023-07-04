@@ -42,6 +42,6 @@ class BotState(Enum):
     RELOAD_CONFIG = 3
 
     def __str__(self):
-        return f"{self.name.lower()}"
+        return self.name.lower()
 
 

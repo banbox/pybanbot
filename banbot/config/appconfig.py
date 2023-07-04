@@ -23,7 +23,10 @@ def load_config_file(path: str) -> Dict[str, Any]:
     try:
         # Read config from stdin if requested in the options
         with Path(path).open() if path != '-' else sys.stdin as file:
-            config = orjson.loads(file.read())
+            fdata = file.read()
+            if isinstance(fdata, (bytes, bytearray)):
+                fdata = fdata.decode('utf-8')
+            config = orjson.loads(fdata)
     except FileNotFoundError:
         raise RuntimeError(
             f'Config file "{path}" not found!'
@@ -107,6 +110,10 @@ class AppConfig(metaclass=Singleton):
         Extract information for sys.argv and load the bot configuration
         :return: Configuration dictionary
         """
+        from banbot.util import get_run_env
+        run_env = get_run_env()
+        if run_env != 'prod':
+            logger.info(f'Running in {run_env}, Please set `ban_run_mode=prod` in production running')
         return load_from_files(self.args.get("config", []))
 
     @property
