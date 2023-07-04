@@ -1,5 +1,6 @@
 #本项目忽略
 banbot/config/config.local.json
+.idea
 
 **/__pycache__
 **/*.pyc

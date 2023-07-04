@@ -8,16 +8,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="fix bug">
+    <list default="true" id="f0357970-5d94-466a-b705-febed23ab521" name="Changes" comment="非生产环境，抓取10个方便快速启动调试">
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/NostalgiaForInfinityXFast.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" beforeDir="false" afterPath="$PROJECT_DIR$/../NostalgiaForInfinity/scripts.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/appconfig.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/appconfig.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/config/consts.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/config/consts.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/banbot/util/misc.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/util/misc.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../banweb/banweb/worker/kline_monitor.py" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/banweb/worker/kline_monitor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/banbot/storage/klines.py" beforeDir="false" afterPath="$PROJECT_DIR$/banbot/storage/klines.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../banweb/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../banweb/.gitignore" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -428,21 +426,7 @@
       <workItem from="1688254724357" duration="45006000" />
       <workItem from="1688340955672" duration="18591000" />
       <workItem from="1688380816107" duration="15544000" />
-      <workItem from="1688429149087" duration="2166000" />
-    </task>
-    <task id="LOCAL-00091" summary="update storage/user">
-      <created>1687749492932</created>
-      <option name="number" value="00091" />
-      <option name="presentableId" value="LOCAL-00091" />
-      <option name="project" value="LOCAL" />
-      <updated>1687749492933</updated>
-    </task>
-    <task id="LOCAL-00092" summary="fix binance credits require">
-      <created>1687750757899</created>
-      <option name="number" value="00092" />
-      <option name="presentableId" value="LOCAL-00092" />
-      <option name="project" value="LOCAL" />
-      <updated>1687750757899</updated>
+      <workItem from="1688429149087" duration="3501000" />
     </task>
     <task id="LOCAL-00093" summary="update readme">
       <created>1687753106672</created>
@@ -773,7 +757,21 @@
       <option name="project" value="LOCAL" />
       <updated>1688396110260</updated>
     </task>
-    <option name="localTasksCounter" value="140" />
+    <task id="LOCAL-00140" summary="支持检测是否运行在生产环境">
+      <created>1688432420342</created>
+      <option name="number" value="00140" />
+      <option name="presentableId" value="LOCAL-00140" />
+      <option name="project" value="LOCAL" />
+      <updated>1688432420342</updated>
+    </task>
+    <task id="LOCAL-00141" summary="非生产环境，抓取10个方便快速启动调试">
+      <created>1688432481570</created>
+      <option name="number" value="00141" />
+      <option name="presentableId" value="LOCAL-00141" />
+      <option name="project" value="LOCAL" />
+      <updated>1688432481570</updated>
+    </task>
+    <option name="localTasksCounter" value="142" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -802,8 +800,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="支持全部数据定时更新落库" />
-    <MESSAGE value="更新项目文档" />
     <MESSAGE value="解决客户端symbol格式不匹配问题" />
     <MESSAGE value="解决币安期货返回未完成bar导致k线不连续问题" />
     <MESSAGE value="fix start_ts&gt;end_ts" />
@@ -827,7 +823,9 @@
     <MESSAGE value="自动登录" />
     <MESSAGE value="支持显示未完成bar" />
     <MESSAGE value="fix bug" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix bug" />
+    <MESSAGE value="支持检测是否运行在生产环境" />
+    <MESSAGE value="非生产环境，抓取10个方便快速启动调试" />
+    <option name="LAST_COMMIT_MESSAGE" value="非生产环境，抓取10个方便快速启动调试" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -886,7 +884,7 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/banbot$__main__.coverage" NAME="banweb Coverage Results" MODIFIED="1686542653226" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
-    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1688430768478" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
+    <SUITE FILE_PATH="coverage/banbot$banweb.coverage" NAME="banweb Coverage Results" MODIFIED="1688432949205" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../banweb/banweb" />
     <SUITE FILE_PATH="coverage/banbot$ban_db.coverage" NAME="ban_dbcmd Coverage Results" MODIFIED="1682516731899" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/../ban_data" />
     <SUITE FILE_PATH="coverage/banbot$order2db.coverage" NAME="order2db Coverage Results" MODIFIED="1683470306964" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />
     <SUITE FILE_PATH="coverage/banbot$test_ohlcvs.coverage" NAME="test_ohlcvs Coverage Results" MODIFIED="1688174680401" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/test" />

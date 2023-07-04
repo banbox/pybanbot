@@ -403,13 +403,13 @@ ORDER BY sid, "time" desc'''
                 continue
             start_align = start_ms // 1000 // item.secs * item.secs
             end_align = end_ms // 1000 // item.secs * item.secs
-            if start_align == end_align < start_ms // 1000:
-                # 没有出现新的bar数据，无需更新
-                # 前2个相等，说明：插入的数据所属bar尚未完成。
-                # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
-                cls._update_unfinish(item, sid, start_align, end_ms)
-            elif item.agg_from in agg_keys:
+            # 没有出现新的完成的bar数据，无需更新
+            # 前2个相等，说明：插入的数据所属bar尚未完成。
+            # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
+            no_new_finish = start_align == end_align < start_ms // 1000
+            if not no_new_finish and item.agg_from in agg_keys:
                 agg_keys.add(item.tf)
+            cls._update_unfinish(item, sid, start_align, end_ms)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
