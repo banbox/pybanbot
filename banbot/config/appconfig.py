@@ -135,7 +135,8 @@ class AppConfig(metaclass=Singleton):
 
     @classmethod
     def get(cls) -> Config:
-        assert cls.obj, '`AppConfig` is not initialized yet!'
+        if not cls.obj:
+            cls.init_by_args({})
         return cls.obj.get_config()
 
     @classmethod
