@@ -96,14 +96,46 @@ async def load_signals(*xls_paths: str):
     state.close()
 
 
-if __name__ == '__main__':
-    import os
-    from banbot.storage.base import init_db, db
-    from banbot.config import AppConfig
+def load_signals_from_dir():
     par_xls_dir = r'E:/Data/SignalData/'
-    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.local.json']))
-    init_db()
     fnames = os.listdir(par_xls_dir)
     with db():
         path_list = [par_xls_dir + n for n in fnames]
         asyncio.run(load_signals(*path_list))
+
+
+def fix_symbol_wrong():
+    '''
+    针对TV的BTCUSDT.p未做兼容，只兼容了BTCUSDT.P；导致导入信号创建了冗余的交易对。
+    信号中symbol_id对应错误。
+    此脚本筛选symbol中所有以"-p"结尾的，找到对应的symbol_id，进行tdsignal更新替换。
+    '''
+    from banbot.storage.base import sa
+    with db():
+        sess = db.session
+        all_symbols = list(sess.query(ExSymbol).all())
+        symbol_map = {f'{s.exchange}:{s.market}:{s.symbol}': s for s in all_symbols}
+        for i, s in enumerate(all_symbols):
+            if i < 300:
+                continue
+            if not s.symbol.endswith('-p'):
+                continue
+            sbl_name = s.symbol[:-2]
+            true_row = symbol_map.get(f'{s.exchange}:{s.market}:{sbl_name}')
+            if not true_row:
+                print(f'no true symbol for: {s}')
+                continue
+            res = sess.execute(sa.text(f'update tdsignal set symbol_id={true_row.id} where symbol_id={s.id}'))
+            print(f'[{i}]change signal id {s.id} > {true_row.id}, num: {res.rowcount}')
+            sess.commit()
+        
+
+
+if __name__ == '__main__':
+    import os
+    from banbot.storage.base import init_db, db
+    from banbot.config import AppConfig
+    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.local.json']))
+    init_db()
+    fix_symbol_wrong()
+    

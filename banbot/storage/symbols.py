@@ -154,7 +154,7 @@ def get_symbol_market(symbol_short: str) -> Tuple[str, str]:
     if suffix and spliter == '.':
         # 分隔符是.表示是short_name
         symbol = f'{base_s}/{quote_s}:{quote_s}'
-        if suffix != 'P':
+        if suffix.lower() != 'p':
             # 非永续合约，带上后缀
             symbol += '-' + suffix
     return symbol, market
