@@ -184,7 +184,10 @@ class AsyncRedisLock:
                     self.lock_by = identifier
                     return self
                 await asyncio.sleep(0.01)
-        raise LockError('acquire redis lock timeout')
+        old_holder = await self._redis.get(self._key)
+        if old_holder:
+            old_holder = old_holder.decode('utf-8')
+        raise LockError(f'acquire redis lock timeout, lock by: {old_holder}')
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if not self.lock_by:
@@ -279,7 +282,7 @@ class SyncRedis:
     def lock(self, lock_name, acquire_timeout=3, lock_timeout=2, force=False, with_conn=False) -> RedisLock:
         '''
         获取基于 Redis 实现的分布式锁对象。针对返回对象应使用with加锁关锁
-        :param lock_name: 锁的名称
+        :param lock_name: 锁的名称，内部会加前缀避免冲突
         :param acquire_timeout: 获取锁的超时时间，默认 3 秒
         :param lock_timeout: 锁的超时时间，默认 2 秒
         :param force: 超时未获取到锁是否强制加锁
@@ -409,7 +412,7 @@ class AsyncRedis:
     def lock(self, lock_name, acquire_timeout=3, lock_timeout=2, force=False, with_conn=False) -> AsyncRedisLock:
         '''
         获取基于 Redis 实现的分布式锁对象。针对返回对象应使用with加锁关锁
-        :param lock_name: 锁的名称
+        :param lock_name: 锁的名称。内部会加前缀避免冲突
         :param acquire_timeout: 获取锁的超时时间，默认 3 秒
         :param lock_timeout: 锁的超时时间，默认 2 秒
         :param force: 超时未获取到锁是否强制加锁

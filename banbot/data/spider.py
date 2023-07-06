@@ -323,7 +323,7 @@ class LiveSpider:
         '''
         redis = AsyncRedis()
         if not await redis.get(cls._key):
-            async with redis.lock(cls._key + '_lock'):
+            async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
                 if not await redis.get(cls._key):
                     asyncio.create_task(start_spider())
                     while not cls._ready:
