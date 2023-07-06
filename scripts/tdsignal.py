@@ -8,6 +8,7 @@ import random
 
 import pandas as pd
 import six
+import datetime
 
 from banbot.storage.symbols import get_symbol_market
 from banbot.storage import *
@@ -23,7 +24,7 @@ async def load_file_signal(xls_path: str):
     df = pd.read_excel(xls_path, header=0)
     action_map = dict(LONG='buy', SHORT='sell')
     df['action'] = df['action'].map(action_map)
-    print(df.head())
+    # print(df.head())
     sess = db.session
     for rid, row in df.iterrows():
         action = action_map.get(row['action'], row['action'])
@@ -46,9 +47,25 @@ async def load_file_signal(xls_path: str):
                 raise ValueError(f'not support interval: {interval}')
         symbol, market = get_symbol_market(row['ticker'])
         exs = ExSymbol.get(row['exchange'], symbol, market)
-        create_time = row['time'].to_pydatetime()
+        sig_time = row['time']
+        if hasattr(sig_time, 'to_pydatetime'):
+            create_time = sig_time.to_pydatetime()
+        elif isinstance(sig_time, six.string_types):
+            time_part_len = len(sig_time.split(':'))
+            if time_part_len == 1:
+                fmt = '%Y-%m-%d'
+            elif time_part_len == 2:
+                fmt = '%Y-%m-%d %H:%M'
+            elif time_part_len == 3:
+                fmt += ':%S'
+            else:
+                raise ValueError(f'unsupport time fmt: {sig_time}')
+            create_time = datetime.datetime.strptime(sig_time, fmt)
+        else:
+            raise ValueError(f'unsupport time: {type(sig_time)}, {sig_time}')
         create_ts = btime.to_utcstamp(create_time, True, cut_int=True)
-        logger.info(f'insert: {timeframe} {create_ts}')
+        if rid % 500 == 0 and rid:
+            logger.info(f'[{rid}/{len(df)}] insert: {timeframe} {create_ts}')
         sess.add(TdSignal(
             symbol_id=exs.id,
             timeframe=timeframe,
@@ -57,24 +74,36 @@ async def load_file_signal(xls_path: str):
             bar_ms=(create_ts // tf_msecs) * tf_msecs,
             price=row['open']
         ))
-        if random.random() < 0.02:
-            sess.commit()
     sess.commit()
     return df
 
 
 async def load_signals(*xls_paths: str):
+    sta_path = r'E:/Data/SignalData.txt'
+    try:
+        handled = set(open(sta_path, 'r', encoding='utf-8').read().strip().splitlines())
+    except FileNotFoundError:
+        handled = set()
+    state = open(sta_path, 'a', encoding='utf-8')
     for path in xls_paths:
+        if path in handled:
+            print(f'skip: {path}')
+            continue
+        print(f'processing: {path}')
         await load_file_signal(path)
+        state.write(f'{path}\n')
+        state.flush()
+    state.close()
 
 
 if __name__ == '__main__':
+    import os
     from banbot.storage.base import init_db, db
     from banbot.config import AppConfig
-    par_xls_dir = r'E:/Data/temp/'
-    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.json']))
+    par_xls_dir = r'E:/Data/SignalData/'
+    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.local.json']))
     init_db()
+    fnames = os.listdir(par_xls_dir)
     with db():
-        fnames = ['btc_5m.xlsx', 'btc_1h.xlsx', 'btc_4h.xlsx', 'btc_15m.xlsx', 'btc_1d.xlsx', 'btc_3d.xlsx']
         path_list = [par_xls_dir + n for n in fnames]
         asyncio.run(load_signals(*path_list))
