@@ -49,12 +49,13 @@ def loop_forever(func):
     return wrap
 
 
-def _fill_credits(exg_args: dict, exg_cfg: dict, run_env: str) -> dict:
+def _get_credits(exg_cfg: dict, run_env: str) -> dict:
     credit = exg_cfg.get(f'credit_{run_env}')
+    ret_data = dict()
     if credit:
-        exg_args['apiKey'] = credit['api_key']
-        exg_args['secret'] = credit['api_secret']
-    return exg_args
+        ret_data['apiKey'] = credit['api_key']
+        ret_data['secret'] = credit['api_secret']
+    return ret_data
 
 
 def _create_exchange(module, cfg: dict, exg_name: str = None, market_type: str = None):
@@ -68,16 +69,18 @@ def _create_exchange(module, cfg: dict, exg_name: str = None, market_type: str =
     run_env = cfg["env"]
     has_proxy = bool(exg_cfg.get('proxies'))
     exg_args = dict(trust_env=has_proxy)
-    _fill_credits(exg_args, exg_cfg, run_env)
     if exg_cfg.get('options'):
         exg_args['options'] = exg_cfg.get('options')
-    exchange = exg_class(exg_args)
+    cred_args = _get_credits(exg_cfg, run_env)
+    exchange = exg_class(dict(**exg_args, **cred_args))
     if run_env == 'test':
         exchange.set_sandbox_mode(True)
         logger.warning('running in TEST mode!!!')
     if has_proxy:
         exchange.proxies = exg_cfg['proxies']
         exchange.aiohttp_proxy = exg_cfg['proxies']['http']
+    logger.info(f'Create Exg: {module.__name__}.{exchange.__class__.__name__} {run_env} '
+                f'proxy:{exchange.proxies}  {exg_args}')
     return exchange
 
 
@@ -99,8 +102,8 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
     run_env = cfg["env"]
     exg_class = getattr(ccxtpro, exg_name)
     exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
-    _fill_credits(exg_args, exg_cfg, run_env)
-    exchange_ws = exg_class()
+    cred_args = _get_credits(exg_cfg, run_env)
+    exchange_ws = exg_class(dict(**exg_args, **cred_args))
     if run_env == 'test':
         exchange_ws.set_sandbox_mode(True)
     if has_proxy:
