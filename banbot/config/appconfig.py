@@ -117,7 +117,15 @@ class AppConfig(metaclass=Singleton):
         path_list = self.args.get("config")
         if not path_list:
             path_list = self._get_def_config_paths()
-        return load_from_files(path_list)
+        config = load_from_files(path_list)
+        if not config.get('data_dir'):
+            import os
+            data_dir = os.environ.get('ban_data_dir')
+            if data_dir:
+                config['data_dir'] = data_dir
+            else:
+                raise ValueError('`data_dir` is required in config.json')
+        return config
 
     @property
     def exchange_cfg(self):
