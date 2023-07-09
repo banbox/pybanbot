@@ -144,12 +144,14 @@ class AppConfig(metaclass=Singleton):
     @classmethod
     def get(cls) -> Config:
         if not cls.obj:
-            cls.init_by_args({})
+            cls.init_by_args()
         return cls.obj.get_config()
 
     @classmethod
-    def init_by_args(cls, args: dict) -> Config:
+    def init_by_args(cls, args: dict = None) -> Config:
         from banbot.util.misc import deep_merge_dicts
+        if not args:
+            args = dict()
         config = AppConfig(args).get_config()
         deep_merge_dicts(args, config, False)
         if 'timerange' in config:

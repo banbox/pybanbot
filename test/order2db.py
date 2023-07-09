@@ -79,7 +79,7 @@ def convert():
 if __name__ == '__main__':
     from banbot.storage.base import init_db
     from banbot.config import AppConfig
-    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.json']))
+    AppConfig.init_by_args()
     init_db()
     with db():
         convert()

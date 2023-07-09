@@ -135,7 +135,7 @@ if __name__ == '__main__':
     import os
     from banbot.storage.base import init_db, db
     from banbot.config import AppConfig
-    AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.local.json']))
+    AppConfig.init_by_args()
     init_db()
     fix_symbol_wrong()
     

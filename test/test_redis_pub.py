@@ -52,6 +52,6 @@ async def test():
     logger.info('test finish')
 
 
-AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.json']))
+AppConfig.init_by_args()
 asyncio.run(test())
 

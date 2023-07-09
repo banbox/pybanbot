@@ -25,7 +25,7 @@ async def test_down():
     print(bar_end)
 
 
-AppConfig.init_by_args(dict(config=[r'E:\trade\banbot\banbot\config\config.json']))
+AppConfig.init_by_args()
 init_db()
 with db():
     asyncio.run(test_down())
