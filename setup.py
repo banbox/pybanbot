@@ -28,6 +28,7 @@ setup(
         'cachetools',
         'corpwechatbot',
         'numpy',
+        'asyncpg'
     ],
     extras_require={
         "develop": [
