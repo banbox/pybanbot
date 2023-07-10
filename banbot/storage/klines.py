@@ -416,7 +416,7 @@ ORDER BY sid, "time" desc'''
 
     @classmethod
     def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
-        agg_keys = {from_level}
+        agg_keys = [from_level]
         from_secs = tf_to_secs(from_level)
         for item in cls.agg_list:
             if item.secs <= from_secs:
@@ -429,7 +429,7 @@ ORDER BY sid, "time" desc'''
             # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
             no_new_finish = start_align == end_align < start_ms // 1000
             if not no_new_finish and item.agg_from in agg_keys:
-                agg_keys.add(item.tf)
+                agg_keys.append(item.tf)
             cls._update_unfinish(item, sid, start_align, end_ms)
         agg_keys.remove(from_level)
         if not agg_keys:
@@ -461,7 +461,7 @@ ORDER BY sid, "time" desc'''
         # 从未完成的自周期中查询bar
         unfinish = sess.execute(sa.text(f'''
                         SELECT sid,time,open,high,low,close,volume FROM kline_un
-                        where sid={sid} and timeframe='{item.tf}' and time >= to_timestamp({start_align})
+                        where sid={sid} and timeframe='{item.agg_from}' and time >= to_timestamp({start_align})
                         limit 1''')).fetchone()
         if unfinish:
             merge_rows.append(tuple(unfinish))
