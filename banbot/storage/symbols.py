@@ -7,6 +7,7 @@ import re
 from typing import ClassVar,Tuple
 
 from banbot.storage.base import *
+from banbot.util import btime
 re_symbol = re.compile(r'^(\w+)/(\w+)(([:.])(\S+))?')
 re_symbol_tv = re.compile(r'^(\w+)(USDT|TUSD|USDC|BUSD)((\.)(\S+))?')  # TradingView的交易对格式
 
