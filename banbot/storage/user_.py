@@ -27,6 +27,9 @@ class DbUser(BaseDbModel):
         sa.Index('idx_user_mobile', 'mobile'),
     )
 
+    # 插入后更新obj的default值到对应列
+    __mapper_args__ = {'eager_defaults': True}
+
     id = Column(sa.Integer, primary_key=True)
     user_name = Column(sa.String(128))
     avatar = Column(sa.String(256))

@@ -73,6 +73,8 @@ class Order(BaseDbModel):
         sa.Index('idx_od_inout_id', 'inout_id'),
         sa.Index('idx_od_status', 'status'),
     )
+    # 插入后更新obj的default值到对应列
+    __mapper_args__ = {'eager_defaults': True}
 
     id = Column(sa.Integer, primary_key=True)
     task_id = Column(sa.Integer)
@@ -124,6 +126,8 @@ class InOutOrder(BaseDbModel):
         sa.Index('idx_io_task_id', 'task_id'),
         sa.Index('idx_io_status', 'status'),
     )
+    # 插入后更新obj的default值到对应列
+    __mapper_args__ = {'eager_defaults': True}
 
     _open_ods: ClassVar[Dict[int, 'InOutOrder']] = dict()
     _his_ods: ClassVar[List['InOutOrder']] = []

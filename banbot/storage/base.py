@@ -18,15 +18,19 @@ from sqlalchemy.orm import Session as SqlSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import make_transient
 from sqlalchemy.types import TypeDecorator
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio.engine import Engine as AsyEngine
 
 from banbot.config import AppConfig
-from banbot.util import btime
 from banbot.util.common import logger
 
 _BaseDbModel = declarative_base()
 _db_engine: Optional[Engine] = None
 _DbSession: Optional[sessionmaker] = None
 _db_sess: ContextVar[Optional[SqlSession]] = ContextVar('_db_sess', default=None)
+_db_engine_asy: Optional[AsyEngine] = None
+_DbSessionAsync: Optional[sessionmaker] = None
+_db_sess_asy: ContextVar[Optional[AsyncSession]] = ContextVar('_db_sess_asy', default=None)
 db_slow_query_timeout = 1
 
 
@@ -38,7 +42,7 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     db.session.connection().execution_options(isolation_level='AUTOCOMMIT')
     或engine.echo=True
     '''
-    global _db_engine, _DbSession
+    global _db_engine, _DbSession, _db_engine_asy, _DbSessionAsync
     if _db_engine is not None:
         return _db_engine
     try:
@@ -57,6 +61,9 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     create_args['isolation_level'] = iso_level
     _db_engine = create_engine(db_url, **create_args)
     _DbSession = sessionmaker(bind=_db_engine)
+    # 实例化异步engine
+    _db_engine_asy = create_async_engine(db_url, **create_args)
+    _DbSessionAsync = sessionmaker(_db_engine_asy, expire_on_commit=False, class_=AsyncSession)
     return _db_engine
 
 
@@ -112,6 +119,57 @@ class DBSession(metaclass=DBSessionMeta):
 
 
 db: DBSessionMeta = DBSession
+
+
+class DBSessionAsyncMeta(type):
+    @property
+    def session(cls) -> AsyncSession:
+        session = _db_sess_asy.get()
+        if session is None:
+            raise RuntimeError('db sess not loaded')
+        return session
+
+
+class DBSessionAsync(metaclass=DBSessionAsyncMeta):
+    _sess = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._sess and cls._sess.token and cls._sess.fetch_tid == threading.get_ident():
+            return cls._sess
+        cls._sess = super().__new__(cls)
+        return cls._sess
+
+    def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
+        self.token = None
+        self.session_args = session_args or {}
+        self.commit_on_exit = commit_on_exit
+        self.fetch_tid = 0
+
+    async def __aenter__(self):
+        if _db_sess_asy.get() is None:
+            self.token = _db_sess_asy.set(_DbSessionAsync(**self.session_args))
+            self.fetch_tid = threading.get_ident()
+        return type(self)
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        sess = _db_sess_asy.get()
+        if not sess:
+            return
+
+        if exc_type is not None:
+            await sess.rollback()
+
+        if self.commit_on_exit:
+            await sess.commit()
+
+        await sess.close()
+
+        if self.token and self.fetch_tid == threading.get_ident():
+            _db_sess_asy.set(None)
+            self.token = None
+
+
+dba: DBSessionAsyncMeta = DBSessionAsync
 
 
 class IntEnum(TypeDecorator):
