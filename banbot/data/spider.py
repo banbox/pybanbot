@@ -252,9 +252,13 @@ class SpiderJob:
         return orjson.dumps(data)
 
 
-async def start_spider():
+async def run_spider():
+    from banbot.storage import db
     spider = LiveSpider()
-    logger.info('run data spider...')
+    with db():
+        logger.info('[spider] sync timeframe ranges ...')
+        KLine.sync_timeframes()
+    logger.info('[spider] wait job ...')
     await spider.run_listeners()
 
 
@@ -317,17 +321,30 @@ class LiveSpider:
             del miner.jobs[p]
 
     @classmethod
+    async def start_spider(cls, redis: AsyncRedis):
+        if not await redis.get(cls._key):
+            async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
+                if not await redis.get(cls._key):
+                    asyncio.create_task(run_spider())
+                    while not cls._ready:
+                        await asyncio.sleep(0.01)
+
+    @classmethod
     async def send(cls, *job_list: SpiderJob):
         '''
         发送命令到爬虫。不等待执行完成；发送成功即返回。
         '''
         redis = AsyncRedis()
-        if not await redis.get(cls._key):
-            async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
-                if not await redis.get(cls._key):
-                    asyncio.create_task(start_spider())
-                    while not cls._ready:
-                        await asyncio.sleep(0.01)
+        await cls.start_spider(redis)
         for job in job_list:
             await redis.publish(cls._key, job.dumps())
 
+
+def run_spider_forever(args: dict):
+    '''
+    此函数仅用于从命令行启动
+    '''
+    import asyncio
+    asyncio.run(LiveSpider.start_spider(AsyncRedis()))
+    while True:
+        time.sleep(1)

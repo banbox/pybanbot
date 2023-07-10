@@ -5,7 +5,7 @@
 # Date  : 2023/4/24
 import math
 from datetime import datetime
-from typing import Callable, Tuple, ClassVar
+from typing import Callable, Tuple, ClassVar, Iterable
 
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
@@ -35,7 +35,7 @@ class KLine(BaseDbModel):
     还有一个超表kline_1h存储1h维度数据
     '''
     __tablename__ = 'kline_1m'
-    _sid_range_map: ClassVar[Dict[Tuple[int, str], Tuple[int, int]]] = dict()
+    _kline_range: ClassVar[Dict[Tuple[int, str], Tuple[Optional[int], Optional[int]]]] = dict()
     _tname: ClassVar[str] = 'kline_1m'
 
     sid = Column(sa.Integer, primary_key=True)
@@ -220,7 +220,7 @@ order by time'''
         return rows
 
     @classmethod
-    def _load_symbol_ranges(cls):
+    def _init_ranges(cls):
         dct_sql = '''
 select sid,
 (extract(epoch from min(time)) * 1000)::float, 
@@ -233,36 +233,24 @@ group by 1'''
             rows = sess.execute(sa.text(sql_text)).fetchall()
             for sid, min_time, max_time in rows:
                 cache_key = sid, item.tf
-                if max_time:
-                    # 这里记录蜡烛对应的结束时间
-                    max_time += tf_to_secs(item.tf) * 1000
-                    min_time, max_time = round(min_time), round(max_time)
-                cls._sid_range_map[cache_key] = min_time, max_time
-        return cls._sid_range_map
+                # 这里记录蜡烛对应的结束时间
+                max_time += tf_to_secs(item.tf) * 1000
+                min_time, max_time = int(min_time), int(max_time)
+                cls._kline_range[cache_key] = min_time, max_time
+                sess.add(KInfo(sid=sid, timeframe=item.tf, start=min_time, stop=max_time))
+        sess.commit()
+        return cls._kline_range
 
     @classmethod
-    def _fetch_range(cls, sid: int, timeframe: str):
-        dct_sql = 'select (extract(epoch from min(time)) * 1000)::float, ' \
-                  '(extract(epoch from max(time)) * 1000)::float from {tbl} where sid={sid}'
-        min_time, max_time = cls._query_hyper(timeframe, dct_sql, '', sid=sid).fetchone()
-        if max_time:
-            # 这里记录蜡烛对应的结束时间
-            max_time += tf_to_secs(timeframe) * 1000
-            min_time, max_time = round(min_time), round(max_time)
-        cache_key = sid, timeframe
-        cls._sid_range_map[cache_key] = min_time, max_time
-        return min_time, max_time
-
-    @classmethod
-    def query_range(cls, sid: int, timeframe: str)\
-            -> Tuple[Optional[int], Optional[int]]:
-        cache_key = sid, timeframe
-        cache_val = cls._sid_range_map.get(cache_key)
-        if not cache_val:
-            min_time, max_time = cls._fetch_range(sid, timeframe)
-        else:
-            min_time, max_time = cache_val
-        return min_time, max_time
+    def _load_kline_ranges(cls):
+        sess = db.session
+        rows: Iterable[KInfo] = sess.query(KInfo).all()
+        if not rows:
+            return cls._init_ranges()
+        for row in rows:
+            cache_key = row.sid, row.timeframe
+            cls._kline_range[cache_key] = row.start, row.stop
+        return cls._kline_range
 
     @classmethod
     def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int):
@@ -270,17 +258,46 @@ group by 1'''
         更新sid+timeframe对应的数据区间。end_ms应为最后一个bar对应的结束时间，而非开始时间
         '''
         cache_key = sid, timeframe
-        if cache_key not in cls._sid_range_map:
-            cls._sid_range_map[cache_key] = start_ms, end_ms
+        old_start, old_end = cls._kline_range.get(cache_key) or (None, None)
+        if old_start:
+            if start_ms >= old_start and end_ms <= old_end:
+                # 未超出已有范围，不更新直接返回
+                return old_start, old_end
+            if old_end < start_ms or end_ms < old_start:
+                raise ValueError(f'incontinus range: {cache_key}, old: [{old_start}, {old_end}], '
+                                 f'new: [{start_ms}, {end_ms}]')
+        # 有新数据，需要更新范围，查询KInfo准备更新
+        sess = db.session
+        fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
+        kinfo: KInfo = sess.query(KInfo).filter(*fts).first()
+        if kinfo:
+            cls._kline_range[cache_key] = kinfo.start, kinfo.stop
+            old_start, old_end = kinfo.start, kinfo.stop
+        if not old_end or end_ms > old_end:
+            old_end = end_ms
+        if not old_start or start_ms < old_start:
+            old_start = start_ms
+        if not kinfo:
+            sess.add(KInfo(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms))
         else:
-            old_start, old_stop = cls._sid_range_map[cache_key]
-            if old_start and old_stop:
-                if old_stop < start_ms or end_ms < old_start:
-                    raise ValueError(f'incontinus range: {cache_key}, old range: [{old_start}, {old_stop}], '
-                                     f'new: [{start_ms}, {end_ms}]')
-                cls._sid_range_map[cache_key] = min(start_ms, old_start), max(end_ms, old_stop)
+            kinfo.start = old_start
+            kinfo.stop = old_end
+        sess.commit()
+        cls._kline_range[cache_key] = old_start, old_end
+        return cls._kline_range[cache_key]
+
+    @classmethod
+    def query_range(cls, sid: int, timeframe: str) -> Tuple[Optional[int], Optional[int]]:
+        cache_key = sid, timeframe
+        if cache_key not in cls._kline_range:
+            sess = db.session
+            fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
+            kinfo: KInfo = sess.query(KInfo).filter(*fts).first()
+            if kinfo:
+                cls._kline_range[cache_key] = kinfo.start, kinfo.stop
             else:
-                cls._sid_range_map[cache_key] = start_ms, end_ms
+                cls._kline_range[cache_key] = None, None
+        return cls._kline_range[cache_key]
 
     @classmethod
     def get_latest_stamps(cls, timeframe: str, max_off: int = 100) -> Dict[int, float]:
@@ -336,8 +353,8 @@ ORDER BY sid, "time" desc'''
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
             if old_stop < start_ms or end_ms < old_start:
-                raise ValueError(f'insert incontinus data, sid: {sid}, old range: [{old_start}, {old_stop}], '
-                                 f'insert: [{start_ms}, {end_ms}]')
+                raise ValueError(f'insert incontinus data, {sid}, {timeframe}, old: [{old_start}, {old_stop}], '
+                                 f'new: [{start_ms}, {end_ms}]')
             if skip_in_range:
                 rows = [r for r in rows if not (old_start <= r[0] < old_stop)]
         if not rows:
@@ -348,8 +365,6 @@ ORDER BY sid, "time" desc'''
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
-        if not ins_rows:
-            return
         sess = db.session
         ins_tbl = cls.agg_map[timeframe].tbl
         ins_cols = "sid, time, open, high, low, close, volume"
@@ -470,17 +485,18 @@ ORDER BY sid, "time" desc'''
     def _refresh_agg(cls, conn: Union[SqlSession, sa.Connection], tbl: BarAgg, sid: int,
                      start_ms: int, end_ms: int, agg_from: str = None):
         tf_msecs = tbl.secs * 1000
+        start_ms = start_ms // tf_msecs * tf_msecs
         # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
-        start_ms = (start_ms // tf_msecs - 1) * tf_msecs
+        agg_start = start_ms - tf_msecs
         end_ms = end_ms // tf_msecs * tf_msecs
         old_start, old_end = cls.query_range(sid, tbl.tf)
         if old_start and old_end > old_start:
             # 避免出现空洞或数据错误
-            start_ms = min(start_ms, old_end)
+            agg_start = min(agg_start, old_end)
             end_ms = max(end_ms, old_start)
         if not agg_from:
             agg_from = 'kline_' + tbl.agg_from
-        win_start = f"'{btime.to_datetime(start_ms)}'"
+        win_start = f"'{btime.to_datetime(agg_start)}'"
         win_end = f"'{btime.to_datetime(end_ms)}'"
         if tbl.is_view:
             # 刷新连续聚合（连续聚合不支持按sid筛选刷新，性能批量插入历史数据时性能较差）
@@ -497,9 +513,10 @@ ORDER BY sid, 2'''
             stmt = f'''INSERT INTO {tbl.tbl} ({ins_cols}) {select_sql} {cls._insert_conflict};'''
         try:
             conn.execute(sa.text(stmt))
-            return cls._fetch_range(sid, tbl.tf)
         except Exception as e:
-            logger.error(f'refresh conti agg error: {e}, {tbl.tf}')
+            logger.exception(f'refresh conti agg error: {e}, {sid} {tbl.tf}')
+            return old_start, old_end
+        return cls._update_range(sid, tbl.tf, start_ms, end_ms)
 
     @classmethod
     def log_candles_conts(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, candles: list):
@@ -643,7 +660,7 @@ ORDER BY sid, 2'''
         应在机器人启动时调用
         '''
         start = time.monotonic()
-        sid_ranges = cls._load_symbol_ranges()
+        sid_ranges = cls._load_kline_ranges()
         if not sid_ranges:
             return
         logger.info('try sync timeframes for klines...')
@@ -752,3 +769,15 @@ def get_unknown_range(start, stop, holes: List[KHole]):
         if start >= stop:
             return start, stop
     return start, stop
+
+
+class KInfo(BaseDbModel):
+    '''
+    记录K线所有周期的相关数据，如：开始结束时间。（每次查询开始结束时间非常慢）
+    '''
+    __tablename__ = 'kinfo'
+
+    sid = Column(sa.Integer, primary_key=True)
+    timeframe = Column(sa.String(5), primary_key=True)
+    start = Column(sa.BigInteger)  # 第一个bar的13位时间戳
+    stop = Column(sa.BigInteger)  # 最后一个bar的13位时间戳 + tf_secs * 1000

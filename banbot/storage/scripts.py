@@ -9,7 +9,7 @@ from banbot.storage import *
 from banbot.storage.base import BaseDbModel, sa, init_db
 from banbot.util.common import logger
 
-all_tables = [ExSymbol, KLine, KHole, BotTask, Order, InOutOrder, DbUser, ExgUser, TdSignal]
+all_tables = [ExSymbol, KLine, KHole, KInfo, BotTask, Order, InOutOrder, DbUser, ExgUser, TdSignal]
 tbl_map: Dict[str, BaseDbModel] = dict()
 for tbl in all_tables:
     tbl_map[tbl.__tablename__.lower()] = tbl

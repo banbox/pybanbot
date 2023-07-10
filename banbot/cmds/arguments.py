@@ -42,7 +42,7 @@ class Arguments:
         subparsers = self.parser.add_subparsers(dest='command')
 
         # 注册子命令
-        sub_cmds = [_reg_trade, _reg_backtest, _reg_down_data, _reg_dbcmd, _reg_od_compare]
+        sub_cmds = [_reg_trade, _reg_backtest, _reg_down_data, _reg_dbcmd, _reg_od_compare, _reg_spider]
         for sub_md in sub_cmds:
             sub_md(subparsers, parents=[com_parser])
 
@@ -81,6 +81,11 @@ def _reg_dbcmd(subparsers, **kwargs):
     from banbot.storage.scripts import exec_dbcmd
     opts = ["action", "tables", "force"]
     _reg_sub(subparsers, 'dbcmd', opts, exec_dbcmd, help='database cmd', **kwargs)
+
+
+def _reg_spider(subparsers, **kwargs):
+    from banbot.data.spider import run_spider_forever
+    _reg_sub(subparsers, 'spider', [], run_spider_forever, help='spider cmd', **kwargs)
 
 
 def _reg_od_compare(subparsers, **kwargs):

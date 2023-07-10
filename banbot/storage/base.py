@@ -198,7 +198,7 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
     if total > db_slow_query_timeout:
         if not str(statement).lower().strip().startswith('select'):
             return
-        logger.warn(f'Slow Query Found！Cost {total:.2} secs: {statement}')
+        logger.warn(f'Slow Query Found！Cost {total * 1000:.1f} ms: {statement}')
 
 
 def detach_obj(sess: SqlSession, obj: BaseDbModel):

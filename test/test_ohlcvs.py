@@ -4,6 +4,8 @@
 # Author: anyongjin
 # Date  : 2023/5/17
 import asyncio
+import random
+
 from banbot.data.tools import *
 from banbot.storage.base import init_db, db
 from banbot.config import AppConfig
@@ -25,7 +27,25 @@ async def test_down():
     print(bar_end)
 
 
-AppConfig.init_by_args()
-init_db()
-with db():
-    asyncio.run(test_down())
+def test_kline_insert():
+    from banbot.storage import KLine
+    KLine.sync_timeframes()
+    insert_num = 3000
+    open_price = 30000
+    ohlcvs = []
+    cur_stamp = btime.utcstamp() - 1000 * insert_num * 60
+    for i in range(insert_num):
+        oprice = open_price + random.random() - 0.5
+        hprice = oprice + 1
+        lprice = oprice - 1
+        cprice = oprice + random.random()
+        ohlcvs.append((cur_stamp, oprice, hprice, lprice, cprice, random.random() * 1000))
+        open_price = cprice
+        cur_stamp += 60 * 1000
+    KLine.insert(14, '1m', ohlcvs)
+
+
+if __name__ == '__main__':
+    AppConfig.init_by_args()
+    with db():
+        test_kline_insert()
