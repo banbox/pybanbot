@@ -493,6 +493,9 @@ ORDER BY sid, "time" desc'''
         sess = db.session
         sess.execute(sa.text(f"DELETE from kline_un where sid={sid} and timeframe='{item.tf}';"))
         cur_bar = cls._get_unfinish(sid, item.tf, start_ts, end_ts, 'calc')
+        if not cur_bar:
+            sess.commit()
+            return
         ins_cols = "sid, time, open, high, low, close, volume, timeframe"
         places = f"{cur_bar[0]}, to_timestamp({cur_bar[1] / 1000}), {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, {cur_bar[6]}, '{item.tf}'"
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
