@@ -154,7 +154,7 @@ class LiveMiner(Watcher):
     loop_intv = 0.5  # 没有任务时，睡眠间隔
     '''
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
-    一个LiveMiner对应一个交易所。处理此交易所下所有数据的监听
+    一个LiveMiner对应一个交易所的一个市场。处理此交易所市场下所有数据的监听
     '''
     def __init__(self, exg_name: str, market: str):
         super(LiveMiner, self).__init__(self._on_bar_finish)

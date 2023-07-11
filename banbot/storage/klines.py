@@ -159,6 +159,14 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
                 conn.execute(sa.text(f"drop table if exists {tbl.tbl}"))
 
     @classmethod
+    def _get_sub_tf(cls, timeframe: str) -> Tuple[str, str]:
+        tf_secs = tf_to_secs(timeframe)
+        for item in cls.agg_list[::-1]:
+            if tf_secs % item.secs == 0:
+                return item.tf, item.tbl
+        raise RuntimeError(f'unsupport timeframe {timeframe}')
+
+    @classmethod
     def _query_hyper(cls, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable], **kwargs):
         conn = db.session.connection()
         if timeframe in cls.agg_map:
@@ -166,14 +174,7 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             return conn.execute(sa.text(stmt))
         else:
             # 时间帧没有直接符合的，从最接近的子timeframe聚合
-            tf_secs = tf_to_secs(timeframe)
-            sub_tf, sub_tbl = None, None
-            for item in cls.agg_list[::-1]:
-                if tf_secs % item.secs == 0:
-                    sub_tf, sub_tbl = item.tf, item.tbl
-                    break
-            if not sub_tbl:
-                raise RuntimeError(f'unsupport timeframe {timeframe}')
+            sub_tf, sub_tbl = cls._get_sub_tf(timeframe)
             if callable(gp_sql):
                 gp_sql = gp_sql()
             stmt = gp_sql.format(tbl=sub_tbl, **kwargs)
@@ -182,23 +183,25 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
     @classmethod
     def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int,
               limit: Optional[int] = None, with_unfinish: bool = False):
-        tf_msecs = tf_to_secs(timeframe) * 1000
+        tf_secs = tf_to_secs(timeframe)
+        tf_msecs = tf_secs * 1000
         max_end_ms = end_ms
         if limit:
             end_ms = min(start_ms + tf_msecs * limit, end_ms)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
+        finish_end_ts = end_ts // tf_secs * tf_secs
 
         dct_sql = f'''
 select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from {{tbl}}
-where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
+where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
 order by time'''
 
         def gen_gp_sql():
             return f'''
                 select (extract(epoch from time_bucket('{timeframe}', time)) * 1000)::float AS gtime,
                   {cls._candle_agg} from {{tbl}}
-                where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
+                where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
                 group by gtime
                 order by gtime'''
 
@@ -209,14 +212,9 @@ order by time'''
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
         elif with_unfinish and rows and rows[-1][0] == max_finish_ts:
             unfinish_ts = (max_finish_ts + tf_msecs) // 1000
-            dct_sql = f'''
-            select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from kline_un
-            where sid={exs.id} and timeframe='{timeframe}' and time >= to_timestamp({unfinish_ts})
-            order by time limit 1'''
-            conn = db.session.connection()
-            row = conn.execute(sa.text(dct_sql)).fetchone()
-            if row:
-                rows.append(list(row))
+            un_bar = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
+            if un_bar:
+                rows.append(list(un_bar))
         return rows
 
     @classmethod
@@ -430,7 +428,7 @@ ORDER BY sid, "time" desc'''
             no_new_finish = start_align == end_align < start_ms // 1000
             if not no_new_finish and item.agg_from in agg_keys:
                 agg_keys.append(item.tf)
-            cls._update_unfinish(item, sid, start_align, end_ms)
+            cls._update_unfinish(item, sid, start_align, end_ms // 1000)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
@@ -445,38 +443,58 @@ ORDER BY sid, "time" desc'''
             conn.execution_options(isolation_level=bak_iso_level)
 
     @classmethod
-    def _update_unfinish(cls, item: BarAgg, sid: int, start_align: int, end_ms: int):
+    def _get_unfinish(cls, sid: int, timeframe: str, start_ts: int, end_ts: int, mode: str = 'query'):
+        '''
+        查询给定周期的未完成bar。给定周期可以是保存的周期1m,5m,15m,1h,1d；也可以是聚合周期如4h,3d
+        此方法两种用途：query用户查询最新数据（可能是聚合周期）；calc从子周期更新大周期的未完成bar（不可能是聚合周期）
+        :param sid:
+        :param timeframe:
+        :param start_ts: 10位秒级时间戳
+        :param end_ts: 10位秒级时间戳
+        :param mode: query|calc
+        '''
+        if mode == 'calc' and timeframe not in cls.agg_map:
+            raise RuntimeError(f'{timeframe} not allowed in `calc` mode')
         sess = db.session
-        sess.execute(sa.text(f"DELETE from kline_un where sid={sid} and timeframe='{item.tf}';"))
-        # 从已完成的子周期中统计筛选数据
-        agg_from = 'kline_' + item.agg_from
-        select_sql = f'''
-                        SELECT sid, time_bucket(INTERVAL '{item.tf}', time) AS time, {cls._candle_agg}
-                        FROM {agg_from}
-                        where sid={sid} and time >= to_timestamp({start_align}) and time < to_timestamp({end_ms / 1000})
-                        GROUP BY sid, 2 
-                        ORDER BY sid, 2'''
-        finish_row = sess.execute(sa.text(select_sql)).fetchone()
-        merge_rows = [tuple(finish_row)] if finish_row else []
-        # 从未完成的自周期中查询bar
+        merge_rows = []
+        un_tf = timeframe
+        if mode == 'calc' or timeframe not in cls.agg_map:
+            # 从已完成的子周期中统计筛选数据。
+            from_tf = cls._get_sub_tf(timeframe)[0]
+            agg_from = 'kline_' + from_tf
+            select_sql = f'''
+                                    SELECT sid, time_bucket(INTERVAL '{timeframe}', time) AS time, {cls._candle_agg}
+                                    FROM {agg_from}
+                                    where sid={sid} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
+                                    GROUP BY sid, 2 
+                                    ORDER BY sid, 2'''
+            finish_row = sess.execute(sa.text(select_sql)).fetchone()
+            merge_rows = [tuple(finish_row)] if finish_row else []
+            un_tf = from_tf  # 未完成bar从子周期查询
+        # 从未完成的周期/子周期中查询bar
         unfinish = sess.execute(sa.text(f'''
-                        SELECT sid,time,open,high,low,close,volume FROM kline_un
-                        where sid={sid} and timeframe='{item.agg_from}' and time >= to_timestamp({start_align})
-                        limit 1''')).fetchone()
+                                SELECT sid,time,open,high,low,close,volume FROM kline_un
+                                where sid={sid} and timeframe='{un_tf}' and time >= to_timestamp({start_ts})
+                                limit 1''')).fetchone()
         if unfinish:
             merge_rows.append(tuple(unfinish))
         if not merge_rows:
-            sess.commit()
             return
         if len(merge_rows) > 1:
             mg_cols = list(zip(*merge_rows))
             cur_bar = (mg_cols[0][0], mg_cols[1][0], mg_cols[2][0], max(mg_cols[3]), min(mg_cols[4]),
-                           mg_cols[5][-1], sum(mg_cols[6]))
+                       mg_cols[5][-1], sum(mg_cols[6]))
         else:
             cur_bar = merge_rows[0]
+        return cur_bar
+
+    @classmethod
+    def _update_unfinish(cls, item: BarAgg, sid: int, start_ts: int, end_ts: int):
+        sess = db.session
+        sess.execute(sa.text(f"DELETE from kline_un where sid={sid} and timeframe='{item.tf}';"))
+        cur_bar = cls._get_unfinish(sid, item.tf, start_ts, end_ts, 'calc')
         ins_cols = "sid, time, open, high, low, close, volume, timeframe"
-        bar_time = btime.to_utcstamp(cur_bar[1])
-        places = f"{cur_bar[0]}, to_timestamp({bar_time}), {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, {cur_bar[6]}, '{item.tf}'"
+        places = f"{cur_bar[0]}, to_timestamp({cur_bar[1] / 1000}), {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, {cur_bar[6]}, '{item.tf}'"
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
         sess.execute(sa.text(insert_sql))
         sess.commit()
