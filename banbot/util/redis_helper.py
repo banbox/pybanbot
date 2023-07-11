@@ -28,7 +28,13 @@ def _get_redis_pool(is_async: bool, **kwargs):
     def create_redis():
         redis_url = AppConfig.get()['redis_url']
         module = aioredis if is_async else redis
-        return module.ConnectionPool.from_url(redis_url, **kwargs)
+        fin_args = dict(
+            health_check_interval=10,
+            socket_keepalive=True,
+            retry_on_timeout=True,
+        )
+        fin_args.update(**kwargs)
+        return module.ConnectionPool.from_url(redis_url, **fin_args)
 
     return Instance.getobj(f'redis_{is_async}', create_redis)
 
