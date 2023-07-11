@@ -28,6 +28,9 @@ class BarAgg:
         self.retention = retention
         self.is_view = comp_before is None  # 超表可压缩，故传入压缩参数的认为是超表
 
+    def __str__(self):
+        return f'{self.tbl} agg_from: {self.agg_from}'
+
 
 class KLine(BaseDbModel):
     '''
@@ -162,6 +165,8 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
     def _get_sub_tf(cls, timeframe: str) -> Tuple[str, str]:
         tf_secs = tf_to_secs(timeframe)
         for item in cls.agg_list[::-1]:
+            if item.secs >= tf_secs:
+                continue
             if tf_secs % item.secs == 0:
                 return item.tf, item.tbl
         raise RuntimeError(f'unsupport timeframe {timeframe}')
@@ -482,10 +487,11 @@ ORDER BY sid, "time" desc'''
             return
         if len(merge_rows) > 1:
             mg_cols = list(zip(*merge_rows))
-            cur_bar = (mg_cols[0][0], mg_cols[1][0], mg_cols[2][0], max(mg_cols[3]), min(mg_cols[4]),
-                       mg_cols[5][-1], sum(mg_cols[6]))
+            utc_stamp = btime.to_utcstamp(mg_cols[1][0], ms=True, cut_int=True)
+            cur_bar = (utc_stamp, mg_cols[2][0], max(mg_cols[3]), min(mg_cols[4]), mg_cols[5][-1], sum(mg_cols[6]))
         else:
-            cur_bar = merge_rows[0]
+            utc_stamp = btime.to_utcstamp(merge_rows[0][1], ms=True, cut_int=True)
+            cur_bar = (utc_stamp, *merge_rows[0][2:])
         return cur_bar
 
     @classmethod
@@ -497,7 +503,7 @@ ORDER BY sid, "time" desc'''
             sess.commit()
             return
         ins_cols = "sid, time, open, high, low, close, volume, timeframe"
-        places = f"{cur_bar[0]}, to_timestamp({cur_bar[1] / 1000}), {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, {cur_bar[6]}, '{item.tf}'"
+        places = f"{sid}, to_timestamp({cur_bar[0] / 1000}), {cur_bar[1]}, {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, '{item.tf}'"
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
         sess.execute(sa.text(insert_sql))
         sess.commit()

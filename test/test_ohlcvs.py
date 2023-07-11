@@ -39,7 +39,8 @@ def test_kline_insert():
         hprice = oprice + 1
         lprice = oprice - 1
         cprice = oprice + random.random()
-        ohlcvs.append((cur_stamp, oprice, hprice, lprice, cprice, random.random() * 1000))
+        bar = (cur_stamp, oprice, hprice, lprice, cprice, random.random() * 1000)
+        ohlcvs.append(bar)
         open_price = cprice
         cur_stamp += 60 * 1000
     KLine.insert(14, '1m', ohlcvs)

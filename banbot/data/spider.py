@@ -255,6 +255,7 @@ class SpiderJob:
 async def run_spider():
     from banbot.storage import db
     spider = LiveSpider()
+    asyncio.create_task(spider.heartbeat())
     with db():
         logger.info('[spider] sync timeframe ranges ...')
         KLine.sync_timeframes()
@@ -277,7 +278,6 @@ class LiveSpider:
 
     async def run_listeners(self):
         await self.conn.subscribe(self._key)
-        asyncio.create_task(self._heartbeat())
         LiveSpider._ready = True
         async for msg in self.conn.listen():
             if msg['type'] != 'message':
@@ -296,7 +296,7 @@ class LiveSpider:
         except Exception:
             logger.exception(f'run spider job error: {params}')
 
-    async def _heartbeat(self):
+    async def heartbeat(self):
         while True:
             await self.redis.set(self._key, expire_time=5)
             await asyncio.sleep(4)
