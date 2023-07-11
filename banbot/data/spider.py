@@ -171,10 +171,10 @@ class LiveMiner(Watcher):
         if job and job.timeframe == save_tf:
             fmt_args = [self.exchange.name, pair, job.check_intv, check_intv]
             if job.check_intv <= check_intv:
-                logger.debug('miner %s/%s  %.1f, skip: %.1f', *fmt_args)
+                logger.info('miner %s/%s  %.1f, skip: %.1f', *fmt_args)
             else:
                 job.check_intv = check_intv
-                logger.debug('miner %s/%s check_intv %.1f -> %.1f', *fmt_args)
+                logger.info('miner %s/%s check_intv %.1f -> %.1f', *fmt_args)
         else:
             job = MinerJob(pair, save_tf, check_intv, since)
             # 将since改为所属bar的开始，避免第一个bar数据不完整
@@ -182,7 +182,7 @@ class LiveMiner(Watcher):
             job.since = job.since // tf_msecs * tf_msecs
             self.jobs[pair] = job
             fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
-            logger.debug('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
+            logger.info('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
 
     async def run(self):
         while True:
@@ -308,6 +308,7 @@ class LiveSpider:
             miner = LiveMiner(exg_name, market)
             self.miners[cache_key] = miner
             asyncio.create_task(miner.run())
+            logger.info(f'start miner for {exg_name}.{market}')
         miner.sub_pair(pair, timeframe, since)
 
     async def unwatch_pairs(self, exg_name: str, market: str, pairs: List[str]):
