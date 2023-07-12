@@ -208,7 +208,7 @@ order by time'''
 
         def gen_gp_sql():
             return f'''
-                select (extract(epoch from time_bucket('{timeframe}', time)) * 1000)::float AS gtime,
+                select (extract(epoch from time_bucket('{timeframe}', time, origin => '1970-01-01')) * 1000)::float AS gtime,
                   {cls._candle_agg} from {{tbl}}
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
                 group by gtime

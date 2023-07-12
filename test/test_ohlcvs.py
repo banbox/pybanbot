@@ -58,8 +58,8 @@ async def test_get_kline():
     exg = get_exchange('binance', 'future')
     exs = ExSymbol.get('binance', 'BTC/USDT:USDT', 'future')
     end_ms = btime.utcstamp()
-    start_ms = end_ms - 72 * 3600 * 1000
-    data = await auto_fetch_ohlcv(exg, exs, '4h', start_ms, end_ms, with_unfinish=True)
+    start_ms = end_ms - 30 * 24 * 3600 * 1000
+    data = await auto_fetch_ohlcv(exg, exs, '1w', start_ms, end_ms, with_unfinish=True)
     print(data[-1])
 
 
