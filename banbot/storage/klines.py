@@ -528,8 +528,8 @@ ORDER BY sid, "time" desc'''
             end_ms = max(end_ms, old_start)
         if not agg_from:
             agg_from = 'kline_' + tbl.agg_from
-        win_start = f"'{btime.to_datetime(agg_start)}'"
-        win_end = f"'{btime.to_datetime(end_ms)}'"
+        win_start = f"to_timestamp({agg_start / 1000})"
+        win_end = f"to_timestamp({end_ms / 1000})"
         if tbl.is_view:
             # 刷新连续聚合（连续聚合不支持按sid筛选刷新，性能批量插入历史数据时性能较差）
             stmt = f"CALL refresh_continuous_aggregate('{tbl.tbl}', {win_start}, {win_end});"
