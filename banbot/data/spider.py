@@ -196,8 +196,11 @@ class LiveMiner(Watcher):
                     await asyncio.sleep(self.loop_intv)
                     continue
                 batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:MAX_CONC_OHLCV]
+                items = [f'{j.pair}:{j.since}' for j in batch_jobs]
+                logger.info(f'update pairs: {"  ".join(items)}')
                 tasks = [self._try_update(j) for j in batch_jobs]
                 await asyncio.gather(*tasks)
+                logger.info("batch jobs complete")
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
@@ -211,9 +214,9 @@ class LiveMiner(Watcher):
         import ccxt
         from banbot.storage import db
         measure = MeasureTime()
-        care_symbol = 'BTC/USDT:USDT'
-        if job.pair == care_symbol:
-            logger.info(f'start update: {care_symbol}')
+        do_print = job.pair.startswith('BTC')
+        if do_print:
+            logger.info(f'start update: {job.pair}')
         try:
             next_time = btime.utctime() + job.check_intv
             next_bar = next_time // job.tf_secs * job.tf_secs
@@ -226,7 +229,7 @@ class LiveMiner(Watcher):
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
                 job.next_run -= job.check_intv * 0.9
-                if job.pair == care_symbol:
+                if do_print:
                     measure.print_all()
                 return
             measure.start_for('build_ohlcv')
@@ -248,11 +251,13 @@ class LiveMiner(Watcher):
             async with AsyncRedis() as redis:
                 pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
                 await redis.publish(pub_key, sre_data)
-            if job.pair == care_symbol:
+            if do_print:
                 measure.print_all()
-                logger.info(f'start update: {care_symbol}')
+                logger.info(f'start update: {job.pair}')
         except (ccxt.NetworkError, ccxt.BadRequest):
             logger.exception(f'get live data exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
+        except Exception:
+            logger.exception(f'spider exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
 
 
 class SpiderJob:
