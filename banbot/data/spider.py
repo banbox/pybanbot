@@ -205,16 +205,21 @@ class LiveMiner(Watcher):
                 logger.exception(f'miner error {self.exchange.name}')
 
     def _on_bar_finish(self, pair: str, timeframe: str, bar_row: Tuple):
+        from banbot.util.common import MeasureTime
+        measure = MeasureTime()
         from banbot.storage import KLine
+        measure.start_for('get_id')
         sid = ExSymbol.get_id(self.exchange.name, pair, self.exchange.market_type)
+        measure.start_for('insert')
         KLine.insert(sid, timeframe, [bar_row])
+        measure.print_all()
 
     async def _try_update(self, job: MinerJob):
         from banbot.util.common import MeasureTime
         import ccxt
         from banbot.storage import db
         measure = MeasureTime()
-        do_print = job.pair.startswith('BTC')
+        do_print = True
         if do_print:
             logger.info(f'start update: {job.pair}')
         try:
@@ -225,7 +230,7 @@ class LiveMiner(Watcher):
                 # 当下次轮询会有新的完成数据时，尽可能在第一时间更新
                 job.next_run = next_bar
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
-            measure.start_for('fetch_ohlcv')
+            measure.start_for(f'fetch:{job.pair}')
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
                 job.next_run -= job.check_intv * 0.9
@@ -242,7 +247,7 @@ class LiveMiner(Watcher):
             else:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
-            measure.start_for('write_db')
+            measure.start_for(f'write_db:{len(ohlcvs)}')
             with db():
                 self._on_state_ohlcv(job.pair, job, ohlcvs, last_finish)
             # 发布小间隔数据到redis订阅方

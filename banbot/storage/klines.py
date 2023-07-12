@@ -345,6 +345,8 @@ ORDER BY sid, "time" desc'''
         '''
         单个bar插入，耗时约38ms
         '''
+        from banbot.util.common import MeasureTime
+        measure = MeasureTime()
         if not rows:
             return
         if timeframe not in cls.down_tfs:
@@ -356,6 +358,7 @@ ORDER BY sid, "time" desc'''
             row_intv = rows[1][0] - rows[0][0]
             if row_intv != intv_msecs:
                 raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
+        measure.start_for('qrange')
         start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
         old_start, old_stop = cls.query_range(sid, timeframe)
         if old_start and old_stop:
@@ -373,23 +376,29 @@ ORDER BY sid, "time" desc'''
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
+        measure.start_for('get_sess')
         sess = db.session
         ins_tbl = cls.agg_map[timeframe].tbl
         ins_cols = "sid, time, open, high, low, close, volume"
         places = ":sid, :time, :open, :high, :low, :close, :volume"
         insert_sql = f"insert into {ins_tbl} ({ins_cols}) values ({places}) {cls._insert_conflict}"
         try:
+            measure.start_for('insert_base')
             sess.execute(sa.text(insert_sql), ins_rows)
         except Exception as e:
             if str(e).find('not supported on compressed chunks') >= 0:
                 logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} sid:{sid} {start_ms}-{end_ms}")
             else:
                 raise
+        measure.start_for('commit')
         sess.commit()
+        measure.start_for('upd_range')
         # 更新区间
         cls._update_range(sid, timeframe, start_ms, end_ms)
+        measure.start_for('agg_conti')
         # 刷新相关的连续聚合
         cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
+        measure.print_all()
 
     @classmethod
     def pause_compress(cls, tbl_list: List[str]) -> List[int]:
