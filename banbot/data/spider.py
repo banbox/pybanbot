@@ -252,20 +252,8 @@ class SpiderJob:
         return orjson.dumps(data)
 
 
-async def run_spider():
-    from banbot.storage import db
-    spider = LiveSpider()
-    asyncio.create_task(spider.heartbeat())
-    with db():
-        logger.info('[spider] sync timeframe ranges ...')
-        KLine.sync_timeframes()
-    logger.info('[spider] wait job ...')
-    await spider.run_listeners()
-
-
 class LiveSpider:
     _key = 'spider'
-    _ready = False
     _unpush_jobs = []
 
     '''
@@ -279,7 +267,6 @@ class LiveSpider:
 
     async def run_listeners(self):
         await self.conn.subscribe(self._key)
-        LiveSpider._ready = True
         async for msg in self.conn.listen():
             if msg['type'] != 'message':
                 continue
@@ -297,7 +284,7 @@ class LiveSpider:
         except Exception:
             logger.exception(f'run spider job error: {params}')
 
-    async def heartbeat(self):
+    async def _heartbeat(self):
         while True:
             await self.redis.set(self._key, expire_time=5)
             await asyncio.sleep(4)
@@ -323,13 +310,27 @@ class LiveSpider:
             del miner.jobs[p]
 
     @classmethod
-    async def start_spider(cls, redis: AsyncRedis):
-        if not await redis.get(cls._key):
-            async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
-                if not await redis.get(cls._key):
-                    asyncio.create_task(run_spider())
-                    while not cls._ready:
-                        await asyncio.sleep(0.01)
+    async def run_spider(cls):
+        redis = AsyncRedis()
+        if await redis.get(cls._key):
+            return
+        async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
+            if await redis.get(cls._key):
+                return
+            from banbot.storage import db
+            spider = LiveSpider()
+            asyncio.create_task(spider._heartbeat())
+        with db():
+            logger.info('[spider] sync timeframe ranges ...')
+            KLine.sync_timeframes()
+        while True:
+            try:
+                logger.info('[spider] wait job ...')
+                await spider.run_listeners()
+            except Exception:
+                logger.exception('spider listen fail, rebooting...')
+            await asyncio.sleep(1)
+            logger.info('try restart spider...')
 
     @classmethod
     async def send(cls, *job_list: SpiderJob):
@@ -354,6 +355,4 @@ def run_spider_forever(args: dict):
     此函数仅用于从命令行启动
     '''
     import asyncio
-    asyncio.run(LiveSpider.start_spider(AsyncRedis()))
-    while True:
-        time.sleep(1)
+    asyncio.run(LiveSpider.run_spider())
