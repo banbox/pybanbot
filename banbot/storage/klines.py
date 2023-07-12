@@ -195,7 +195,11 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             end_ms = min(start_ms + tf_msecs * limit, end_ms)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
+        # 计算最新未完成bar的时间戳
         finish_end_ts = end_ts // tf_secs * tf_secs
+        unfinish_ts = int(btime.utctime() // tf_secs * tf_secs)
+        if finish_end_ts > unfinish_ts:
+            finish_end_ts = unfinish_ts
 
         dct_sql = f'''
 select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from {{tbl}}
@@ -212,11 +216,9 @@ order by time'''
 
         rows = cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=exs.id).fetchall()
         rows = [list(r) for r in rows]
-        max_finish_ts = (btime.utcstamp() // tf_msecs - 1) * tf_msecs
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
-        elif with_unfinish and rows and rows[-1][0] == max_finish_ts:
-            unfinish_ts = (max_finish_ts + tf_msecs) // 1000
+        elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
             un_bar = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
             if un_bar:
                 rows.append(list(un_bar))
@@ -340,6 +342,9 @@ ORDER BY sid, "time" desc'''
 
     @classmethod
     def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True):
+        '''
+        单个bar插入，耗时约38ms
+        '''
         if not rows:
             return
         if timeframe not in cls.down_tfs:

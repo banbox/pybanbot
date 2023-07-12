@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/2/28
 import datetime
+import math
 import os
 
 from banbot.config.consts import *
@@ -347,15 +348,15 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     tf_msecs = tf_to_secs(timeframe) * 1000
     if not end_ms:
         end_ms = int(btime.time() * 1000)
-    end_ms = end_ms // tf_msecs * tf_msecs
+    factor = end_ms / tf_msecs
+    factor_int = math.ceil(factor) if with_unfinish else math.floor(factor)
+    end_ms = factor_int * tf_msecs
     if not start_ms:
         start_ms = end_ms - tf_msecs * limit
     else:
         fix_start_ms = start_ms // tf_msecs * tf_msecs
         if start_ms > fix_start_ms:
             start_ms = fix_start_ms + tf_msecs
-    if with_unfinish:
-        end_ms += tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack)
     return KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
