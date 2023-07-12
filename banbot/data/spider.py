@@ -207,8 +207,13 @@ class LiveMiner(Watcher):
         KLine.insert(sid, timeframe, [bar_row])
 
     async def _try_update(self, job: MinerJob):
+        from banbot.util.common import MeasureTime
         import ccxt
         from banbot.storage import db
+        measure = MeasureTime()
+        care_symbol = 'BTC/USDT:USDT'
+        if job.pair == care_symbol:
+            logger.info(f'start update: {care_symbol}')
         try:
             next_time = btime.utctime() + job.check_intv
             next_bar = next_time // job.tf_secs * job.tf_secs
@@ -217,10 +222,14 @@ class LiveMiner(Watcher):
                 # 当下次轮询会有新的完成数据时，尽可能在第一时间更新
                 job.next_run = next_bar
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
+            measure.start_for('fetch_ohlcv')
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
                 job.next_run -= job.check_intv * 0.9
+                if job.pair == care_symbol:
+                    measure.print_all()
                 return
+            measure.start_for('build_ohlcv')
             job.since = ohlcvs_sml[-1][0] + job.fetch_tfsecs * 1000
             if job.tf_secs > job.fetch_tfsecs:
                 # 合并得到保存到数据库周期维度的数据
@@ -230,13 +239,18 @@ class LiveMiner(Watcher):
             else:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
+            measure.start_for('write_db')
             with db():
                 self._on_state_ohlcv(job.pair, job, ohlcvs, last_finish)
             # 发布小间隔数据到redis订阅方
+            measure.start_for('send_pub')
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
             async with AsyncRedis() as redis:
                 pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
                 await redis.publish(pub_key, sre_data)
+            if job.pair == care_symbol:
+                measure.print_all()
+                logger.info(f'start update: {care_symbol}')
         except (ccxt.NetworkError, ccxt.BadRequest):
             logger.exception(f'get live data exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
 
