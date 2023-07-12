@@ -266,6 +266,7 @@ async def run_spider():
 class LiveSpider:
     _key = 'spider'
     _ready = False
+    _unpush_jobs = []
 
     '''
     实时数据爬虫；仅用于实盘。负责：实时K线、订单簿等公共数据监听
@@ -336,7 +337,14 @@ class LiveSpider:
         发送命令到爬虫。不等待执行完成；发送成功即返回。
         '''
         redis = AsyncRedis()
-        await cls.start_spider(redis)
+        if not await redis.get(cls._key):
+            cls._unpush_jobs.extend(job_list)
+            logger.error(f'spider not started, {len(job_list)} job cached')
+            return
+        if cls._unpush_jobs:
+            for job in cls._unpush_jobs:
+                await redis.publish(cls._key, job.dumps())
+            cls._unpush_jobs = []
         for job in job_list:
             await redis.publish(cls._key, job.dumps())
 

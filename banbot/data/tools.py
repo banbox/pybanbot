@@ -350,7 +350,10 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     end_ms = end_ms // tf_msecs * tf_msecs
     if not start_ms:
         start_ms = end_ms - tf_msecs * limit
-    start_ms = start_ms // tf_msecs * tf_msecs
+    else:
+        fix_start_ms = start_ms // tf_msecs * tf_msecs
+        if start_ms > fix_start_ms:
+            start_ms = fix_start_ms + tf_msecs
     if with_unfinish:
         end_ms += tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
