@@ -135,16 +135,23 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             conn.commit()
             conn.execute(sa.text(stat_policy))
             conn.commit()
-        # 创建未完成kline表，存储所有币的所有周期未完成bar
-        un_tname = 'kline_un'
+        # 创建未完成kline表，存储所有币的所有周期未完成bar；不需要是超表
         exc_sqls = [
-            f'CREATE TABLE {un_tname} (LIKE {cls._tname} INCLUDING ALL);',
-            f'alter table {un_tname} add column timeframe varchar(30);',
-            f'CREATE INDEX "{un_tname}_tf" ON "{un_tname}" USING btree ("timeframe");',
-            f"SELECT create_hypertable('{un_tname}','time');",
-            # sqlalchemy创建的表，附带主键默认是类名+"_pkey"后缀
-            f"ALTER TABLE {un_tname} DROP CONSTRAINT kline_un_pkey;",
-            f"ALTER TABLE {un_tname} ADD CONSTRAINT kline_un_pkey PRIMARY KEY (sid, time, timeframe);"
+            'DROP TABLE IF EXISTS "kline_un";',
+            '''
+CREATE TABLE "kline_un" (
+  "sid" int4 NOT NULL,
+  "start_ms" bigint NOT NULL,
+  "stop_ms" bigint NOT NULL,
+  "timeframe" varchar(5) NOT NULL,
+  "open" float8,
+  "high" float8,
+  "low" float8,
+  "close" float8,
+  "volume" float8
+);''',
+            'CREATE INDEX "kline_un_sid_tf_idx" ON "kline_un"("sid", "timeframe");',
+            "ALTER TABLE kline_un ADD CONSTRAINT pk_kline_un PRIMARY KEY (sid, start_ms, timeframe);"
         ]
         for stat in exc_sqls:
             conn.execute(sa.text(stat))
@@ -202,13 +209,13 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
             finish_end_ts = unfinish_ts
 
         dct_sql = f'''
-select (extract(epoch from time) * 1000)::float as time,open,high,low,close,volume from {{tbl}}
+select (extract(epoch from time) * 1000)::bigint as time,open,high,low,close,volume from {{tbl}}
 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
 order by time'''
 
         def gen_gp_sql():
             return f'''
-                select (extract(epoch from time_bucket('{timeframe}', time, origin => '1970-01-01')) * 1000)::float AS gtime,
+                select (extract(epoch from time_bucket('{timeframe}', time, origin => '1970-01-01')) * 1000)::bigint AS gtime,
                   {cls._candle_agg} from {{tbl}}
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
                 group by gtime
@@ -219,7 +226,7 @@ order by time'''
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
         elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
-            un_bar = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
+            un_bar, _ = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
             if un_bar:
                 rows.append(list(un_bar))
         return rows
@@ -228,8 +235,8 @@ order by time'''
     def _init_ranges(cls):
         dct_sql = '''
 select sid,
-(extract(epoch from min(time)) * 1000)::float, 
-(extract(epoch from max(time)) * 1000)::float 
+(extract(epoch from min(time)) * 1000)::bigint, 
+(extract(epoch from max(time)) * 1000)::bigint 
 from {tbl}
 group by 1'''
         sess = db.session
@@ -314,7 +321,7 @@ group by 1'''
         start_ts = stop_ts - tf_to_secs(timeframe) * max_off
         tbl = cls.agg_map[timeframe].tbl
         dct_sql = f'''
-select distinct on(sid) sid, (extract(epoch from time) * 1000)::float from {tbl}
+select distinct on(sid) sid, (extract(epoch from time) * 1000)::bigint from {tbl}
 where "time" > to_timestamp({start_ts}) and "time" < to_timestamp({stop_ts}) 
 ORDER BY sid, "time" desc'''
         rows = conn.execute(sa.text(dct_sql)).fetchall()
@@ -389,7 +396,7 @@ ORDER BY sid, "time" desc'''
         # 更新区间
         cls._update_range(sid, timeframe, start_ms, end_ms)
         # 刷新相关的连续聚合
-        cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
+        cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms, rows)
 
     @classmethod
     def pause_compress(cls, tbl_list: List[str]) -> List[int]:
@@ -423,7 +430,7 @@ ORDER BY sid, "time" desc'''
         sess.commit()
 
     @classmethod
-    def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
+    def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int, sub_bars: List[tuple]):
         from banbot.util.common import MeasureTime
         measure = MeasureTime()
         agg_keys = [from_level]
@@ -441,7 +448,7 @@ ORDER BY sid, "time" desc'''
             no_new_finish = start_align == end_align < start_ms // 1000
             if not no_new_finish and item.agg_from in agg_keys:
                 agg_keys.append(item.tf)
-            cls._update_unfinish(item, sid, start_align, end_ms // 1000)
+            cls._update_unfinish(item, sid, start_ms, end_ms, sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
@@ -474,48 +481,105 @@ ORDER BY sid, "time" desc'''
             raise RuntimeError(f'{timeframe} not allowed in `calc` mode')
         sess = db.session
         merge_rows = []
+        tf_secs = tf_to_secs(timeframe)
         un_tf = timeframe
+        bar_end_ms = 0
         if mode == 'calc' or timeframe not in cls.agg_map:
             # 从已完成的子周期中统计筛选数据。
             from_tf = cls._get_sub_tf(timeframe)[0]
             agg_from = 'kline_' + from_tf
-            select_sql = f'''
-                                    SELECT sid, time_bucket(INTERVAL '{timeframe}', time) AS time, {cls._candle_agg}
-                                    FROM {agg_from}
-                                    where sid={sid} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})
-                                    GROUP BY sid, 2 
-                                    ORDER BY sid, 2'''
-            finish_row = sess.execute(sa.text(select_sql)).fetchone()
-            merge_rows = [tuple(finish_row)] if finish_row else []
+            sel_sql = f'''SELECT (extract(epoch from time) * 1000)::bigint AS start_ms,
+                            open,high,low,close,volume FROM {agg_from}
+                            where sid={sid} and time >= to_timestamp({start_ts}) and time < to_timestamp({end_ts})'''
+            sub_rows = sess.execute(sa.text(sel_sql)).fetchall()
+            sub_rows = [tuple(r) for r in sub_rows]
+            from banbot.data.tools import build_ohlcvc
+            merge_rows, last_finish = build_ohlcvc(sub_rows, tf_secs)
+            if sub_rows:
+                bar_end_ms = sub_rows[-1][0] + tf_to_secs(from_tf) * 1000
             un_tf = from_tf  # 未完成bar从子周期查询
         # 从未完成的周期/子周期中查询bar
         unfinish = sess.execute(sa.text(f'''
-                                SELECT sid,time,open,high,low,close,volume FROM kline_un
-                                where sid={sid} and timeframe='{un_tf}' and time >= to_timestamp({start_ts})
+                                SELECT start_ms,open,high,low,close,volume,stop_ms FROM kline_un
+                                where sid={sid} and timeframe='{un_tf}' and start_ms >= {int(start_ts * 1000)}
                                 limit 1''')).fetchone()
         if unfinish:
-            merge_rows.append(tuple(unfinish))
+            merge_rows.append(tuple(unfinish)[:-1])
+            bar_end_ms = max(bar_end_ms, unfinish[-1])
         if not merge_rows:
-            return
+            return None, bar_end_ms
         if len(merge_rows) > 1:
-            mg_cols = list(zip(*merge_rows))
-            utc_stamp = btime.to_utcstamp(mg_cols[1][0], ms=True, cut_int=True)
-            cur_bar = (utc_stamp, mg_cols[2][0], max(mg_cols[3]), min(mg_cols[4]), mg_cols[5][-1], sum(mg_cols[6]))
+            ts_col, opens, highs, lows, closes, volumes = list(zip(*merge_rows))
+            cur_bar = ts_col[0], opens[0], max(highs), min(lows), closes[-1], sum(volumes)
         else:
-            utc_stamp = btime.to_utcstamp(merge_rows[0][1], ms=True, cut_int=True)
-            cur_bar = (utc_stamp, *merge_rows[0][2:])
-        return cur_bar
+            cur_bar = merge_rows[0]
+        return cur_bar, bar_end_ms
 
     @classmethod
-    def _update_unfinish(cls, item: BarAgg, sid: int, start_ts: int, end_ts: int):
+    def _update_unfinish(cls, item: BarAgg, sid: int, start_ms: int, end_ms: int, sml_bars: List[Tuple]):
+        '''
+        :param start_ms: 毫秒时间戳，子周期插入数据的开始时间
+        :param end_ms: 毫秒时间戳，子周期bar的截止时间（非bar的开始时间）
+        '''
         sess = db.session
-        sess.execute(sa.text(f"DELETE from kline_un where sid={sid} and timeframe='{item.tf}';"))
-        cur_bar = cls._get_unfinish(sid, item.tf, start_ts, end_ts, 'calc')
+        tf_secs = tf_to_secs(item.tf)
+        tf_msecs = tf_secs * 1000
+        bar_finish = end_ms % tf_msecs == 0
+        where_sql = f"where sid={sid} and timeframe='{item.tf}';"
+        from_where = f"from kline_un {where_sql}"
+        if bar_finish:
+            # 当前周期已完成，kline_un中删除即可
+            sess.execute(sa.text(f"DELETE {from_where}"))
+            sess.commit()
+            return
+        bar_start_ts = start_ms // tf_msecs * tf_secs
+        bar_end_ts = end_ms // tf_msecs * tf_secs
+        if bar_start_ts == bar_end_ts:
+            # 当子周期插入开始结束时间戳，对应到当前周期，属于同一个bar时，才执行快速更新
+            rows = sess.execute(sa.text(f"select start_ms,open,high,low,close,volume,stop_ms {from_where}")).fetchall()
+            rows = [tuple(r) for r in rows]
+            if len(rows) == 1 and rows[0][-1] == start_ms:
+                # 当本次插入开始时间戳，和未完成bar结束时间戳完全匹配时，认为有效
+                from banbot.data.tools import build_ohlcvc
+                old_un = rows[0]
+                cur_bars, last_finish = build_ohlcvc(sml_bars, tf_secs)
+                if len(cur_bars) == 1:
+                    new_un = cur_bars[0]
+                    phigh = max(old_un[2], new_un[2])
+                    plow = min(old_un[3], new_un[3])
+                    pclose = new_un[4]
+                    vol_sum = old_un[5] + new_un[5]
+                    sess.execute(sa.text(f'''
+update "kline_un" set high={phigh},low={plow},
+  close={pclose},volume={vol_sum},stop_ms={end_ms}
+  {where_sql}'''))
+                    sess.commit()
+                    return
+            elif start_ms % tf_msecs == 0:
+                # 当插入的bar是第一个时，也认为有效。直接插入
+                if len(rows):
+                    sess.execute(sa.text(f"DELETE {from_where}"))
+                from banbot.data.tools import build_ohlcvc
+                cur_bars, last_finish = build_ohlcvc(sml_bars, tf_secs)
+                if len(cur_bars) == 1:
+                    new_un = cur_bars[0]
+                    ins_cols = "sid, start_ms, stop_ms, open, high, low, close, volume, timeframe"
+                    places = f"{sid}, {new_un[0]}, {end_ms}, {new_un[1]}, {new_un[2]}, {new_un[3]}, " \
+                             f"{new_un[4]}, {new_un[5]}, '{item.tf}'"
+                    insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
+                    sess.execute(sa.text(insert_sql))
+                    sess.commit()
+                    return
+        logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
+        # 当快速更新不可用时，从子周期归集
+        sess.execute(sa.text(f"DELETE {from_where}"))
+        cur_bar, bar_end_ms = cls._get_unfinish(sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')
         if not cur_bar:
             sess.commit()
             return
-        ins_cols = "sid, time, open, high, low, close, volume, timeframe"
-        places = f"{sid}, to_timestamp({cur_bar[0] / 1000}), {cur_bar[1]}, {cur_bar[2]}, {cur_bar[3]}, {cur_bar[4]}, {cur_bar[5]}, '{item.tf}'"
+        ins_cols = "sid, start_ms, stop_ms, open, high, low, close, volume, timeframe"
+        places = f"{sid}, {cur_bar[0]}, {bar_end_ms}, {cur_bar[1]}, {cur_bar[2]}, {cur_bar[3]}, " \
+                 f"{cur_bar[4]}, {cur_bar[5]}, '{item.tf}'"
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
         sess.execute(sa.text(insert_sql))
         sess.commit()
