@@ -110,7 +110,7 @@ class MeasureTime:
             return
         self.history.append((self.prefix + name, time.monotonic()))
 
-    def print_all(self, top_n: int = 0, min_cost: float = 0):
+    def print_all(self, top_n: int = 0, min_cost: float = 0.005):
         if self.disable or not self.history:
             return False
         self.history.append((self.prefix + 'end', time.monotonic()))

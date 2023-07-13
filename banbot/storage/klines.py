@@ -345,8 +345,6 @@ ORDER BY sid, "time" desc'''
         '''
         单个bar插入，耗时约38ms
         '''
-        from banbot.util.common import MeasureTime
-        measure = MeasureTime()
         if not rows:
             return
         if timeframe not in cls.down_tfs:
@@ -358,7 +356,6 @@ ORDER BY sid, "time" desc'''
             row_intv = rows[1][0] - rows[0][0]
             if row_intv != intv_msecs:
                 raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
-        measure.start_for('qrange')
         start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
         old_start, old_stop = cls.query_range(sid, timeframe)
         if old_start and old_stop:
@@ -376,29 +373,23 @@ ORDER BY sid, "time" desc'''
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
-        measure.start_for('get_sess')
         sess = db.session
         ins_tbl = cls.agg_map[timeframe].tbl
         ins_cols = "sid, time, open, high, low, close, volume"
         places = ":sid, :time, :open, :high, :low, :close, :volume"
         insert_sql = f"insert into {ins_tbl} ({ins_cols}) values ({places}) {cls._insert_conflict}"
         try:
-            measure.start_for('insert_base')
             sess.execute(sa.text(insert_sql), ins_rows)
         except Exception as e:
             if str(e).find('not supported on compressed chunks') >= 0:
                 logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} sid:{sid} {start_ms}-{end_ms}")
             else:
                 raise
-        measure.start_for('commit')
         sess.commit()
-        measure.start_for('upd_range')
         # 更新区间
         cls._update_range(sid, timeframe, start_ms, end_ms)
-        measure.start_for('agg_conti')
         # 刷新相关的连续聚合
         cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms)
-        measure.print_all()
 
     @classmethod
     def pause_compress(cls, tbl_list: List[str]) -> List[int]:
@@ -433,12 +424,15 @@ ORDER BY sid, "time" desc'''
 
     @classmethod
     def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int):
+        from banbot.util.common import MeasureTime
+        measure = MeasureTime()
         agg_keys = [from_level]
         from_secs = tf_to_secs(from_level)
         for item in cls.agg_list:
             if item.secs <= from_secs:
                 # 跳过过小维度；跳过无关的连续聚合
                 continue
+            measure.start_for(f'upd_un_{item.tf}')
             start_align = start_ms // 1000 // item.secs * item.secs
             end_align = end_ms // 1000 // item.secs * item.secs
             # 没有出现新的完成的bar数据，无需更新
@@ -451,15 +445,19 @@ ORDER BY sid, "time" desc'''
         agg_keys.remove(from_level)
         if not agg_keys:
             return
+        measure.start_for(f'get_db')
         from banbot.storage.base import init_db
         with init_db().connect() as conn:
             # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
             bak_iso_level = conn.get_isolation_level()
             conn.execution_options(isolation_level='AUTOCOMMIT')
             for tf in agg_keys:
+                measure.start_for(f'refresh_agg_{tf}')
                 cls._refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
+            measure.start_for(f'commit')
             conn.commit()
             conn.execution_options(isolation_level=bak_iso_level)
+            measure.print_all()
 
     @classmethod
     def _get_unfinish(cls, sid: int, timeframe: str, start_ts: int, end_ts: int, mode: str = 'query'):

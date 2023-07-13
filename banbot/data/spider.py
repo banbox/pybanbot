@@ -150,14 +150,13 @@ class MinerJob(PairTFCache):
         return save_tf, check_intv
 
 
-class LiveMiner(Watcher):
+class LiveMiner:
     loop_intv = 0.5  # 没有任务时，睡眠间隔
     '''
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
     一个LiveMiner对应一个交易所的一个市场。处理此交易所市场下所有数据的监听
     '''
     def __init__(self, exg_name: str, market: str):
-        super(LiveMiner, self).__init__(self._on_bar_finish)
         self.exchange = get_exchange(exg_name, market)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
@@ -204,15 +203,22 @@ class LiveMiner(Watcher):
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
-    def _on_bar_finish(self, pair: str, timeframe: str, bar_row: Tuple):
-        from banbot.util.common import MeasureTime
-        measure = MeasureTime()
+    def save_ohlcvs(self, job: MinerJob, ohlcvs: List[Tuple], last_finish: bool):
+        if not ohlcvs:
+            return
         from banbot.storage import KLine
-        measure.start_for('get_id')
-        sid = ExSymbol.get_id(self.exchange.name, pair, self.exchange.market_type)
-        measure.start_for('insert')
-        KLine.insert(sid, timeframe, [bar_row])
-        measure.print_all()
+        sid = ExSymbol.get_id(self.exchange.name, job.pair, self.exchange.market_type)
+        ins_rows = []
+        if job.wait_bar and job.wait_bar[0] < ohlcvs[0][0]:
+            ins_rows.append(job.wait_bar)
+            job.wait_bar = None
+        ins_rows.extend(ohlcvs)
+        if not last_finish:
+            job.wait_bar = ohlcvs[-1]
+            ins_rows = ins_rows[:-1]
+        if not ins_rows:
+            return
+        KLine.insert(sid, job.timeframe, ins_rows)
 
     async def _try_update(self, job: MinerJob):
         from banbot.util.common import MeasureTime
@@ -249,7 +255,7 @@ class LiveMiner(Watcher):
             # 检查是否有完成的bar。写入到数据库
             measure.start_for(f'write_db:{len(ohlcvs)}')
             with db():
-                self._on_state_ohlcv(job.pair, job, ohlcvs, last_finish)
+                self.save_ohlcvs(job, ohlcvs, last_finish)
             # 发布小间隔数据到redis订阅方
             measure.start_for('send_pub')
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
