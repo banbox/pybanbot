@@ -226,8 +226,6 @@ class LiveMiner:
         from banbot.storage import db
         measure = MeasureTime()
         do_print = True
-        if do_print:
-            logger.info(f'start update: {job.pair}')
         try:
             next_time = btime.utctime() + job.check_intv
             next_bar = next_time // job.tf_secs * job.tf_secs

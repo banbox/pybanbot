@@ -225,15 +225,10 @@ order by time'''
         rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
-        elif with_unfinish and rows:
-            if rows[-1][0] // 1000 + tf_secs == unfinish_ts:
-                un_bar, _ = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
-                if un_bar:
-                    rows.append(list(un_bar))
-                else:
-                    logger.info(f'no unbar {exs.symbol} {exs.id} {timeframe} {unfinish_ts}')
-            else:
-                logger.info(f'noend unbar {exs.symbol} {exs.id} {timeframe} {unfinish_ts}')
+        elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
+            un_bar, _ = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
+            if un_bar:
+                rows.append(list(un_bar))
         return rows
 
     @classmethod
@@ -440,6 +435,7 @@ ORDER BY sid, "time" desc'''
         measure = MeasureTime()
         agg_keys = [from_level]
         from_secs = tf_to_secs(from_level)
+        now_stamp = int(btime.utctime())  # 当前13位整型时间戳
         for item in cls.agg_list:
             if item.secs <= from_secs:
                 # 跳过过小维度；跳过无关的连续聚合
@@ -453,7 +449,9 @@ ORDER BY sid, "time" desc'''
             no_new_finish = start_align == end_align < start_ms // 1000
             if not no_new_finish and item.agg_from in agg_keys:
                 agg_keys.append(item.tf)
-            cls._update_unfinish(item, sid, start_ms, end_ms, sub_bars)
+            if end_align >= now_stamp // item.secs * item.secs:
+                # 仅当数据涉及当日未完成bar时，才尝试更新
+                cls._update_unfinish(item, sid, start_ms, end_ms, sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
