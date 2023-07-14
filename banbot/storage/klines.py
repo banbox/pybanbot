@@ -225,10 +225,15 @@ order by time'''
         rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = cls.query(exs, timeframe, end_ms, max_end_ms, limit)
-        elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
-            un_bar, _ = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
-            if un_bar:
-                rows.append(list(un_bar))
+        elif with_unfinish and rows:
+            if rows[-1][0] // 1000 + tf_secs == unfinish_ts:
+                un_bar, _ = cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
+                if un_bar:
+                    rows.append(list(un_bar))
+                else:
+                    logger.info(f'no unbar {exs.symbol} {exs.id} {timeframe} {unfinish_ts}')
+            else:
+                logger.info(f'noend unbar {exs.symbol} {exs.id} {timeframe} {unfinish_ts}')
         return rows
 
     @classmethod
@@ -520,6 +525,7 @@ ORDER BY sid, "time" desc'''
         '''
         :param start_ms: 毫秒时间戳，子周期插入数据的开始时间
         :param end_ms: 毫秒时间戳，子周期bar的截止时间（非bar的开始时间）
+        :param sml_bars: 子周期插入的bars，可能包含超出start范围的旧数据
         '''
         sess = db.session
         tf_secs = tf_to_secs(item.tf)

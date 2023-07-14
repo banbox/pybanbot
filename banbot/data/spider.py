@@ -264,7 +264,6 @@ class LiveMiner:
                 await redis.publish(pub_key, sre_data)
             if do_print:
                 measure.print_all()
-                logger.info(f'start update: {job.pair}')
         except (ccxt.NetworkError, ccxt.BadRequest):
             logger.exception(f'get live data exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
         except Exception:
