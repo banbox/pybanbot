@@ -436,6 +436,7 @@ ORDER BY sid, "time" desc'''
         agg_keys = [from_level]
         from_secs = tf_to_secs(from_level)
         now_stamp = int(btime.utctime())  # 当前13位整型时间戳
+        rev_sub_bars = sub_bars[::-1]  # 逆序，提高后续遍历速度
         for item in cls.agg_list:
             if item.secs <= from_secs:
                 # 跳过过小维度；跳过无关的连续聚合
@@ -449,9 +450,16 @@ ORDER BY sid, "time" desc'''
             no_new_finish = start_align == end_align < start_ms // 1000
             if not no_new_finish and item.agg_from in agg_keys:
                 agg_keys.append(item.tf)
-            if end_align >= now_stamp // item.secs * item.secs:
-                # 仅当数据涉及当日未完成bar时，才尝试更新
-                cls._update_unfinish(item, sid, start_ms, end_ms, sub_bars)
+            unbar_start_ts = now_stamp // item.secs * item.secs
+            if end_align >= unbar_start_ts:
+                # 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
+                unbar_start_ms = unbar_start_ts * 1000
+                if sub_bars and sub_bars[-1][0] >= unbar_start_ms:
+                    care_sub_bars = sub_bars
+                else:
+                    stop_id = next((i for i, r in enumerate(rev_sub_bars) if r[0] < unbar_start_ms), len(sub_bars))
+                    care_sub_bars = rev_sub_bars[:stop_id][::-1]
+                cls._update_unfinish(item, sid, start_ms, end_ms, care_sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
             return
