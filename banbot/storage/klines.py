@@ -232,7 +232,7 @@ order by time'''
         return rows
 
     @classmethod
-    def _init_ranges(cls):
+    def _recalc_ranges(cls, *tf_list: str):
         dct_sql = '''
 select sid,
 (extract(epoch from min(time)) * 1000)::bigint, 
@@ -240,16 +240,18 @@ select sid,
 from {tbl}
 group by 1'''
         sess = db.session
-        for item in cls.agg_list:
-            sql_text = dct_sql.format(tbl=item.tbl)
+        if not tf_list:
+            tf_list = [item.tf for item in cls.agg_list]
+        for tf in tf_list:
+            sql_text = dct_sql.format(tbl=f'kline_{tf}')
             rows = sess.execute(sa.text(sql_text)).fetchall()
             for sid, min_time, max_time in rows:
-                cache_key = sid, item.tf
+                cache_key = sid, tf
                 # 这里记录蜡烛对应的结束时间
-                max_time += tf_to_secs(item.tf) * 1000
+                max_time += tf_to_secs(tf) * 1000
                 min_time, max_time = int(min_time), int(max_time)
                 cls._kline_range[cache_key] = min_time, max_time
-                sess.add(KInfo(sid=sid, timeframe=item.tf, start=min_time, stop=max_time))
+                sess.add(KInfo(sid=sid, timeframe=tf, start=min_time, stop=max_time))
         sess.commit()
         return cls._kline_range
 
@@ -258,24 +260,31 @@ group by 1'''
         sess = db.session
         rows: Iterable[KInfo] = sess.query(KInfo).all()
         if not rows:
-            return cls._init_ranges()
+            return cls._recalc_ranges()
         for row in rows:
             cache_key = row.sid, row.timeframe
             cls._kline_range[cache_key] = row.start, row.stop
         return cls._kline_range
 
     @classmethod
-    def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int):
+    def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int, force_new: bool = False):
         '''
         更新sid+timeframe对应的数据区间。end_ms应为最后一个bar对应的结束时间，而非开始时间
+        :param force_new: 是否强制刷新范围后，再尝试更新
         '''
         cache_key = sid, timeframe
+        if force_new:
+            cls._recalc_ranges(timeframe)
         old_start, old_end = cls._kline_range.get(cache_key) or (None, None)
         if old_start:
             if start_ms >= old_start and end_ms <= old_end:
                 # 未超出已有范围，不更新直接返回
                 return old_start, old_end
             if old_end < start_ms or end_ms < old_start:
+                if not force_new:
+                    logger.info('incontinus insert detect, try refresh range...')
+                    cls._update_range(sid, timeframe, start_ms, end_ms, True)
+                    return
                 raise ValueError(f'incontinus range: {cache_key}, old: [{old_start}, {old_end}], '
                                  f'new: [{start_ms}, {end_ms}]')
         # 有新数据，需要更新范围，查询KInfo准备更新
