@@ -3,6 +3,7 @@
 # File  : __main__.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import asyncio
 import sys
 
 from banbot.cmds.arguments import *
@@ -22,7 +23,11 @@ def main(sysargv: Optional[List[str]] = None) -> None:
 
         # Call subcommand.
         if 'func' in args:
-            return_code = args['func'](args)
+            run_func = args['func']
+            if asyncio.iscoroutinefunction(run_func):
+                return_code = asyncio.run(run_func(args))
+            else:
+                return_code = run_func(args)
         else:
             # No subcommand was issued.
             raise RuntimeError(

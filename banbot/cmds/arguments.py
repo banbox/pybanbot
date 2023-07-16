@@ -54,6 +54,10 @@ def _build_args(parser, optionlist):
 
 
 def _reg_sub(subparsers, name: str, opts: List[str], run_fn: Callable, **kwargs):
+    '''
+    注册命令行子命令。
+    :paran run_fn: 子命令启动函数，可以是异步函数
+    '''
     parser = subparsers.add_parser(name, **kwargs)
     parser.set_defaults(func=run_fn)
     _build_args(parser, opts)

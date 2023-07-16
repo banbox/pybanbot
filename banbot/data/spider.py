@@ -227,17 +227,11 @@ class LiveMiner:
         measure = MeasureTime()
         do_print = True
         try:
-            next_time = btime.utctime() + job.check_intv
-            next_bar = next_time // job.tf_secs * job.tf_secs
-            job.next_run = next_bar + job.check_intv * 0.07
-            if job.wait_bar and next_bar > job.wait_bar[0] // 1000:
-                # 当下次轮询会有新的完成数据时，尽可能在第一时间更新
-                job.next_run = next_bar
+            job.next_run += job.check_intv
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
             measure.start_for(f'fetch:{job.pair}')
             ohlcvs_sml = await self.exchange.fetch_ohlcv(job.pair, job.fetch_tf, since=job.since)
             if not ohlcvs_sml:
-                job.next_run -= job.check_intv * 0.9
                 if do_print:
                     measure.print_all()
                 return
@@ -281,7 +275,7 @@ class SpiderJob:
 
 class LiveSpider:
     _key = 'spider'
-    _unpush_jobs = []
+    _job_key = 'spiderjobs'
 
     '''
     实时数据爬虫；仅用于实盘。负责：实时K线、订单簿等公共数据监听
@@ -303,11 +297,13 @@ class LiveSpider:
     async def _run_job(self, params: dict):
         action, args, kwargs = params['action'], params['args'], params['kwargs']
         try:
-            if hasattr(self, action):
-                await getattr(self, action)(*args, **kwargs)
-            else:
-                logger.error(f'unknown spider job: {params}')
-                return
+            from banbot.storage import db
+            with db():
+                if hasattr(self, action):
+                    await getattr(self, action)(*args, **kwargs)
+                else:
+                    logger.error(f'unknown spider job: {params}')
+                    return
         except Exception:
             logger.exception(f'run spider job error: {params}')
 
@@ -324,6 +320,9 @@ class LiveSpider:
             self.miners[cache_key] = miner
             asyncio.create_task(miner.run())
             logger.info(f'start miner for {exg_name}.{market}')
+        if pair not in miner.jobs and not since:
+            # 新监听的币，且未指定开始时间戳，则初始化获取时间戳
+            since = await self._init_symbol(exg_name, market, pair, timeframe)
         miner.sub_pair(pair, timeframe, since)
 
     async def unwatch_pairs(self, exg_name: str, market: str, pairs: List[str]):
@@ -335,6 +334,66 @@ class LiveSpider:
             if p not in miner.jobs:
                 continue
             del miner.jobs[p]
+
+    async def _init_symbol(self, exg_name: str, market_type: str, symbol: str, timeframe: str) -> int:
+        '''
+        初始化币对，如果前面遗漏蜡烛太多，下载必要的数据
+        '''
+        prefetch = 1000
+        exchange = get_exchange(exg_name, market_type)
+        min_save_tf, min_tf_secs = '1m', 60
+        save_tf, save_tfsec = min_save_tf, min_tf_secs
+        tf_secs = tf_to_secs(timeframe)
+        if tf_secs > min_tf_secs:
+            if timeframe not in KLine.down_tfs:
+                raise ValueError(f'{timeframe} not allowed : {symbol}, {exg_name} {market_type}')
+            save_tf, save_tfsec = timeframe, tf_secs
+        tf_msecs = tf_secs * 1000
+        cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
+        start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
+        exs = ExSymbol.get(exg_name, symbol, market_type)
+        _, end_ms = KLine.query_range(exs.id, save_tf)
+        if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
+            # 当缺失数据超过30个时，才执行批量下载
+            await download_to_db(exchange, exs, save_tf, start_ms, cur_ms)
+            end_ms = cur_ms
+        return end_ms
+
+    async def _init_exg_market(self, exg_name: str, market_type: str):
+        '''
+        从redis获取给定交易所、给定市场下，需要抓取的币对
+        '''
+        key = f'{self._job_key}_{exg_name}_{market_type}'
+        pairs: dict = await self.redis.hgetall(key)
+        if not pairs:
+            return
+        logger.info(f'init {exg_name}.{market_type} with {len(pairs)} symbols: {pairs}')
+        prev_tip, completes = time.monotonic(), []
+        i = -1
+        for symbol, timeframe in pairs.items():
+            i += 1
+            if time.monotonic() - prev_tip > 5:
+                logger.info(f'[{i}/{len(pairs)}] complete {len(completes)}: {completes}')
+                prev_tip, completes = time.monotonic(), []
+            await self.watch_ohlcv(exg_name, symbol, market_type, timeframe)
+            completes.append(symbol)
+        logger.info(f'ALL {len(pairs)} symbols listening for {exg_name}.{market_type}')
+
+    async def init_pairs(self):
+        '''
+        从redis获取需要抓取的比对，检查上次时间，如果缺失蜡烛太多，则进行预下载
+        # 检查需要监听的交易对历史数据，先批量下载缺失的数据，然后再监听，逐个处理。
+        # 这里只需要指定下载前面1K个，如果中间缺失过多，会自动全部下载
+        '''
+        space_keys = await self.redis.list_keys(self._job_key + '*')
+        exg_markets = [k.split('_')[1:] for k in space_keys]
+        exg_markets = sorted(exg_markets, key=lambda x: x[0])
+        from itertools import groupby
+        gps = groupby(exg_markets, key=lambda x: x[0])
+        for key, gp in gps:
+            gp_data = list(gp)
+            for exg_name, market in gp_data:
+                await self._init_exg_market(exg_name, market)
 
     @classmethod
     async def run_spider(cls):
@@ -350,6 +409,8 @@ class LiveSpider:
         with db():
             logger.info('[spider] sync timeframe ranges ...')
             KLine.sync_timeframes()
+            logger.info('[spider] init exchange, markets...')
+            await spider.init_pairs()
         while True:
             try:
                 logger.info('[spider] wait job ...')
@@ -366,20 +427,18 @@ class LiveSpider:
         '''
         redis = AsyncRedis()
         if not await redis.get(cls._key):
-            cls._unpush_jobs.extend(job_list)
             logger.error(f'spider not started, {len(job_list)} job cached')
             return
-        if cls._unpush_jobs:
-            for job in cls._unpush_jobs:
-                await redis.publish(cls._key, job.dumps())
-            cls._unpush_jobs = []
         for job in job_list:
             await redis.publish(cls._key, job.dumps())
 
 
-def run_spider_forever(args: dict):
+async def run_spider_forever(args: dict):
     '''
     此函数仅用于从命令行启动
     '''
-    import asyncio
-    asyncio.run(LiveSpider.run_spider())
+    from banbot.worker.top_change import TopChange
+    logger.info('start top change update timer...')
+    await TopChange.start()
+    await LiveSpider.run_spider()
+    # await TopChange.clear()

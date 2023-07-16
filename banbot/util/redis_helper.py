@@ -14,8 +14,11 @@ from redis.client import PubSub
 
 from banbot.config.appconfig import AppConfig
 from banbot.util.common import Instance
+from typing import Set
 
+# redis-py不支持命名空间前缀:
 reg_non_key = re.compile(r'[^a-zA-Z0-9_]+')
+reg_non_field = re.compile(r'[^a-zA-Z0-9_/:]+')
 
 Expire_time_week = 604800
 Expire_time_day = 86400
@@ -26,6 +29,7 @@ Expire_time_minute = 60
 def _get_redis_pool(is_async: bool, **kwargs):
 
     def create_redis():
+        from banbot.util.common import logger
         redis_url = AppConfig.get()['redis_url']
         module = aioredis if is_async else redis
         fin_args = dict(
@@ -34,6 +38,7 @@ def _get_redis_pool(is_async: bool, **kwargs):
             retry_on_timeout=True,
         )
         fin_args.update(**kwargs)
+        logger.info(f'create redis pool: {redis_url}')
         return module.ConnectionPool.from_url(redis_url, **fin_args)
 
     return Instance.getobj(f'redis_{is_async}', create_redis)
@@ -110,6 +115,16 @@ def build_deserializer(json_deserializer=None, raise_on_error=True):
 
 def_serializer = build_serializer()
 def_deserializer = build_deserializer()
+
+
+def _get_key(key: str, max_len=100, is_field=False):
+    if not key:
+        return key
+    reg_ptn = reg_non_field if is_field else reg_non_key
+    safe_key = reg_ptn.sub('_', key)
+    if safe_key == '_':
+        return None
+    return safe_key[:max_len]
 
 
 class LockError(Exception):
@@ -221,20 +236,6 @@ class SyncRedis:
         self.serializer = serializer or def_serializer
         self.deserializer = deserializer or def_deserializer
 
-    def get_key(self, key: str, max_len=100):
-        if not key:
-            return key
-        if key == 'random':
-            import uuid
-            token = str(uuid.uuid4())
-            while self.redis.exists(token):
-                token = str(uuid.uuid4())
-            key = token
-        safe_key = reg_non_key.sub('_', key)
-        if safe_key == '_':
-            return None
-        return safe_key[:max_len]
-
     def set(self, key, val='1', expire_time=None):
         '''
         设置redis的键值，过期时间可选
@@ -243,7 +244,7 @@ class SyncRedis:
         :param expire_time: 过期的秒数
         :return:
         '''
-        key = self.get_key(key)
+        key = _get_key(key)
         if not key:
             return False
         self.redis.set(key, self.serializer(val), ex=expire_time)
@@ -256,7 +257,7 @@ class SyncRedis:
         :param default_val: 当缓存为None时，默认返回值
         :return:
         '''
-        key = self.get_key(key)
+        key = _get_key(key)
         if not key:
             return default_val
         from banbot.util.common import MeasureTime
@@ -271,7 +272,7 @@ class SyncRedis:
         return decode_val
 
     def ttl(self, key: str):
-        key = self.get_key(key)
+        key = _get_key(key)
         if not key:
             return -1
         return self.redis.ttl(key)
@@ -279,7 +280,7 @@ class SyncRedis:
     def delete(self, *keys):
         if not keys:
             return 0
-        clean_keys = [self.get_key(k) for k in keys]
+        clean_keys = [_get_key(k) for k in keys]
         clean_keys = [k for k in clean_keys if k]
         if not clean_keys:
             return 0
@@ -323,22 +324,29 @@ class AsyncRedis:
         self.serializer = serializer or def_serializer
         self.deserializer = deserializer or def_deserializer
 
-    async def get_key(self, key: str, max_len=100):
-        if not key:
-            return key
-        if key == 'random':
-            import uuid
+    async def get_random_key(self):
+        import uuid
+        token = str(uuid.uuid4())
+        while await self.redis.exists(token):
             token = str(uuid.uuid4())
-            while await self.redis.exists(token):
-                token = str(uuid.uuid4())
-            key = token
-        safe_key = reg_non_key.sub('_', key)
-        if safe_key == '_':
-            return None
-        return safe_key[:max_len]
+        return token
+
+    async def list_keys(self, prefix: str = None) -> Set[str]:
+        '''
+        列出以指定命名空间开头的所有键，会发送"prefix:*"命令
+        '''
+        result = set()
+        cursor = 0
+        match_str = prefix or ''
+        while True:
+            cursor, keys = await self.redis.scan(cursor, match=match_str)
+            result.update([k.decode() for k in keys])
+            if cursor == 0:
+                break
+        return result
 
     async def sadd(self, key: str, *args):
-        key = await self.get_key(key)
+        key = _get_key(key)
         vals = [self.serializer(v) for v in args]
         await self.redis.sadd(key, *vals)
 
@@ -346,11 +354,11 @@ class AsyncRedis:
         '''
         返回集合的数量
         '''
-        key = await self.get_key(key)
+        key = _get_key(key)
         return await self.redis.scard(key)
 
     async def smembers(self, key: str):
-        key = await self.get_key(key)
+        key = _get_key(key)
         items = await self.redis.smembers(key)
         if not items:
             return []
@@ -358,16 +366,20 @@ class AsyncRedis:
         return [v for v in items if v]
 
     async def hset(self, key: str, field: str, val):
-        key = await self.get_key(key)
-        field = await self.get_key(field)
-        return await self.redis.hset(key, field, val)
+        key = _get_key(key)
+        field = _get_key(field, is_field=True)
+        return await self.redis.hset(key, field, self.serializer(val))
+
+    async def hlen(self, key: str):
+        key = _get_key(key)
+        return await self.redis.hlen(key)
 
     async def hgetall(self, key: str):
-        key = await self.get_key(key)
+        key = _get_key(key)
         data = await self.redis.hgetall(key)
         if not data:
             return dict()
-        data = {k: self.deserializer(v) for k, v in data.items()}
+        data = {k.decode(): self.deserializer(v) for k, v in data.items()}
         return {k: v for k, v in data.items() if v}
 
     async def set(self, key, val='1', expire_time=None):
@@ -378,7 +390,7 @@ class AsyncRedis:
         :param expire_time: 过期的秒数
         :return:
         '''
-        key = await self.get_key(key)
+        key = _get_key(key)
         if not key:
             return False
         await self.redis.set(key, self.serializer(val), ex=expire_time)
@@ -391,7 +403,7 @@ class AsyncRedis:
         :param default_val: 当缓存为None时，默认返回值
         :return:
         '''
-        key = await self.get_key(key)
+        key = _get_key(key)
         if not key:
             return default_val
         val = await self.redis.get(key)
@@ -401,7 +413,7 @@ class AsyncRedis:
         return decode_val
 
     async def ttl(self, key: str):
-        key = await self.get_key(key)
+        key = _get_key(key)
         if not key:
             return -1
         return await self.redis.ttl(key)
@@ -409,7 +421,7 @@ class AsyncRedis:
     async def delete(self, *keys):
         if not keys:
             return 0
-        clean_keys = [await self.get_key(k) for k in keys]
+        clean_keys = [_get_key(k) for k in keys]
         clean_keys = [k for k in clean_keys if k]
         if not clean_keys:
             return 0

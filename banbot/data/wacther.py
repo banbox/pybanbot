@@ -8,14 +8,15 @@ from typing import List, Tuple, Callable, Optional
 from banbot.storage import BotGlobal
 from banbot.util import btime
 from banbot.util.common import logger
+from dataclasses import dataclass
 
 
+@dataclass
 class PairTFCache:
-    def __init__(self, timeframe: str, tf_decs: int):
-        self.timeframe = timeframe
-        self.tf_secs = tf_decs
-        self.wait_bar = None  # 记录尚未完成的bar。已完成时应置为None
-        self.latest = None  # 记录最新bar数据，可能未完成，可能已完成
+    timeframe: str
+    tf_secs: int
+    wait_bar: tuple = None  # 记录尚未完成的bar。已完成时应置为None
+    latest: tuple = None  # 记录最新bar数据，可能未完成，可能已完成
 
     def set_bar(self, bar_row):
         self.wait_bar = bar_row
@@ -52,13 +53,13 @@ class Watcher:
                 logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)
 
 
+@dataclass
 class WatchParam:
-    def __init__(self, exchange: str, symbol: str, market: str, timeframe: str = None, since: int = None):
-        self.exchange = exchange
-        self.symbol = symbol
-        self.market = market
-        self.timeframe = timeframe
-        self.since = since
+    exchange: str
+    symbol: str
+    market: str
+    timeframe: str = None
+    since: int = None
 
 
 class KlineLiveConsumer:
@@ -81,7 +82,8 @@ class KlineLiveConsumer:
         for job in jobs:
             args = [job.exchange, job.symbol, job.market, job.timeframe, job.since]
             job_list.append(SpiderJob('watch_ohlcv', *args))
-            await self.conn.subscribe(f'{job.exchange}_{job.market}_{job.symbol}')
+            key = f'{job.exchange}_{job.market}_{job.symbol}'
+            await self.conn.subscribe(key)
         # 发送消息给爬虫，实时抓取数据
         await LiveSpider.send(*job_list)
 
@@ -105,7 +107,7 @@ class KlineLiveConsumer:
         assert cls._obj, '`KlineLiveConsumer` is not initialized yet!'
         logger.info(f'start watching ohlcvs from {cls.__name__}...')
         # 监听个假的，防止立刻退出
-        await cls._obj.conn.unsubscribe('fake')
+        await cls._obj.conn.subscribe('fake')
         async for msg in cls._obj.conn.listen():
             if msg['type'] != 'message':
                 continue

@@ -321,22 +321,6 @@ group by 1'''
         return cls._kline_range[cache_key]
 
     @classmethod
-    def get_latest_stamps(cls, timeframe: str, max_off: int = 100) -> Dict[int, float]:
-        '''
-        获取某个时间周期，所以交易对的最新一个时间戳。只查询前max_off * timeframe段时间，避免数据太多性能太差
-        '''
-        conn = db.session.connection()
-        stop_ts = btime.utcstamp() / 1000
-        start_ts = stop_ts - tf_to_secs(timeframe) * max_off
-        tbl = cls.agg_map[timeframe].tbl
-        dct_sql = f'''
-select distinct on(sid) sid, (extract(epoch from time) * 1000)::bigint from {tbl}
-where "time" > to_timestamp({start_ts}) and "time" < to_timestamp({stop_ts}) 
-ORDER BY sid, "time" desc'''
-        rows = conn.execute(sa.text(dct_sql)).fetchall()
-        return {r[0]: r[1] for r in rows}
-
-    @classmethod
     def get_down_tf(cls, tf: str):
         '''
         获取指定周期对应的下载的时间周期。
