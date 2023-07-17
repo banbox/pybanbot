@@ -129,18 +129,14 @@ class MinerJob(PairTFCache):
         return save_tf, check_intv
 
 
-def save_ohlcvs(sid: int, job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool):
+def get_finish_ohlcvs(job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool) -> List[Tuple]:
     if not ohlcvs:
-        return
-    from banbot.storage import KLine
+        return ohlcvs
     job.wait_bar = None
     if not last_finish:
         job.wait_bar = ohlcvs[-1]
-    else:
         ohlcvs = ohlcvs[:-1]
-        if not ohlcvs:
-            return
-    KLine.insert(sid, job.timeframe, ohlcvs)
+    return ohlcvs
 
 
 class TradesWatcher:
@@ -154,13 +150,21 @@ class TradesWatcher:
         self.state_save = PairTFCache('1m', 60)  # 用于数据库更新
         self.sid = 0
         self.first_insert = True  # 第一次保存的1m必然是不完整的，从接口抓取
+        self.running = True
+
+    async def run(self):
+        while self.running:
+            try:
+                await self.try_update()
+            except Exception:
+                logger.exception('watch trades fail')
 
     async def try_update(self):
         details = await self.exchange.watch_trades(self.pair)
         details = trades_to_ohlcv(details)
         # 交易按小维度归集和通知；减少传输数据大小；
         ohlcvs_sml = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
-        ohlcvs_sml, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sml)
+        ohlcvs_sml, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sml, with_count=False)
         if not ohlcvs_sml:
             return
         self.state_sec.wait_bar = ohlcvs_sml[-1]
@@ -174,14 +178,53 @@ class TradesWatcher:
         # 更新1m级别bar，写入数据库
         ohlcv_old = [self.state_save.wait_bar] if self.state_save.wait_bar else []
         ohlcvs_save, is_finish = build_ohlcvc(ohlcvs_sml, self.state_save.tf_secs, ohlcvs=ohlcv_old)
-        if len(ohlcvs_save) <= 1 and not is_finish:
-            self.state_save.wait_bar = ohlcvs_save[0] if ohlcvs_save else None
+        ohlcvs_save = get_finish_ohlcvs(self.state_save, ohlcvs_save, is_finish)
+        if not ohlcvs_save:
             return
+        logger.info(f'ws ohlcv: {self.pair} {ohlcvs_save}')
         from banbot.storage import db
         with db():
             if self.first_insert:
-                self.sid = ExSymbol.get_id(self.exchange.name, self.pair, self.exchange.market_type)
-            save_ohlcvs(self.sid, self.state_save, ohlcvs_save, is_finish)
+                await self.save_init(ohlcvs_save)
+            else:
+                KLine.insert(self.sid, self.state_save.timeframe, ohlcvs_save)
+
+    async def save_init(self, ohlcv: List[Tuple]):
+        save_tf = self.state_save.timeframe
+        exs = ExSymbol.get(self.exchange.name, self.pair, self.exchange.market_type)
+        self.sid = exs.id
+        self.first_insert = False
+        tf_msecs = tf_to_secs(save_tf) * 1000
+        first_ms = ohlcv[0][0]  # 第一个插入的bar时间戳，这个是不全的，需要跳过
+        ohlcv = ohlcv[1:]  # 从第2个bar开始可以插入到数据库
+        fetch_end_ms = first_ms + tf_msecs
+        start_ms, end_ms = KLine.query_range(self.sid, save_tf)
+        if not end_ms or fetch_end_ms <= end_ms:
+            # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
+            KLine.insert(self.sid, self.state_save.timeframe, ohlcv)
+            return
+
+        async def fetch_and_save():
+            try_count = 0
+            logger.info(f'start first fetch {self.pair} {end_ms}-{fetch_end_ms}')
+            while True:
+                try_count += 1
+                ins_num = await download_to_db(self.exchange, exs, save_tf, end_ms, fetch_end_ms)
+                save_bars = KLine.query(exs, save_tf, end_ms, fetch_end_ms)
+                last_ms = save_bars[-1][0] if save_bars else None
+                if last_ms == first_ms:
+                    break
+                elif try_count > 5:
+                    logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
+                    break
+                else:
+                    # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
+                    logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {self.pair}')
+                    await asyncio.sleep(3)
+            KLine.insert(self.sid, self.state_save.timeframe, ohlcv)
+            logger.info(f'first fetch ok {self.pair} {end_ms}-{fetch_end_ms}')
+        # 异步执行获取和存储，避免影响秒级更新
+        asyncio.create_task(fetch_and_save())
 
 
 class LiveMiner:
@@ -194,8 +237,17 @@ class LiveMiner:
         self.exchange = get_exchange(exg_name, market)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
+        self.socks: Dict[str, TradesWatcher] = dict()
 
     def sub_pair(self, pair: str, timeframe: str, since: int = None):
+        tf_msecs = tf_to_secs(timeframe) * 1000
+        if tf_msecs <= 60000:
+            # 1m及以下周期的ohlcv，通过websoc获取
+            if pair in self.socks:
+                return
+            self.socks[pair] = TradesWatcher(self.exchange.name, self.exchange.market_type, pair)
+            asyncio.create_task(self.socks[pair].run())
+            return
         save_tf, check_intv = MinerJob.get_tf_intv(timeframe)
         if self.exchange.market_type == 'future':
             # 期货市场最低维度是1m
@@ -211,7 +263,6 @@ class LiveMiner:
         else:
             job = MinerJob(pair, save_tf, check_intv, since)
             # 将since改为所属bar的开始，避免第一个bar数据不完整
-            tf_msecs = tf_to_secs(timeframe) * 1000
             job.since = job.since // tf_msecs * tf_msecs
             self.jobs[pair] = job
             fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
@@ -265,7 +316,8 @@ class LiveMiner:
             measure.start_for(f'write_db:{len(ohlcvs)}')
             with db():
                 sid = ExSymbol.get_id(self.exchange.name, job.pair, self.exchange.market_type)
-                save_ohlcvs(sid, job, ohlcvs, last_finish)
+                ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
+                KLine.insert(sid, job.timeframe, ohlcvs)
             # 发布小间隔数据到redis订阅方
             measure.start_for('send_pub')
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))

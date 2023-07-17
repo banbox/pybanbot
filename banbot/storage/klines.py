@@ -242,6 +242,10 @@ group by 1'''
         sess = db.session
         if not tf_list:
             tf_list = [item.tf for item in cls.agg_list]
+        # 删除旧的kinfo
+        tf_texts = ', '.join([f"'{tf}'" for tf in tf_list])
+        del_sql = f"delete from kinfo where timeframe in ({tf_texts})"
+        sess.execute(sa.text(del_sql))
         for tf in tf_list:
             sql_text = dct_sql.format(tbl=f'kline_{tf}')
             rows = sess.execute(sa.text(sql_text)).fetchall()
@@ -341,12 +345,12 @@ group by 1'''
         return '1m'
 
     @classmethod
-    def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True):
+    def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True) -> int:
         '''
         单个bar插入，耗时约38ms
         '''
         if not rows:
-            return
+            return 0
         if timeframe not in cls.down_tfs:
             raise RuntimeError(f'can only insert kline: {cls.down_tfs}, current: {timeframe}')
         intv_msecs = tf_to_secs(timeframe) * 1000
@@ -366,7 +370,7 @@ group by 1'''
             if skip_in_range:
                 rows = [r for r in rows if not (old_start <= r[0] < old_stop)]
         if not rows:
-            return
+            return 0
         ins_rows = []
         for r in rows:
             row_ts = btime.to_datetime(r[0])
@@ -390,6 +394,7 @@ group by 1'''
         cls._update_range(sid, timeframe, start_ms, end_ms)
         # 刷新相关的连续聚合
         cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms, rows)
+        return len(rows)
 
     @classmethod
     def pause_compress(cls, tbl_list: List[str]) -> List[int]:

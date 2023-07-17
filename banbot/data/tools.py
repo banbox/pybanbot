@@ -23,7 +23,7 @@ def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, 
     return result
 
 
-def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=None, ohlcvs=None):
+def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=None, ohlcvs=None, with_count=True):
     '''
     从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
     :param details: 子OHLC列表。[[t,o,h,l,c,v,cnt], ...]
@@ -31,6 +31,7 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
     :param prefire: 是否提前触发构建完成；用于在特定信号时早于其他交易者提早发出信号
     :param since:
     :param ohlcvs: 已有的待更新数组
+    :param with_count: 是否添加交易数量
     :return:
     '''
     ms = tf_secs * 1000
@@ -47,7 +48,7 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
             continue
         if not ohlcvs or (row[timestamp] >= ohlcvs[-1][timestamp] + ms):
             # moved to a new timeframe -> create a new candle from opening trade
-            ohlcvs.append(row)
+            ohlcvs.append(row if with_count else row[:count])
         else:
             prow = ohlcvs[-1]
             # still processing the same timeframe -> update opening trade
@@ -55,7 +56,7 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
             prow[low] = min(prow[low], row[low])
             prow[close] = row[close]
             prow[volume] += row[volume]
-            if len(row) > count:
+            if with_count and len(row) > count:
                 prow[count] += row[count]
     last_finish = False
     if len(raw_ts) >= 2:
@@ -248,7 +249,7 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0.):
+                         allow_lack: float = 0.) -> int:
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -263,7 +264,8 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     measure.start_for('down_range')
     start_ms, end_ms = KHole.get_down_range(exs, timeframe, start_ms, end_ms)
     if not start_ms:
-        return
+        return 0
+    down_count = 0
     if check_exist:
         measure.start_for('query_range')
         old_start, old_end = KLine.query_range(exs.id, timeframe)
@@ -274,32 +276,33 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                 measure.start_for('fetch_start')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end)
                 measure.start_for('insert_start')
-                KLine.insert(exs.id, timeframe, predata)
+                down_count += KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_start')
                 KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
                 if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
                     # 最新部分缺失的较少，不再请求交易所，节省时间
-                    return
+                    return down_count
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 measure.start_for('fetch_end')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms)
                 measure.start_for('insert_end')
-                KLine.insert(exs.id, timeframe, predata)
+                down_count += KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_end')
                 KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
-                return
+                return down_count
             else:
                 # 要下载的数据全部存在，直接退出
-                return
+                return down_count
     measure.start_for('fetch_all')
     newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms)
     measure.start_for('insert_all')
-    KLine.insert(exs.id, timeframe, newdata, check_exist)
+    down_count += KLine.insert(exs.id, timeframe, newdata, check_exist)
     measure.start_for('candle_conts_all')
     KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
     measure.print_all(min_cost=0.01)
+    return down_count
 
 
 async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, end_ms: int, out_dir: str):
