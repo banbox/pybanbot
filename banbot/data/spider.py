@@ -99,27 +99,6 @@ def run_down_pairs(args: Dict[str, Any]):
     asyncio.run(run_download())
 
 
-class TradesWatcher(Watcher):
-    '''
-    针对1m以下维度的K线数据监听
-    '''
-    def __init__(self, exg_name: str, pair: str):
-        super(TradesWatcher, self).__init__()
-        self.exchange = get_exchange(exg_name)
-        self.pair = pair
-
-    async def try_update(self):
-        logger.warning(f'watch trades: {self.pair}')
-        details = await self.exchange.watch_trades(self.pair)
-        details = trades_to_ohlcv(details)
-        # 交易按小维度归集和通知；减少传输数据大小；
-        ohlcvs_sml = [self.state_sml.wait_bar] if self.state_sml.wait_bar else []
-        ohlcvs_sml, _ = build_ohlcvc(details, self.state_sml.tf_secs, ohlcvs=ohlcvs_sml)
-        do_fire = self.state.tf_secs <= self.state_sml.tf_secs
-        # 未完成数据存储在wait_bar中
-        finish_bars = self._on_state_ohlcv(self.pair, self.state_sml, ohlcvs_sml, False, do_fire)
-
-
 class MinerJob(PairTFCache):
     def __init__(self, pair: str, save_tf: str, check_intv: float, since: Optional[int] = None):
         '''
@@ -148,6 +127,61 @@ class MinerJob(PairTFCache):
         save_tf = KLine.get_down_tf(timeframe)
         check_intv = get_check_interval(cur_tfsecs)
         return save_tf, check_intv
+
+
+def save_ohlcvs(sid: int, job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool):
+    if not ohlcvs:
+        return
+    from banbot.storage import KLine
+    job.wait_bar = None
+    if not last_finish:
+        job.wait_bar = ohlcvs[-1]
+    else:
+        ohlcvs = ohlcvs[:-1]
+        if not ohlcvs:
+            return
+    KLine.insert(sid, job.timeframe, ohlcvs)
+
+
+class TradesWatcher:
+    '''
+    websocket实时交易数据监听，归集得到秒级ohlcv
+    '''
+    def __init__(self, exg_name: str, market: str, pair: str):
+        self.exchange = get_exchange(exg_name, market)
+        self.pair = pair
+        self.state_sec = PairTFCache('1s', 1)  # 用于实时归集通知
+        self.state_save = PairTFCache('1m', 60)  # 用于数据库更新
+        self.sid = 0
+        self.first_insert = True  # 第一次保存的1m必然是不完整的，从接口抓取
+
+    async def try_update(self):
+        details = await self.exchange.watch_trades(self.pair)
+        details = trades_to_ohlcv(details)
+        # 交易按小维度归集和通知；减少传输数据大小；
+        ohlcvs_sml = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
+        ohlcvs_sml, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sml)
+        if not ohlcvs_sml:
+            return
+        self.state_sec.wait_bar = ohlcvs_sml[-1]
+        ohlcvs_sml = ohlcvs_sml[:-1]  # 完成的秒级ohlcv
+        if not ohlcvs_sml:
+            return
+        sre_data = orjson.dumps((ohlcvs_sml, self.state_sec.tf_secs))
+        async with AsyncRedis() as redis:
+            pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+            await redis.publish(pub_key, sre_data)
+        # 更新1m级别bar，写入数据库
+        ohlcv_old = [self.state_save.wait_bar] if self.state_save.wait_bar else []
+        ohlcvs_save, is_finish = build_ohlcvc(ohlcvs_sml, self.state_save.tf_secs, ohlcvs=ohlcv_old)
+        if len(ohlcvs_save) <= 1 and not is_finish:
+            self.state_save.wait_bar = ohlcvs_save[0] if ohlcvs_save else None
+            return
+        from banbot.storage import db
+        with db():
+            if self.first_insert:
+                self.sid = ExSymbol.get_id(self.exchange.name, self.pair, self.exchange.market_type)
+            save_ohlcvs(self.sid, self.state_save, ohlcvs_save, is_finish)
 
 
 class LiveMiner:
@@ -203,23 +237,6 @@ class LiveMiner:
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
-    def save_ohlcvs(self, job: MinerJob, ohlcvs: List[Tuple], last_finish: bool):
-        if not ohlcvs:
-            return
-        from banbot.storage import KLine
-        sid = ExSymbol.get_id(self.exchange.name, job.pair, self.exchange.market_type)
-        ins_rows = []
-        if job.wait_bar and job.wait_bar[0] < ohlcvs[0][0]:
-            ins_rows.append(job.wait_bar)
-            job.wait_bar = None
-        ins_rows.extend(ohlcvs)
-        if not last_finish:
-            job.wait_bar = ohlcvs[-1]
-            ins_rows = ins_rows[:-1]
-        if not ins_rows:
-            return
-        KLine.insert(sid, job.timeframe, ins_rows)
-
     async def _try_update(self, job: MinerJob):
         from banbot.util.common import MeasureTime
         import ccxt
@@ -247,7 +264,8 @@ class LiveMiner:
             # 检查是否有完成的bar。写入到数据库
             measure.start_for(f'write_db:{len(ohlcvs)}')
             with db():
-                self.save_ohlcvs(job, ohlcvs, last_finish)
+                sid = ExSymbol.get_id(self.exchange.name, job.pair, self.exchange.market_type)
+                save_ohlcvs(sid, job, ohlcvs, last_finish)
             # 发布小间隔数据到redis订阅方
             measure.start_for('send_pub')
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
