@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/5/17
 import asyncio
+import csv
 import random
 import time
 
@@ -63,8 +64,56 @@ async def test_get_kline():
     print(data[-1])
 
 
+async def test_trade_agg():
+    '''
+    从原始交易流生成1m的ohlcv，然后从交易所获取1m的ohlcv，都输出到文件，进行比较。
+    需要给TradesWatcher的__init__添加下面：
+    cln_p = pair.replace('/', '_').replace(':', '_')
+    out_path = f'E:/Data/temp/{exg_name}_{market}_{cln_p}.csv'
+    import csv
+    wt_mode = 'a' if os.path.isfile(out_path) else 'w'
+    self.out_file = open(out_path, wt_mode, newline='')
+    self.writer = csv.writer(self.out_file)
+    self.save_ts = time.time()
+    通过watch_trades获取到交易后，用下面代码存储到文件
+    csv_rows = [(t['info']['T'], t['info']['E'], t['price'], t['amount'], t['side']) for t in details]
+    self.writer.writerows(csv_rows)
+    if time.time() - self.save_ts > 10:
+        print(f'flush: {self.pair}')
+        self.out_file.flush()
+        self.save_ts = time.time()
+    '''
+    data_dir = 'E:/Data/temp/'
+    coin_list = ['1000FLOKI', '1000LUNC', '1000PEPE', '1000SHIB', '1000XEC', '1INCH', 'AAVE', 'ACH', 'ADA',
+                 'AGIX', 'BTC']
+    for coin in coin_list:
+        trade_path = data_dir + f'binance_future_{coin}_USDT_USDT.csv'
+        fdata = open(trade_path, 'r')
+        trades = []
+        for line in fdata:
+            time_ts, _, price, amount, side = line.strip().split(',')
+            trades.append(dict(timestamp=int(time_ts), price=float(price), amount=float(amount)))
+        from banbot.data.tools import build_ohlcvc, trades_to_ohlcv
+        ohlcv_arr = trades_to_ohlcv(trades)
+        ohlcv_arr, _ = build_ohlcvc(ohlcv_arr, 60, with_count=False)
+        start_ms, end_ms = ohlcv_arr[1][0], ohlcv_arr[-1][0]
+        agg_path = data_dir + f'{coin}_agg.csv'
+        with open(agg_path, 'w', newline='') as fout:
+            agg_writer = csv.writer(fout)
+            agg_writer.writerows(ohlcv_arr)
+
+        from banbot.exchange.crypto_exchange import get_exchange
+        exg = get_exchange('binance', 'future')
+        ohlcv_true = await fetch_api_ohlcv(exg, f'{coin}/USDT:USDT', '1m', start_ms, end_ms)
+        agg_path = data_dir + f'{coin}_true.csv'
+        with open(agg_path, 'w', newline='') as fout:
+            agg_writer = csv.writer(fout)
+            agg_writer.writerows(ohlcv_true)
+        print(f'{coin} ok')
+
+
 if __name__ == '__main__':
     AppConfig.init_by_args()
     with db():
         # test_kline_insert()
-        asyncio.run(test_get_kline())
+        asyncio.run(test_trade_agg())
