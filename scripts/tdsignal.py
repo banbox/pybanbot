@@ -17,7 +17,7 @@ from banbot.exchange.crypto_exchange import secs_to_tf
 from banbot.util.common import logger
 
 
-async def load_file_signal(xls_path: str):
+async def load_file_signal(xls_path: str, timezone_off: int = 0):
     '''
     将阿涛从TradingView导出的策略交易信号，导入到banbot数据库
     '''
@@ -26,6 +26,7 @@ async def load_file_signal(xls_path: str):
     df['action'] = df['action'].map(action_map)
     # print(df.head())
     sess = db.session
+    off_msecs = timezone_off * 3600000
     for rid, row in df.iterrows():
         action = action_map.get(row['action'], row['action'])
         interval = row['interval']
@@ -57,13 +58,13 @@ async def load_file_signal(xls_path: str):
             elif time_part_len == 2:
                 fmt = '%Y-%m-%d %H:%M'
             elif time_part_len == 3:
-                fmt += ':%S'
+                fmt = '%Y-%m-%d %H:%M:%S'
             else:
                 raise ValueError(f'unsupport time fmt: {sig_time}')
             create_time = datetime.datetime.strptime(sig_time, fmt)
         else:
             raise ValueError(f'unsupport time: {type(sig_time)}, {sig_time}')
-        create_ts = btime.to_utcstamp(create_time, True, cut_int=True)
+        create_ts = btime.to_utcstamp(create_time, True, cut_int=True) + off_msecs
         if rid % 500 == 0 and rid:
             logger.info(f'[{rid}/{len(df)}] insert: {timeframe} {create_ts}')
         sess.add(TdSignal(
@@ -78,7 +79,8 @@ async def load_file_signal(xls_path: str):
     return df
 
 
-async def load_signals(*xls_paths: str):
+async def load_signals(timezone_off: int, *xls_paths: str):
+    logger.warning(f'所有时间将被视为UTC+{timezone_off}H')
     sta_path = r'E:/Data/SignalData.txt'
     try:
         handled = set(open(sta_path, 'r', encoding='utf-8').read().strip().splitlines())
@@ -90,7 +92,7 @@ async def load_signals(*xls_paths: str):
             print(f'skip: {path}')
             continue
         print(f'processing: {path}')
-        await load_file_signal(path)
+        await load_file_signal(path, timezone_off)
         state.write(f'{path}\n')
         state.flush()
     state.close()
