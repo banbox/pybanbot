@@ -103,7 +103,7 @@ def load_signals_from_dir():
     fnames = os.listdir(par_xls_dir)
     with db():
         path_list = [par_xls_dir + n for n in fnames]
-        asyncio.run(load_signals(*path_list))
+        asyncio.run(load_signals(8, *path_list))
 
 
 def fix_symbol_wrong():
