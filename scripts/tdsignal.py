@@ -64,7 +64,7 @@ async def load_file_signal(xls_path: str, timezone_off: int = 0):
             create_time = datetime.datetime.strptime(sig_time, fmt)
         else:
             raise ValueError(f'unsupport time: {type(sig_time)}, {sig_time}')
-        create_ts = btime.to_utcstamp(create_time, True, cut_int=True) + off_msecs
+        create_ts = btime.to_utcstamp(create_time, True, cut_int=True) - off_msecs
         if rid % 500 == 0 and rid:
             logger.info(f'[{rid}/{len(df)}] insert: {timeframe} {create_ts}')
         sess.add(TdSignal(
