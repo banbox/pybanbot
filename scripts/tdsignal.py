@@ -139,5 +139,5 @@ if __name__ == '__main__':
     from banbot.config import AppConfig
     AppConfig.init_by_args()
     init_db()
-    fix_symbol_wrong()
+    load_signals_from_dir()
     
