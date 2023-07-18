@@ -151,6 +151,14 @@ class TradesWatcher:
         self.sid = 0
         self.first_insert = True  # 第一次保存的1m必然是不完整的，从接口抓取
         self.running = True
+        data_dir = AppConfig.get()['data_dir']
+        cln_p = pair.replace('/', '_').replace(':', '_')
+        out_path = f'{data_dir}/temp/{exg_name}_{market}_{cln_p}.csv'
+        import csv
+        wt_mode = 'a' if os.path.isfile(out_path) else 'w'
+        self.out_file = open(out_path, wt_mode, newline='')
+        self.writer = csv.writer(self.out_file)
+        self.save_ts = time.time()
 
     async def run(self):
         while self.running:
@@ -161,6 +169,11 @@ class TradesWatcher:
 
     async def try_update(self):
         details = await self.exchange.watch_trades(self.pair)
+        csv_rows = [(t['info']['T'], t['info']['E'], t['price'], t['amount'], t['side']) for t in details]
+        self.writer.writerows(csv_rows)
+        if time.time() - self.save_ts > 10:
+            self.out_file.flush()
+            self.save_ts = time.time()
         details = trades_to_ohlcv(details)
         # 交易按小维度归集和通知；减少传输数据大小；
         ohlcvs_sml = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
