@@ -38,7 +38,6 @@ class KLine(BaseDbModel):
     还有一个超表kline_1h存储1h维度数据
     '''
     __tablename__ = 'kline_1m'
-    _kline_range: ClassVar[Dict[Tuple[int, str], Tuple[Optional[int], Optional[int]]]] = dict()
     _tname: ClassVar[str] = 'kline_1m'
 
     sid = Column(sa.Integer, primary_key=True)
@@ -232,7 +231,7 @@ order by time'''
         return rows
 
     @classmethod
-    def _recalc_ranges(cls, *tf_list: str):
+    def _recalc_ranges(cls, *tf_list: str) -> Dict[Tuple[int, str], Tuple[int, int]]:
         dct_sql = '''
 select sid,
 (extract(epoch from min(time)) * 1000)::bigint, 
@@ -243,6 +242,7 @@ group by 1'''
         if not tf_list:
             tf_list = [item.tf for item in cls.agg_list]
         # 删除旧的kinfo
+        result = dict()
         tf_texts = ', '.join([f"'{tf}'" for tf in tf_list])
         del_sql = f"delete from kinfo where timeframe in ({tf_texts})"
         sess.execute(sa.text(del_sql))
@@ -254,24 +254,26 @@ group by 1'''
                 # 这里记录蜡烛对应的结束时间
                 max_time += tf_to_secs(tf) * 1000
                 min_time, max_time = int(min_time), int(max_time)
-                cls._kline_range[cache_key] = min_time, max_time
+                result[cache_key] = min_time, max_time
                 sess.add(KInfo(sid=sid, timeframe=tf, start=min_time, stop=max_time))
         sess.commit()
-        return cls._kline_range
+        return result
 
     @classmethod
-    def _load_kline_ranges(cls):
+    def _load_kline_ranges(cls) -> Dict[Tuple[int, str], Tuple[int, int]]:
         sess = db.session
         rows: Iterable[KInfo] = sess.query(KInfo).all()
         if not rows:
             return cls._recalc_ranges()
+        result = dict()
         for row in rows:
             cache_key = row.sid, row.timeframe
-            cls._kline_range[cache_key] = row.start, row.stop
-        return cls._kline_range
+            result[cache_key] = row.start, row.stop
+        return result
 
     @classmethod
-    def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int, force_new: bool = False):
+    def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int, force_new: bool = False)\
+            -> Tuple[int, int]:
         '''
         更新sid+timeframe对应的数据区间。end_ms应为最后一个bar对应的结束时间，而非开始时间
         :param force_new: 是否强制刷新范围后，再尝试更新
@@ -279,50 +281,39 @@ group by 1'''
         cache_key = sid, timeframe
         if force_new:
             cls._recalc_ranges(timeframe)
-        old_start, old_end = cls._kline_range.get(cache_key) or (None, None)
-        if old_start:
+        sess = db.session
+        fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
+        kinfo: KInfo = sess.query(KInfo).filter(*fts).first()
+        if kinfo:
+            old_start, old_end = kinfo.start, kinfo.stop
             if start_ms >= old_start and end_ms <= old_end:
                 # 未超出已有范围，不更新直接返回
                 return old_start, old_end
             if old_end < start_ms or end_ms < old_start:
                 if not force_new:
                     logger.info('incontinus insert detect, try refresh range...')
-                    cls._update_range(sid, timeframe, start_ms, end_ms, True)
-                    return
+                    return cls._update_range(sid, timeframe, start_ms, end_ms, True)
                 raise ValueError(f'incontinus range: {cache_key}, old: [{old_start}, {old_end}], '
                                  f'new: [{start_ms}, {end_ms}]')
-        # 有新数据，需要更新范围，查询KInfo准备更新
+            else:
+                kinfo.start = min(kinfo.start, start_ms)
+                kinfo.stop = max(kinfo.stop, end_ms)
+        else:
+            kinfo = KInfo(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms)
+            sess.add(kinfo)
+        new_start, new_stop = kinfo.start, kinfo.stop
+        sess.commit()
+        return new_start, new_stop
+
+    @classmethod
+    def query_range(cls, sid: int, timeframe: str) -> Tuple[Optional[int], Optional[int]]:
         sess = db.session
         fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
         kinfo: KInfo = sess.query(KInfo).filter(*fts).first()
         if kinfo:
-            cls._kline_range[cache_key] = kinfo.start, kinfo.stop
-            old_start, old_end = kinfo.start, kinfo.stop
-        if not old_end or end_ms > old_end:
-            old_end = end_ms
-        if not old_start or start_ms < old_start:
-            old_start = start_ms
-        if not kinfo:
-            sess.add(KInfo(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms))
+            return kinfo.start, kinfo.stop
         else:
-            kinfo.start = old_start
-            kinfo.stop = old_end
-        sess.commit()
-        cls._kline_range[cache_key] = old_start, old_end
-        return cls._kline_range[cache_key]
-
-    @classmethod
-    def query_range(cls, sid: int, timeframe: str) -> Tuple[Optional[int], Optional[int]]:
-        cache_key = sid, timeframe
-        if cache_key not in cls._kline_range:
-            sess = db.session
-            fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
-            kinfo: KInfo = sess.query(KInfo).filter(*fts).first()
-            if kinfo:
-                cls._kline_range[cache_key] = kinfo.start, kinfo.stop
-            else:
-                cls._kline_range[cache_key] = None, None
-        return cls._kline_range[cache_key]
+            return None, None
 
     @classmethod
     def get_down_tf(cls, tf: str):
