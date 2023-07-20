@@ -464,7 +464,7 @@ group by 1'''
             measure.start_for(f'commit')
             conn.commit()
             conn.execution_options(isolation_level=bak_iso_level)
-            measure.print_all()
+            # measure.print_all()
 
     @classmethod
     def _get_unfinish(cls, sid: int, timeframe: str, start_ts: int, end_ts: int, mode: str = 'query'):

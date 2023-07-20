@@ -433,6 +433,9 @@ class CryptoExchange:
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
         return await self.api_ws.watch_trades(symbol, since, limit, params)
 
+    async def watch_ohlcv(self, symbol: str, timeframe: str, since=None, limit=None, params={}):
+        return await self.api_ws.watch_ohlcv(symbol, timeframe, since, limit, params)
+
     @net_retry
     async def fetch_balance(self, params={}):
         return await self.api_async.fetch_balance(params)

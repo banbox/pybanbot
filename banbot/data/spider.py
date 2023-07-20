@@ -139,17 +139,12 @@ def get_finish_ohlcvs(job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool) 
     return ohlcvs
 
 
-class TradesWatcher:
-    '''
-    websocket实时交易数据监听，归集得到秒级ohlcv
-    '''
+class WebsocketWatcher:
     def __init__(self, exg_name: str, market: str, pair: str):
         self.exchange = get_exchange(exg_name, market)
         self.pair = pair
-        self.state_sec = PairTFCache('1s', 1)  # 用于实时归集通知
-        self.state_save = PairTFCache('1m', 60)  # 用于数据库更新
         self.sid = 0
-        self.first_insert = True  # 第一次保存的1m必然是不完整的，从接口抓取
+        self.first_insert = True  # 第一次保存前，有遗漏，从接口抓取
         self.running = True
 
     async def run(self):
@@ -158,6 +153,61 @@ class TradesWatcher:
                 await self.try_update()
             except Exception:
                 logger.exception('watch trades fail')
+
+    async def try_update(self):
+        pass
+
+    async def save_init(self, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
+        exs = ExSymbol.get(self.exchange.name, self.pair, self.exchange.market_type)
+        self.sid = exs.id
+        self.first_insert = False
+        tf_msecs = tf_to_secs(save_tf) * 1000
+        if skip_first:
+            fetch_end_ms = ohlcv[0][0] + tf_msecs  # 第一个插入的bar时间戳，这个是不全的，需要跳过
+            ohlcv = ohlcv[1:]
+        else:
+            fetch_end_ms = ohlcv[0][0]
+        start_ms, end_ms = KLine.query_range(self.sid, save_tf)
+        if not end_ms or fetch_end_ms <= end_ms:
+            # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
+            KLine.insert(self.sid, save_tf, ohlcv)
+            return
+
+        async def fetch_and_save():
+            try_count = 0
+            logger.info(f'start first fetch {self.pair} {end_ms}-{fetch_end_ms}')
+            while True:
+                try_count += 1
+                ins_num = await download_to_db(self.exchange, exs, save_tf, end_ms, fetch_end_ms)
+                save_bars = KLine.query(exs, save_tf, end_ms, fetch_end_ms)
+                last_ms = save_bars[-1][0] if save_bars else None
+                if last_ms + tf_msecs == fetch_end_ms:
+                    break
+                elif try_count > 5:
+                    logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
+                    break
+                else:
+                    # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
+                    logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {self.pair}')
+                    await asyncio.sleep(3)
+            KLine.insert(self.sid, save_tf, ohlcv)
+            logger.info(f'first fetch ok {self.pair} {end_ms}-{fetch_end_ms}')
+        # 异步执行获取和存储，避免影响秒级更新
+        asyncio.create_task(fetch_and_save())
+
+
+class TradesWatcher(WebsocketWatcher):
+    '''
+    websocket实时交易数据监听，归集得到秒级ohlcv
+    监听交易流，从交易流实时归集为s级ohlcv
+    归集得到的第一个bar无效。
+    每天190个期货币种会有100根针：价格突然超出正常范围，成交量未放大。
+    故推荐直接监听ohlcv
+    '''
+    def __init__(self, exg_name: str, market: str, pair: str):
+        super(TradesWatcher, self).__init__(exg_name, market, pair)
+        self.state_sec = PairTFCache('1s', 1)  # 用于实时归集通知
+        self.state_save = PairTFCache('1m', 60)  # 用于数据库更新
 
     async def try_update(self):
         details = await self.exchange.watch_trades(self.pair)
@@ -185,46 +235,51 @@ class TradesWatcher:
         from banbot.storage import db
         with db():
             if self.first_insert:
-                await self.save_init(ohlcvs_save)
+                await self.save_init(ohlcvs_save, self.state_save.timeframe, True)
             else:
                 KLine.insert(self.sid, self.state_save.timeframe, ohlcvs_save)
 
-    async def save_init(self, ohlcv: List[Tuple]):
-        save_tf = self.state_save.timeframe
-        exs = ExSymbol.get(self.exchange.name, self.pair, self.exchange.market_type)
-        self.sid = exs.id
-        self.first_insert = False
-        tf_msecs = tf_to_secs(save_tf) * 1000
-        first_ms = ohlcv[0][0]  # 第一个插入的bar时间戳，这个是不全的，需要跳过
-        ohlcv = ohlcv[1:]  # 从第2个bar开始可以插入到数据库
-        fetch_end_ms = first_ms + tf_msecs
-        start_ms, end_ms = KLine.query_range(self.sid, save_tf)
-        if not end_ms or fetch_end_ms <= end_ms:
-            # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-            KLine.insert(self.sid, self.state_save.timeframe, ohlcv)
-            return
 
-        async def fetch_and_save():
-            try_count = 0
-            logger.info(f'start first fetch {self.pair} {end_ms}-{fetch_end_ms}')
-            while True:
-                try_count += 1
-                ins_num = await download_to_db(self.exchange, exs, save_tf, end_ms, fetch_end_ms)
-                save_bars = KLine.query(exs, save_tf, end_ms, fetch_end_ms)
-                last_ms = save_bars[-1][0] if save_bars else None
-                if last_ms == first_ms:
-                    break
-                elif try_count > 5:
-                    logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
-                    break
+class OhlcvWatcher(WebsocketWatcher):
+    '''
+    监听trades交易归集得到ohlcv的方式，币安每天190个期货币种会有100根针：
+    价格突然超出正常范围，成交量未放大。故使用监听ohlcv方式
+
+    目前仅支持插入期货。
+    '''
+    def __init__(self, exg_name: str, market: str, pair: str):
+        super(OhlcvWatcher, self).__init__(exg_name, market, pair)
+        ws_tf = '1m' if market == 'future' else '1s'
+        self.state_ws = PairTFCache(ws_tf, tf_to_secs(ws_tf))  # 用于实时归集通知
+        self.notify_ts = 0.  # 记录上次通知时间戳，用于ws限流
+        self.pbar = None  # 记录上一个bar用于判断是否完成
+
+    async def try_update(self):
+        ohlcvs_sml = await self.exchange.watch_ohlcv(self.pair, self.state_ws.timeframe)
+        if not ohlcvs_sml:
+            return
+        cur_ts = btime.utctime()
+        if cur_ts - self.notify_ts >= 0.9:
+            self.notify_ts = cur_ts
+            sre_data = orjson.dumps((ohlcvs_sml, self.state_ws.tf_secs))
+            async with AsyncRedis() as redis:
+                pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+                await redis.publish(pub_key, sre_data)
+        finish_bars: list = ohlcvs_sml[:-1]
+        cur_bar = ohlcvs_sml[-1]
+        if not self.pbar:
+            self.pbar = cur_bar
+        elif cur_bar[0] > self.pbar[0]:
+            if not finish_bars or self.pbar[0] > finish_bars[0][0]:
+                finish_bars.append(self.pbar)
+            self.pbar = cur_bar
+        if finish_bars:
+            from banbot.storage import db
+            with db():
+                if self.first_insert:
+                    await self.save_init(finish_bars, self.state_ws.timeframe, False)
                 else:
-                    # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
-                    logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {self.pair}')
-                    await asyncio.sleep(3)
-            KLine.insert(self.sid, self.state_save.timeframe, ohlcv)
-            logger.info(f'first fetch ok {self.pair} {end_ms}-{fetch_end_ms}')
-        # 异步执行获取和存储，避免影响秒级更新
-        asyncio.create_task(fetch_and_save())
+                    KLine.insert(self.sid, self.state_ws.timeframe, finish_bars)
 
 
 class LiveMiner:
@@ -237,7 +292,7 @@ class LiveMiner:
         self.exchange = get_exchange(exg_name, market)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
-        self.socks: Dict[str, TradesWatcher] = dict()
+        self.socks: Dict[str, OhlcvWatcher] = dict()
 
     def sub_pair(self, pair: str, timeframe: str, since: int = None):
         tf_msecs = tf_to_secs(timeframe) * 1000
@@ -245,7 +300,7 @@ class LiveMiner:
             # 1m及以下周期的ohlcv，通过websoc获取
             if pair in self.socks:
                 return
-            self.socks[pair] = TradesWatcher(self.exchange.name, self.exchange.market_type, pair)
+            self.socks[pair] = OhlcvWatcher(self.exchange.name, self.exchange.market_type, pair)
             asyncio.create_task(self.socks[pair].run())
             return
         save_tf, check_intv = MinerJob.get_tf_intv(timeframe)
