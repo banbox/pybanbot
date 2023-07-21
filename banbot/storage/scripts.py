@@ -6,10 +6,13 @@
 from typing import Any, Dict, List
 
 from banbot.storage import *
+from banbot import storage
 from banbot.storage.base import BaseDbModel, sa, init_db
 from banbot.util.common import logger
+from banbot.util.misc import get_module_classes
 
-all_tables = [ExSymbol, KLine, KHole, KInfo, BotTask, Order, InOutOrder, DbUser, ExgUser, TdSignal]
+
+all_tables = get_module_classes(storage, BaseDbModel)
 tbl_map: Dict[str, BaseDbModel] = dict()
 for tbl in all_tables:
     tbl_map[tbl.__tablename__.lower()] = tbl

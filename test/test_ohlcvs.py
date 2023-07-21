@@ -57,12 +57,12 @@ def test_kline_insert():
 async def test_get_kline():
     from banbot.exchange.crypto_exchange import get_exchange
     symbol = 'BTC/USDT:USDT'
-    timeframe = '1m'
+    timeframe = '1d'
     exg = get_exchange('binance', 'future')
     # exs = ExSymbol.get('binance', symbol, 'future')
     end_ms = btime.utcstamp()
     # start_ms = end_ms - 30 * 24 * 3600 * 1000
-    start_ms = 1689831600000
+    start_ms = 1689573795000
     arr = await fetch_api_ohlcv(exg, symbol, timeframe, start_ms, end_ms)
     # data = await auto_fetch_ohlcv(exg, exs, '1w', start_ms, end_ms, with_unfinish=True)
     print(arr)

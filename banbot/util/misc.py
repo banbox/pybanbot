@@ -204,3 +204,15 @@ def safe_json_dumps(val, **kwargs):
     import orjson
     json_serial = build_fallback_serial(False)
     return orjson.dumps(val, default=json_serial, **kwargs)
+
+
+def get_module_classes(module, base_cls: type):
+    import inspect
+    clsmembers = inspect.getmembers(module, inspect.isclass)
+    result = []
+    for (name, cld_cls) in clsmembers:
+        if not issubclass(cld_cls, base_cls) or cld_cls == base_cls:
+            continue
+        result.append(cld_cls)
+    return result
+

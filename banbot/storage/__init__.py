@@ -11,3 +11,4 @@ from banbot.storage.orders import Order, InOutOrder, InOutStatus, OrderStatus
 from banbot.storage.symbols import ExSymbol, to_short_symbol, get_symbol_market
 from banbot.storage.user_ import DbUser, VIPType, ExgUser
 from banbot.storage.tsignals import TdSignal
+from banbot.storage.fronts import Overlay
