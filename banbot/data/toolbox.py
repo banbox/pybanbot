@@ -169,6 +169,9 @@ def correct_ohlcvs():
         all_sids = {k[0] for k in all_ranges.keys()}
         for sid in all_sids:
             exs: ExSymbol = sess.query(ExSymbol).get(sid)
+            if not exs:
+                logger.warning(f'no ExSymbol for: {sid}')
+                continue
             exs = detach_obj(sess, exs)
             for agg in KLine.agg_list[1:]:
                 sub_range = all_ranges.get((sid, agg.agg_from))
