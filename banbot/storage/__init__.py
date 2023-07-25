@@ -6,7 +6,7 @@
 from banbot.storage.base import db, dba
 from banbot.storage.bot_task import BotTask
 from banbot.storage.common import *
-from banbot.storage.klines import KLine, KHole, KInfo
+from banbot.storage.klines import KLine, KHole, KInfo, DisContiError
 from banbot.storage.orders import Order, InOutOrder, InOutStatus, OrderStatus
 from banbot.storage.symbols import ExSymbol, to_short_symbol, get_symbol_market
 from banbot.storage.user_ import DbUser, VIPType, ExgUser

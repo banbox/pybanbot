@@ -13,6 +13,23 @@ from banbot.util import btime
 from banbot.storage.symbols import ExSymbol
 
 
+class DisContiError(Exception):
+    '''
+    插入K线时不连续错误
+    '''
+    def __init__(self, key, old_rg: Tuple[int, int], new_rg: Tuple[int, int]):
+        super(DisContiError, self).__init__()
+        self.key = key
+        self.old_rg = old_rg
+        self.new_rg = new_rg
+
+    def __str__(self):
+        return f'incontinus insert: {self.key}, old: {self.old_rg}, new: {self.new_rg}'
+
+    def __repr__(self):
+        return f'incontinus insert: {self.key}, old: {self.old_rg}, new: {self.new_rg}'
+
+
 class BarAgg:
     def __init__(self, tf: str, tbl: str, agg_from: Optional[str], agg_start: Optional[str],
                  agg_end: Optional[str], agg_every: Optional[str], comp_before: str = None,
@@ -293,8 +310,7 @@ group by 1'''
                 if not force_new:
                     logger.info('incontinus insert detect, try refresh range...')
                     return cls._update_range(sid, timeframe, start_ms, end_ms, True)
-                raise ValueError(f'incontinus range: {cache_key}, old: [{old_start}, {old_end}], '
-                                 f'new: [{start_ms}, {end_ms}]')
+                raise DisContiError(cache_key, (old_start, old_end), (start_ms, end_ms))
             else:
                 kinfo.start = min(kinfo.start, start_ms)
                 kinfo.stop = max(kinfo.stop, end_ms)
@@ -356,8 +372,7 @@ group by 1'''
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
             if old_stop < start_ms or end_ms < old_start:
-                raise ValueError(f'insert incontinus data, {sid}, {timeframe}, old: [{old_start}, {old_stop}], '
-                                 f'new: [{start_ms}, {end_ms}]')
+                raise DisContiError((sid, timeframe), (old_start, old_stop), (start_ms, end_ms))
             if skip_in_range:
                 rows = [r for r in rows if not (old_start <= r[0] < old_stop)]
         if not rows:

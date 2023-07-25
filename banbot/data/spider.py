@@ -14,7 +14,7 @@ from banbot.data.tools import *
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.util.redis_helper import AsyncRedis
-from banbot.storage import KLine
+from banbot.storage import KLine, DisContiError
 
 
 def get_check_interval(tf_secs: int) -> float:
@@ -195,6 +195,16 @@ class WebsocketWatcher:
         # 异步执行获取和存储，避免影响秒级更新
         asyncio.create_task(fetch_and_save())
 
+    async def save_ohlcvs(self, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
+        if self.first_insert:
+            await self.save_init(ohlcv, save_tf, skip_first)
+        else:
+            try:
+                KLine.insert(self.sid, save_tf, ohlcv)
+            except DisContiError as e:
+                logger.warning(f"Kline DisConti {e}, try fill...")
+                await self.save_init(ohlcv, save_tf, False)
+
 
 class TradesWatcher(WebsocketWatcher):
     '''
@@ -234,10 +244,7 @@ class TradesWatcher(WebsocketWatcher):
         logger.info(f'ws ohlcv: {self.pair} {ohlcvs_save}')
         from banbot.storage import db
         with db():
-            if self.first_insert:
-                await self.save_init(ohlcvs_save, self.state_save.timeframe, True)
-            else:
-                KLine.insert(self.sid, self.state_save.timeframe, ohlcvs_save)
+            await self.save_ohlcvs(ohlcvs_save, self.state_save.timeframe, True)
 
 
 class OhlcvWatcher(WebsocketWatcher):
@@ -276,10 +283,7 @@ class OhlcvWatcher(WebsocketWatcher):
         if finish_bars:
             from banbot.storage import db
             with db():
-                if self.first_insert:
-                    await self.save_init(finish_bars, self.state_ws.timeframe, False)
-                else:
-                    KLine.insert(self.sid, self.state_ws.timeframe, finish_bars)
+                await self.save_ohlcvs(finish_bars, self.state_ws.timeframe, False)
 
 
 class LiveMiner:
