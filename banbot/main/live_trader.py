@@ -47,10 +47,11 @@ class LiveTrader(Trader):
         asyncio.create_task(self.rpc.send_msg(msg))
 
     async def init(self):
+        from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         with db():
             BotTask.init()
-            KLine.sync_timeframes()
+            sync_timeframes()
             await ExSymbol.fill_list_dts()
             await self.pair_mgr.refresh_pairlist()
             await self.wallets.init(self.pair_mgr.symbols)

@@ -49,7 +49,8 @@ async def down_pairs_by_config(config: Config):
     此方法由命令行调用。
     '''
     from banbot.storage.klines import KLine, db
-    await KLine.fill_holes()
+    from banbot.data.toolbox import fill_holes
+    await fill_holes()
     pairs = config['pairs']
     timerange = config['timerange']
     start_ms = round(timerange.startts * 1000)
@@ -526,6 +527,7 @@ class LiveSpider:
 
     @classmethod
     async def run_spider(cls):
+        from banbot.data.toolbox import sync_timeframes
         redis = AsyncRedis()
         if await redis.get(cls._key):
             return
@@ -537,7 +539,7 @@ class LiveSpider:
             asyncio.create_task(spider._heartbeat())
         with db():
             logger.info('[spider] sync timeframe ranges ...')
-            KLine.sync_timeframes()
+            sync_timeframes()
             logger.info('[spider] init exchange, markets...')
             await spider.init_pairs()
         while True:

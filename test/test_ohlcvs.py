@@ -31,7 +31,8 @@ async def test_down():
 
 def test_kline_insert():
     from banbot.storage import KLine
-    KLine.sync_timeframes()
+    from banbot.data.toolbox import sync_timeframes
+    sync_timeframes()
     insert_num = 300
     open_price = 30000
     ohlcvs = []

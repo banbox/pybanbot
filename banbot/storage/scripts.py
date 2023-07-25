@@ -79,5 +79,8 @@ def exec_dbcmd(args: Dict[str, Any]):
     with db():
         if action == 'rebuild':
             rebuild_db(_parse_tbls(args), not args['force'])
+        elif action == 'correct':
+            from banbot.data.toolbox import correct_ohlcvs
+            correct_ohlcvs()
         else:
             raise RuntimeError(f'unsupport db action: {action}')
