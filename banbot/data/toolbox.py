@@ -242,10 +242,11 @@ def _correct_ohlcv_range(sid: int, timeframe: str, ohlcvs: List[Tuple], agg_ohlc
             agg_id += 1
             cur_id += 1
             continue
-        cols = f'open={cur_bar[1]},high={cur_bar[2]},low={cur_bar[3]},close={cur_bar[4]},volume={cur_bar[5]}'
+        cols = f'open=:open,high=:high,low=:low,close=:close,volume=:volume'
         bar_ts = cur_bar[0] // 1000
         upd_sql = f'update kline_{timeframe} set {cols} where sid={sid} and "time"=to_timestamp({bar_ts})'
-        exc_res = sess.execute(sa.text(upd_sql))
+        params = dict(open=agg_bar[1], high=agg_bar[2], low=agg_bar[3], close=agg_bar[4], volume=agg_bar[5])
+        exc_res = sess.execute(sa.text(upd_sql), params)
         logger.info(f'update {exc_res.rowcount} bar: {sid} {timeframe} {agg_bar} for {cur_bar}')
         agg_id += 1
         cur_id += 1
@@ -256,4 +257,3 @@ def _correct_ohlcv_range(sid: int, timeframe: str, ohlcvs: List[Tuple], agg_ohlc
         KLine.force_insert(sid, timeframe, ins_rows)
         ins_ts = [row[0] // 1000 for row in ins_rows]
         logger.info(f'insert {sid} {timeframe}: {ins_ts}')
-    sess.close()
