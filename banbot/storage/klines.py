@@ -45,6 +45,14 @@ class BarAgg:
         self.retention = retention
         self.is_view = comp_before is None  # 超表可压缩，故传入压缩参数的认为是超表
 
+    def has_finish(self, start_ms: int, end_ms: int):
+        start_align = start_ms // 1000 // self.secs * self.secs
+        end_align = end_ms // 1000 // self.secs * self.secs
+        # 没有出现新的完成的bar数据，无需更新
+        # 前2个相等，说明：插入的数据所属bar尚未完成。
+        # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
+        return not (start_align == end_align < start_ms // 1000)
+
     def __str__(self):
         return f'{self.tbl} agg_from: {self.agg_from}'
 
@@ -446,13 +454,8 @@ group by 1'''
                 # 跳过过小维度；跳过无关的连续聚合
                 continue
             measure.start_for(f'upd_un_{item.tf}')
-            start_align = start_ms // 1000 // item.secs * item.secs
             end_align = end_ms // 1000 // item.secs * item.secs
-            # 没有出现新的完成的bar数据，无需更新
-            # 前2个相等，说明：插入的数据所属bar尚未完成。
-            # start_align < start_ms说明：插入的数据不是所属bar的第一个数据
-            no_new_finish = start_align == end_align < start_ms // 1000
-            if not no_new_finish and item.agg_from in agg_keys:
+            if item.has_finish(start_ms, end_ms) and item.agg_from in agg_keys:
                 agg_keys.append(item.tf)
             unbar_start_ts = now_stamp // item.secs * item.secs
             if end_align >= unbar_start_ts:
@@ -602,12 +605,17 @@ update "kline_un" set high={phigh},low={plow},
 
     @classmethod
     def _refresh_agg(cls, conn: Union[SqlSession, sa.Connection], tbl: BarAgg, sid: int,
-                     start_ms: int, end_ms: int, agg_from: str = None):
+                     org_start_ms: int, org_end_ms: int, agg_from: str = None):
         tf_msecs = tbl.secs * 1000
-        start_ms = start_ms // tf_msecs * tf_msecs
+        start_ms = org_start_ms // tf_msecs * tf_msecs
         # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
         agg_start = start_ms - tf_msecs
-        end_ms = end_ms // tf_msecs * tf_msecs
+        end_ms = org_end_ms // tf_msecs * tf_msecs
+        if start_ms == end_ms < org_start_ms:
+            # 没有出现新的完成的bar数据，无需更新
+            # 前2个相等，说明：插入的数据所属bar尚未完成。
+            # start_ms < org_start_ms说明：插入的数据不是所属bar的第一个数据
+            return
         old_start, old_end = cls.query_range(sid, tbl.tf)
         if old_start and old_end > old_start:
             # 避免出现空洞或数据错误
@@ -833,18 +841,15 @@ ORDER BY sid, 2'''
                 continue
             ptf, psec, pstart, pend = par
             agg_tbl = cls.agg_map[ptf]
-            tf_msecs = psec * 1000
-            base_start = start // tf_msecs * tf_msecs
-            base_end = end // tf_msecs * tf_msecs
             if not pstart or not pend:
-                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, base_start, base_end, base_tbl)
+                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, start, end, base_tbl)
                 tf_list[i] = (*par[:2], min_time, max_time)
                 continue
             min_time, max_time = None, None
-            if base_start < pstart:
-                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, base_start, pstart, base_tbl)
-            if base_end > pend:
-                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, pend, base_end, base_tbl)
+            if start < pstart:
+                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, start, pstart, base_tbl)
+            if end > pend:
+                min_time, max_time = cls._refresh_agg(sess, agg_tbl, sid, pend, end, base_tbl)
             if min_time:
                 tf_list[i] = (*par[:2], min_time, max_time)
 
