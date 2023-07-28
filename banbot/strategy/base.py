@@ -28,6 +28,7 @@ class BaseStrategy:
         self._cross_last: Dict[str, float] = dict()  # 记录信号交叉点
         self.state = dict()  # 仅在当前bar生效的临时缓存
         self._state_fn = dict()
+        self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:

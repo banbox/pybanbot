@@ -214,13 +214,22 @@ class StaRSI(BaseInd):
 
 
 class StaKDJ(BaseInd):
+    '''
+    KDJ指标。也称为：Stoch随机指标。
+    '''
     input_dim = 2
 
-    def __init__(self, period: int = 9, sm1: int = 3, sm2: int = 3, cache_key: str = ''):
+    def __init__(self, period: int = 9, sm1: int = 3, sm2: int = 3, smooth_type='rma', cache_key: str = ''):
         super(StaKDJ, self).__init__(cache_key)
         self.period = period
-        self._k = StaRMA(sm1, init_val=50., cache_key=cache_key+'kdj_k')
-        self._d = StaRMA(sm2, init_val=50., cache_key=cache_key+'kdj_d')
+        if smooth_type == 'rma':
+            self._k = StaRMA(sm1, init_val=50., cache_key=cache_key+'kdj_k')
+            self._d = StaRMA(sm2, init_val=50., cache_key=cache_key+'kdj_d')
+        elif smooth_type == 'sma':
+            self._k = StaSMA(sm1, cache_key=cache_key + 'kdj_k')
+            self._d = StaSMA(sm2, cache_key=cache_key + 'kdj_d')
+        else:
+            raise ValueError(f'unsupport smooth_type: {smooth_type} for StaKDJ')
 
     def _compute_arr(self, val: np.ndarray):
         if len(val) < self.period:
@@ -236,6 +245,79 @@ class StaKDJ(BaseInd):
         self._k(rsv)
         self._d(self._k[-1])
         return self._k[-1], self._d[-1]
+
+
+class StaStdDev(BaseInd):
+    '''
+    带状态的标准差计算
+    '''
+    def __init__(self, period: int, ddof=0, cache_key: str = ''):
+        super(StaStdDev, self).__init__(cache_key)
+        self.period = period
+        self.factor = period - ddof
+        self._mean = StaSMA(period, cache_key)
+        self._win_arr = []  # 记录输入值
+
+    def _compute_val(self, val: float):
+        mean_val = self._mean(val)
+        self._win_arr.append(val)
+        if len(self._win_arr) < self.period:
+            return np.nan, np.nan
+        variance = sum((x - mean_val) ** 2 for x in self._win_arr) / self.factor
+        stddev_val = variance ** 0.5
+        self._win_arr.pop(0)
+        return stddev_val, mean_val
+
+
+class StaBBANDS(BaseInd):
+    '''
+    带状态的布林带指标
+    '''
+
+    def __init__(self, period: int, std_up: int, std_dn: int, cache_key: str = ''):
+        super(StaBBANDS, self).__init__(cache_key)
+        self.period = period
+        self.std_up = std_up
+        self.std_dn = std_dn
+        self._std = StaStdDev(period, cache_key=cache_key)
+
+    def _compute_val(self, val: float):
+        dev_val, mean_val = self._std(val)
+        if np.isnan(dev_val):
+            return np.nan, np.nan, np.nan
+        upper = mean_val + dev_val * self.std_up
+        lower = mean_val - dev_val * self.std_dn
+        return upper, mean_val, lower
+
+
+class CrossTrace:
+    def __init__(self):
+        self.prev_valid = None
+        self.cross_tag = 0
+
+    def __call__(self, *args, **kwargs):
+        '''
+        0：未发生交叉
+        1：vala向上穿越valb
+        -1：vala向下穿越valb
+        '''
+        if len(args) == 2:
+            cur_diff = args[0] - args[1]
+        elif len(args) == 1:
+            cur_diff = args[0]
+        else:
+            raise ValueError(f'wrong args len: {len(args)}, expect 1 or 2')
+        self.cross_tag = 0
+        if not self.prev_valid or not np.isfinite(self.prev_valid):
+            self.prev_valid = cur_diff
+            return self.cross_tag
+        elif not cur_diff:
+            return self.cross_tag
+        factor = self.prev_valid * cur_diff
+        if factor < 0:
+            self.prev_valid = cur_diff
+            self.cross_tag = 1 if cur_diff > 0 else -1
+        return self.cross_tag
 
 
 def _make_sub_malong():

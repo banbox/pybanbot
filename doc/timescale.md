@@ -41,3 +41,10 @@ exit
 ```shell
 python -m banbot dbcmd --force --action=rebuild -c /root/bantd/config.json
 ```
+
+# 常见问题
+### 重复键违反唯一约束
+一般是在从别的数据库同步数据到当前数据库，然后再次插入数据时出现。原因是同步数据后，主键ID序列自增起始值未更新。可通过下面sql更新：
+```sql
+SELECT setval('tdsignal_id_seq', (SELECT max(id) FROM tdsignal));
+```

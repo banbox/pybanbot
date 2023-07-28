@@ -38,23 +38,28 @@ class IResolver:
     user_subdir: Optional[str] = None
     initial_search_path: Optional[Path]
     extra_path: Optional[str] = None
+    env_key: Optional[str] = None
 
     @classmethod
     def build_search_paths(cls, config: Config, user_subdir: Optional[str] = None,
-                           extra_dirs: List[str] = []):
+                           extra_dirs: List[str] = None):
         abs_paths: List[Path] = []
         if cls.initial_search_path:
             abs_paths.append(cls.initial_search_path)
 
         if user_subdir:
-            abs_paths.insert(0, Path(os.path.join(config['data_dir'], user_subdir)))
+            abs_paths.append(Path(os.path.join(config['data_dir'], user_subdir)))
+
+        if cls.env_key and os.environ.get(cls.env_key):
+            abs_paths.append(Path(os.environ[cls.env_key]))
 
         # Add extra directory to the top of the search paths
-        for dir in extra_dirs:
-            abs_paths.insert(0, Path(dir).resolve())
+        if extra_dirs:
+            for dir in extra_dirs:
+                abs_paths.append(Path(dir).resolve())
 
         if cls.extra_path and (extra := config.get(cls.extra_path)):
-            abs_paths.insert(0, Path(extra).resolve())
+            abs_paths.append(Path(extra).resolve())
 
         return abs_paths
 

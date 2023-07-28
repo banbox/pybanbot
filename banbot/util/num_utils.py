@@ -111,3 +111,10 @@ def max_rolling(a, window, axis=1, pad='nan'):
 def min_rolling(a, window, axis=1, pad='nan'):
     return np_rolling(a, window, axis=axis, pad=pad, calc_fn=np.min)
 
+
+def mean_rolling(a, window, axis=1, pad='nan'):
+    return np_rolling(a, window, axis=axis, pad=pad, calc_fn=np.mean)
+
+
+def std_rolling(a, window, axis=1, pad='nan'):
+    return np_rolling(a, window, axis=axis, pad=pad, calc_fn=np.std)

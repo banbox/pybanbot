@@ -136,3 +136,17 @@ def KDJ(arr: np.ndarray, period: int = 9, m1: int = 3, m2: int = 3):
     # 计算J值
     # j = 3 * k - 2 * d
     return k, d
+
+
+def BBANDS(arr: np.ndarray, period: int, std_up: int, std_dn: int):
+    '''
+    计算布林带。
+    :return rolling_mean, upper_band, lower_band
+    '''
+    rolling_mean = mean_rolling(arr, period)
+    rolling_std = std_rolling(arr, period)
+
+    upper_band = rolling_mean + (rolling_std * std_up)
+    lower_band = rolling_mean - (rolling_std * std_dn)
+
+    return upper_band, rolling_mean, lower_band

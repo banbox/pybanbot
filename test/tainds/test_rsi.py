@@ -10,7 +10,7 @@ from banbot.compute import mytt
 from banbot.compute.vec_inds import *
 '''
 比较自行实现的指标和talib、pandas_ta、MyTT等结果异同
-SMA  EMA  RMA  TR  ATR  MACD  RSI  KDJ
+SMA  EMA  RMA  TR  ATR  MACD  RSI  KDJ  BBANDS
 不对比：NATR、TRRoll、NTRRoll、NVol
 
 |  指标  | 状态指标 |  MyTT  |TA-lib Class|TA-lib Metastock| Pandas-TA |
@@ -23,6 +23,7 @@ SMA  EMA  RMA  TR  ATR  MACD  RSI  KDJ
 |  MACD |   ✔    |   T1   |     T2     |       T1        |     ✔     |
 |  RSI  |   ✔    |   T1   |    ✔       |       ✔        |     T2    |
 |  KDJ  |   ✔    |   T1   |     T2     |       T1        |     T3    |  # 只有细微差别
+| BBANDS|   ✔    |   ✔    |     ✔     |       ✔         |     ✔     |
 '''
 
 
@@ -162,3 +163,38 @@ def test_kdj():
     print_tares(myk, sta_k, ta2_k, ta_k, mk, pta_k)
     assert_arr_equal(myk, sta_k)
     assert_arr_equal(myd, sta_d)
+
+
+def test_bband():
+    '''
+    对比测试布林带指标
+    '''
+    ta.set_compatibility(1)
+    period, nbdevup, nbdevdn = 9, 2, 2
+    ta_up, ta_md, ta_lo = ta.BBANDS(close_arr, timeperiod=period, nbdevup=nbdevup, nbdevdn=nbdevdn)
+    ta.set_compatibility(0)
+    ta2_up, ta2_md, ta2_lo = ta.BBANDS(close_arr, timeperiod=period, nbdevup=nbdevup, nbdevdn=nbdevdn)
+    # 使用mytt计算
+    m_up, m_md, m_lo = mytt.BOLL(close_arr, period, nbdevup)
+    # pta 计算
+    pta_df = pta.bbands(close_col, period, nbdevup, talib=False)
+    pta_up, pta_md, pta_lo = pta_df['BBU_9_2.0'], pta_df['BBM_9_2.0'], pta_df['BBL_9_2.0']
+    # 带状态
+    sta_up, sta_md, sta_lo = calc_state_ind(StaBBANDS(period, nbdevup, nbdevdn), close_arr)
+    # 向量计算
+    my_up, my_md, my_lo = BBANDS(close_arr, period, nbdevup, nbdevdn)
+    # 对比
+    print_tares(my_up, sta_up, ta2_up, ta_up, m_up, pta_up)
+    # print_tares(my_md, sta_md, ta2_md, ta_md, m_md, pta_md)
+    # print_tares(my_lo, sta_lo, ta2_lo, ta_lo, m_lo, pta_lo)
+    assert_arr_equal(my_up, sta_up)
+    assert_arr_equal(sta_up, ta_up)
+
+
+def test_cross():
+    ct = CrossTrace()
+    sma3 = SMA(close_arr, 3)
+    diff_arr = close_arr - sma3
+    for i, v in enumerate(close_arr):
+        tag = ct.calc(v, sma3[i])
+        print(diff_arr[i], tag)

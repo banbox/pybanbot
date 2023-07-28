@@ -28,10 +28,10 @@ class ExSymbol(BaseDbModel):
         return data
 
     def __str__(self):
-        return f'{self.exchange}:{self.symbol}:{self.market}'
+        return f'[{self.id}] {self.exchange}:{self.symbol}:{self.market}'
 
     def __repr__(self):
-        return f'{self.exchange}:{self.symbol}:{self.market}'
+        return f'[{self.id}] {self.exchange}:{self.symbol}:{self.market}'
 
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):

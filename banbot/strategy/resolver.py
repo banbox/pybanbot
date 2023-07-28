@@ -84,6 +84,7 @@ class StrategyResolver(IResolver):
     object_type_str: str = 'BaseStrategy'
     user_subdir = 'strategies'
     initial_search_path = Path(__file__).parent.resolve()
+    env_key = 'ban_stgy_dir'
 
     @classmethod
     def load_run_jobs(cls, config: dict, pairlist: List[str],

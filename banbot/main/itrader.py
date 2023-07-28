@@ -70,6 +70,7 @@ class Trader:
             for strategy in strategy_list:
                 stg_name = strategy.name
                 strategy.state = dict()
+                strategy.bar_signals = dict()
                 strategy.on_bar(pair_arr)
                 if not BotGlobal.is_wramup:
                     # 调用策略生成入场和出场信号
