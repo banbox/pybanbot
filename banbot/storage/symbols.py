@@ -22,6 +22,16 @@ class ExSymbol(BaseDbModel):
     market = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
 
+    @orm.reconstructor
+    def __init__(self, **kwargs):
+        self.quote_code = ''
+        self.base_code = ''
+        symbol: str = kwargs.get('symbol')
+        if symbol:
+            self.base_code, quote_part = symbol.split('/')
+            self.quote_code = quote_part.split(':')[0]
+        super(ExSymbol, self).__init__(**kwargs)
+
     def client_dict(self) -> dict:
         data = self.dict()
         data['short_name'] = to_short_symbol(self.symbol)

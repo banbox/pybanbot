@@ -90,18 +90,18 @@ class OrderManager(metaclass=SingletonArg):
         else:
             return [], []
         ctx = get_context(pair_tf)
-        pair, _, _, _ = get_cur_symbol(ctx)
+        exs, _ = get_cur_symbol(ctx)
         enter_ods, exit_ods = [], []
         if enters:
-            if btime.allow_order_enter(ctx) and self.allow_pair(pair):
+            if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
                 for stg_name, sigin in enters:
                     enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
                 enter_ods = [od for od in enter_ods if od]
             else:
-                logger.debug('pair %s enter not allow: %s', pair, enters)
+                logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
         if exits:
             for stg_name, sigout in exits:
-                exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, pair))
+                exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, exs.symbol))
         if exit_keys:
             for od_id, sigout in exit_keys.items():
                 od = InOutOrder.get(od_id)
@@ -120,26 +120,26 @@ class OrderManager(metaclass=SingletonArg):
         :param do_check: 是否执行入场检查
         :return:
         '''
-        pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
-        if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(pair)):
-            logger.debug('pair %s enter not allowed', pair)
+        exs, timeframe = get_cur_symbol(ctx)
+        if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(exs.symbol)):
+            logger.debug('pair %s enter not allowed', exs.symbol)
             return
         tag = sigin.pop('tag')
         lock_key = sigin.get('lock_key') or tag
-        if lock_od := InOutOrder.get_order(pair, strategy, lock_key):
+        if lock_od := InOutOrder.get_order(exs.symbol, strategy, lock_key):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
                 logger.error('lock order exit timeout: %s, exit bar: %d', lock_od, lock_od.elp_num_exit)
             return
         legal_cost = sigin.pop('legal_cost')
-        quote_cost = self.wallets.get_avaiable_by_cost(quote_s, legal_cost, self.last_ts)
+        quote_cost = self.wallets.get_avaiable_by_cost(exs.quote_code, legal_cost, self.last_ts)
         if not quote_cost:
-            logger.debug('wallet %s empty: %f', pair, quote_cost)
+            logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
             return
         od = InOutOrder(
             **sigin,
-            symbol=pair,
+            symbol=exs.symbol,
             timeframe=timeframe,
             quote_cost=quote_cost,
             enter_price=price,
@@ -179,10 +179,10 @@ class OrderManager(metaclass=SingletonArg):
             sigout = dict(tag=sigout)
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
-        _, base_s, quote_s, _ = get_cur_symbol(ctx)
+        exs, _ = get_cur_symbol(ctx)
         if od.enter.filled:
             # 订单已至少部分成交
-            ava_amt, lock_amt = self.wallets.get(base_s, od.enter.create_at)
+            ava_amt, lock_amt = self.wallets.get(exs.base_code, od.enter.create_at)
             exit_amount = od.enter.filled
             if 0 < ava_amt < exit_amount or abs(ava_amt - exit_amount) / exit_amount <= 0.03:
                 exit_amount = ava_amt
@@ -213,14 +213,14 @@ class OrderManager(metaclass=SingletonArg):
         for od in op_orders:
             od.update_by_bar(row)
         # 更新价格
-        pair, base_s, quote_s, timeframe = get_cur_symbol()
-        if quote_s.find('USD') >= 0:
-            self.prices[base_s] = float(row[ccol])
+        exs, timeframe = get_cur_symbol()
+        if exs.quote_code.find('USD') >= 0:
+            self.prices[exs.base_code] = float(row[ccol])
 
     def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, dict]:
         result = dict()
-        pair, _, _, _ = get_cur_symbol()
-        op_orders = InOutOrder.open_orders(strategy.name, pair)
+        exs, _ = get_cur_symbol()
+        op_orders = InOutOrder.open_orders(strategy.name, exs.symbol)
         if not op_orders:
             return result
         # 调用策略的自定义退出判断
@@ -302,8 +302,8 @@ class LocalOrderManager(OrderManager):
     def update_by_bar(self, row):
         super(LocalOrderManager, self).update_by_bar(row)
         if not btime.prod_mode():
-            pair, base_s, quote_s, timeframe = get_cur_symbol()
-            self.fill_pending_orders(pair, timeframe, row)
+            exs, timeframe = get_cur_symbol()
+            self.fill_pending_orders(exs.symbol, timeframe, row)
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
@@ -313,13 +313,13 @@ class LocalOrderManager(OrderManager):
             sub_od.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
         quote_amount = enter_price * sub_od.amount
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
-        _, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        exs, timeframe = get_cur_symbol(ctx)
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         base_amt = sub_od.amount * (1 - sub_od.fee)
-        self.wallets.update_wallets(**{quote_s: -quote_amount, base_s: base_amt})
+        self.wallets.update_wallets(**{exs.quote_code: -quote_amount, exs.base_code: base_amt})
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
@@ -340,9 +340,9 @@ class LocalOrderManager(OrderManager):
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         ctx = get_context(f'{od.symbol}/{od.timeframe}')
-        pair, base_s, quote_s, timeframe = get_cur_symbol(ctx)
+        exs, timeframe = get_cur_symbol(ctx)
         quote_amt = quote_amount * (1 - sub_od.fee)
-        self.wallets.update_wallets(**{quote_s: quote_amt, base_s: -sub_od.amount})
+        self.wallets.update_wallets(**{exs.quote_code: quote_amt, exs.base_code: -sub_od.amount})
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit

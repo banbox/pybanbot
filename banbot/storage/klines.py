@@ -4,13 +4,15 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import math
-from datetime import datetime
-from typing import Callable, Tuple, ClassVar, Iterable
+import collections
+import asyncio
+from typing import Callable, Tuple, ClassVar, Iterable, Deque
 
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
 from banbot.util import btime
 from banbot.storage.symbols import ExSymbol
+from asyncio import Future
 
 
 class DisContiError(Exception):
@@ -101,6 +103,8 @@ volume = EXCLUDED.volume'''
   min(low) AS low, 
   last(close, time) AS close,
   sum(volume) AS volume'''
+
+    _listeners: Dict[str, Deque[Future]] = dict()
 
     @classmethod
     def _agg_sql(cls, intv: str, base_tbl: str, where_str: str = ''):
@@ -411,9 +415,18 @@ group by 1'''
             return 0
         cls.force_insert(sid, timeframe, rows)
         # 更新区间
-        cls._update_range(sid, timeframe, start_ms, end_ms)
+        n_start, n_end = cls._update_range(sid, timeframe, start_ms, end_ms)
         # 刷新相关的连续聚合
-        cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms, rows)
+        tf_new_ranges = cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms, rows)
+        if not old_stop or n_end > old_stop:
+            tf_new_ranges.insert(0, (timeframe, old_stop or n_start, n_end))
+        if tf_new_ranges and cls._listeners:
+            # 有可能的监听者，发出查询数据发出事件
+            sess = db.session
+            exs: ExSymbol = sess.get(ExSymbol, sid)
+            exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
+            for tf, n_start, n_end in tf_new_ranges:
+                cls._on_new_bars(exg_name, market, symbol, tf)
         return len(rows)
 
     @classmethod
@@ -448,7 +461,10 @@ group by 1'''
         sess.commit()
 
     @classmethod
-    def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int, sub_bars: List[tuple]):
+    def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int, sub_bars: List[tuple]) -> List[Tuple[str, int, int]]:
+        '''
+        刷新连续聚合。返回大周期有新数据的区间
+        '''
         from banbot.util.common import MeasureTime
         measure = MeasureTime()
         agg_keys = [from_level]
@@ -475,19 +491,24 @@ group by 1'''
                 cls._update_unfinish(item, sid, start_ms, end_ms, care_sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
-            return
+            return []
         measure.start_for(f'get_db')
         from banbot.storage.base import init_db
         with init_db().connect() as conn:
             # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
             bak_iso_level = conn.get_isolation_level()
             conn.execution_options(isolation_level='AUTOCOMMIT')
+            tf_ins_list = []
             for tf in agg_keys:
                 measure.start_for(f'refresh_agg_{tf}')
-                cls.refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
+                n_start, n_end, o_start, o_end = cls.refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
+                if not o_end or n_end > o_end:
+                    # 记录有新数据的周期
+                    tf_ins_list.append((tf, o_end or n_start, n_end))
             measure.start_for(f'commit')
             conn.commit()
             conn.execution_options(isolation_level=bak_iso_level)
+            return tf_ins_list
             # measure.print_all()
 
     @classmethod
@@ -621,7 +642,7 @@ update "kline_un" set high={phigh},low={plow},
             # 没有出现新的完成的bar数据，无需更新
             # 前2个相等，说明：插入的数据所属bar尚未完成。
             # start_ms < org_start_ms说明：插入的数据不是所属bar的第一个数据
-            return
+            return None, None, None, None
         old_start, old_end = cls.query_range(sid, tbl.tf)
         if old_start and old_end > old_start:
             # 避免出现空洞或数据错误
@@ -648,8 +669,9 @@ ORDER BY sid, 2'''
             conn.execute(sa.text(stmt))
         except Exception as e:
             logger.exception(f'refresh conti agg error: {e}, {sid} {tbl.tf}')
-            return old_start, old_end
-        return cls._update_range(sid, tbl.tf, start_ms, end_ms)
+            return old_start, old_end, old_start, old_end
+        new_start, new_end = cls._update_range(sid, tbl.tf, start_ms, end_ms)
+        return new_start, new_end, old_start, old_end
 
     @classmethod
     def log_candles_conts(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, candles: list):
@@ -707,6 +729,44 @@ ORDER BY sid, 2'''
             if not m.id:
                 sess.add(m)
         sess.commit()
+
+    @classmethod
+    async def wait_bars(cls, exg_name: str, market: str, pair: str, timeframe: str):
+        '''
+        监听指定币，指定周期的新的bar。四个参数都可为*，表示任意。
+        '''
+        key = f'{exg_name}_{market}_{pair}_{timeframe}'
+        if key not in cls._listeners:
+            cls._listeners[key] = collections.deque()
+        queue = cls._listeners[key]
+        fut = asyncio.get_running_loop().create_future()
+        queue.append(fut)
+        try:
+            return await fut
+        finally:
+            queue.remove(fut)
+
+    @classmethod
+    def _on_new_bars(cls, exg_name: str, market: str, pair: str, timeframe: str):
+        '''
+        有新的bar被写入到数据库，触发相应的监听者。
+        '''
+        if not cls._listeners:
+            return []
+        waiters = []
+        for exg in ['*', exg_name]:
+            for m in ['*', market]:
+                for p in ['*', pair]:
+                    for t in ['*', timeframe]:
+                        waits = cls._listeners.get(f'{exg}_{m}_{p}_{t}')
+                        if waits:
+                            waiters.extend(waits)
+        if not waiters:
+            return
+        data = [exg_name, market, pair, timeframe]
+        for fut in waiters:
+            if not fut.done():
+                fut.set_result(data)
 
 
 class KHole(BaseDbModel):

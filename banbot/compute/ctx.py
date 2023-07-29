@@ -17,6 +17,7 @@ from contextvars import Context, ContextVar, copy_context
 from typing import *
 
 import numpy as np
+from banbot.storage.symbols import ExSymbol
 
 # 所有对上下文变量的数据访问，均应先获取锁，避免协程交互访问时发生混乱
 bar_num = ContextVar('bar_num')
@@ -35,10 +36,11 @@ def _update_context(kwargs):
         key.set(val)
 
 
-def get_cur_symbol(ctx: Optional[Context] = None) -> Tuple[str, str, str, str]:
+def get_cur_symbol(ctx: Optional[Context] = None) -> Tuple[ExSymbol, str]:
     pair_tf = ctx[symbol_tf] if ctx else symbol_tf.get()
-    base_symbol, quote_symbol, timeframe = pair_tf.split('/')
-    return f'{base_symbol}/{quote_symbol}', base_symbol, quote_symbol, timeframe
+    exg_name, market, base_code, quote_part, timeframe = pair_tf.split('/')
+    exs = ExSymbol(exchange=exg_name, market=market, symbol=f'{base_code}/{quote_part}')
+    return exs, timeframe
 
 
 def get_context(pair_tf: str) -> Context:

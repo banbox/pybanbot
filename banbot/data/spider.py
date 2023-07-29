@@ -569,7 +569,9 @@ async def run_spider_forever(args: dict):
     此函数仅用于从命令行启动
     '''
     from banbot.worker.top_change import TopChange
+    from banbot.worker.sig_sync import run_tdsig_updater
     logger.info('start top change update timer...')
     await TopChange.start()
+    asyncio.create_task(run_tdsig_updater())
     await LiveSpider.run_spider()
     # await TopChange.clear()

@@ -271,6 +271,17 @@ class SyncRedis:
             return default_val
         return decode_val
 
+    def hset(self, key: str, field: str, val):
+        key = _get_key(key)
+        field = _get_key(field, is_field=True)
+        return self.redis.hset(key, field, self.serializer(val))
+
+    def hget(self, key: str, field: str):
+        key = _get_key(key)
+        field = _get_key(field, is_field=True)
+        val = self.redis.hget(key, field)
+        return self.deserializer(val)
+
     def ttl(self, key: str):
         key = _get_key(key)
         if not key:

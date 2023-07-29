@@ -146,14 +146,14 @@ def _sync_kline_sid_tf(sess: SqlSession, sid: int, tf_list: List[Tuple[str, int,
         ptf, psec, pstart, pend = par
         agg_tbl = KLine.agg_map[ptf]
         if not pstart or not pend:
-            min_time, max_time = KLine.refresh_agg(sess, agg_tbl, sid, start, end, base_tbl)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, end, base_tbl)
             tf_list[i] = (*par[:2], min_time, max_time)
             continue
         min_time, max_time = None, None
         if start < pstart:
-            min_time, max_time = KLine.refresh_agg(sess, agg_tbl, sid, start, pstart, base_tbl)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, pstart, base_tbl)
         if end > pend:
-            min_time, max_time = KLine.refresh_agg(sess, agg_tbl, sid, pend, end, base_tbl)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, pend, end, base_tbl)
         if min_time:
             tf_list[i] = (*par[:2], min_time, max_time)
 
