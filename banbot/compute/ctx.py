@@ -207,9 +207,9 @@ class CachedInd(type):
 
     @classmethod
     def reset(cls, ctx_key: str):
-        for key in cls._instances:
-            if key.startswith(ctx_key):
-                del cls._instances[key]
+        del_keys = {key for key in cls._instances if key.startswith(ctx_key)}
+        for key in del_keys:
+            del cls._instances[key]
 
 
 class BaseInd(metaclass=CachedInd):

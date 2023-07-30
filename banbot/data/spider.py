@@ -185,7 +185,7 @@ class WebsocketWatcher:
                 ins_num = await download_to_db(self.exchange, exs, save_tf, end_ms, fetch_end_ms)
                 save_bars = KLine.query(exs, save_tf, end_ms, fetch_end_ms)
                 last_ms = save_bars[-1][0] if save_bars else None
-                if last_ms + tf_msecs == fetch_end_ms:
+                if last_ms and last_ms + tf_msecs == fetch_end_ms:
                     break
                 elif try_count > 5:
                     logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
