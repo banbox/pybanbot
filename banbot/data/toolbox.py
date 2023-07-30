@@ -90,7 +90,7 @@ def sync_timeframes():
     检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
     应在机器人启动时调用
     '''
-    start = time.monotonic()
+    start_ts = time.monotonic()
     sid_ranges = KLine.load_kline_ranges()
     if not sid_ranges:
         return
@@ -117,9 +117,8 @@ def sync_timeframes():
             tf_ranges.clear()
         tf_ranges[it[1]] = (tf_to_secs(it[1]), *it[2:])
     call_sync()
-    cost = time.monotonic() - start
-    if cost > 2:
-        logger.info(f'sync timeframes cost: {cost:.2f} s')
+    cost_ts = time.monotonic() - start_ts
+    logger.info(f'sync timeframes cost {round(cost_ts * 1000)} ms')
 
 
 def _sync_kline_sid(sid: int, tf_list: List[Tuple[str, int, int, int]]):
@@ -127,35 +126,33 @@ def _sync_kline_sid(sid: int, tf_list: List[Tuple[str, int, int, int]]):
     检查给定的sid，各个周期数据是否有不一致，尝试用低维度数据更新高维度数据
     '''
     sess = db.session
-    for i in range(len(tf_list) - 1):
-        if not tf_list[i][2]:
+    tf_map = {r[0]: i for i, r in enumerate(tf_list)}
+    for agg_tbl in KLine.agg_list:
+        if not agg_tbl.agg_from:
             continue
-        _sync_kline_sid_tf(sess, sid, tf_list, i)
-    sess.commit()
-
-
-def _sync_kline_sid_tf(sess: SqlSession, sid: int, tf_list: List[Tuple[str, int, int, int]], base_id: int):
-    '''
-    检查给定sid的指定周期数据，是否可更新更大周期数据。必要时进行更新。
-    '''
-    stf, secs, start, end = tf_list[base_id]
-    base_tbl = f'kline_{stf}'
-    for i, par in enumerate(tf_list):
-        if i <= base_id:
+        cur_id, src_id = tf_map.get(agg_tbl.tf), tf_map.get(agg_tbl.agg_from)
+        if cur_id is None or src_id is None:
             continue
-        ptf, psec, pstart, pend = par
-        agg_tbl = KLine.agg_map[ptf]
+        ptf, psec, pstart, pend = tf_list[cur_id]
+        stf, ssec, start, end = tf_list[src_id]
+        tf_msecs = psec * 1000
+        start_align = start // tf_msecs * tf_msecs
+        end_align = end // tf_msecs * tf_msecs
+        if start_align >= pstart and end_align <= pend:
+            continue
+
         if not pstart or not pend:
-            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, end, base_tbl)
-            tf_list[i] = (*par[:2], min_time, max_time)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, end)
+            tf_list[cur_id] = (ptf, psec, min_time, max_time)
             continue
         min_time, max_time = None, None
         if start < pstart:
-            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, pstart, base_tbl)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, start, pstart)
         if end > pend:
-            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, pend, end, base_tbl)
+            min_time, max_time, _, _ = KLine.refresh_agg(sess, agg_tbl, sid, pend, end)
         if min_time:
-            tf_list[i] = (*par[:2], min_time, max_time)
+            tf_list[cur_id] = (ptf, psec, min_time, max_time)
+    sess.commit()
 
 
 def correct_ohlcvs():
