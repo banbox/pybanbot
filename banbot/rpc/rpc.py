@@ -55,9 +55,8 @@ class RPCHandler:
 
 class RPC:
 
-    def __init__(self, bot):
-        self._bot = bot
-        self._config = bot.config
+    def __init__(self, config: Config):
+        self._config = config
 
     def _rpc_start(self) -> Dict[str, str]:
         """ Handler for start """

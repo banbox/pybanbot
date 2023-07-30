@@ -24,7 +24,7 @@ class LiveTrader(Trader):
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
-        self.rpc = RPCManager(self)
+        self.rpc = RPCManager(config)
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT

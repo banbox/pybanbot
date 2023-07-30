@@ -13,12 +13,11 @@ from banbot.util.common import Singleton
 class RPCManager(metaclass=Singleton):
     instance: 'RPCManager' = None
 
-    def __init__(self, bot):
+    def __init__(self, config: Config):
         RPCManager.instance = self
-        self.config = bot.config
-        self._rpc = RPC(bot)
+        self.config = config
+        self._rpc = RPC(config)
         self.channels: List[RPCHandler] = []
-        config = bot.config
         self.name = config.get('name', '')
 
         if config.get('wework', {}).get('enabled', False):

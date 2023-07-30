@@ -196,10 +196,13 @@ class NotifyHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
-        from banbot.util import btime
+        from banbot.config import AppConfig
         try:
-            if not RPCManager.instance or btime.run_mode not in btime.LIVE_MODES:
-                return
+            if not RPCManager.instance:
+                if AppConfig.obj:
+                    RPCManager(AppConfig.get())
+                else:
+                    return
             try:
                 if self.loop is None:
                     self.loop = asyncio.get_running_loop()
