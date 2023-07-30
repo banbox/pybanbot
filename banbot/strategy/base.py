@@ -29,6 +29,7 @@ class BaseStrategy:
         self.state = dict()  # 仅在当前bar生效的临时缓存
         self._state_fn = dict()
         self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
+        self.calc_num = 0
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -75,7 +76,9 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
-        pass
+        self.state = dict()
+        self.bar_signals = dict()
+        self.calc_num += 1
 
     def _update_inds(self, arr: np.ndarray, *args):
         cur_close, cur_row = arr[-1, ccol], arr[-1]

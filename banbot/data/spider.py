@@ -152,6 +152,9 @@ class WebsocketWatcher:
         while self.running:
             try:
                 await self.try_update()
+            except ccxt.NetworkError as e:
+                await asyncio.sleep(0.3)
+                logger.error(f'watch trades net fail: {e}')
             except Exception:
                 logger.exception('watch trades fail')
 
@@ -159,7 +162,7 @@ class WebsocketWatcher:
         pass
 
     async def save_init(self, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
-        exs = ExSymbol.get(self.exchange.name, self.pair, self.exchange.market_type)
+        exs = ExSymbol.get(self.exchange.name, self.exchange.market_type, self.pair)
         self.sid = exs.id
         self.first_insert = False
         tf_msecs = tf_to_secs(save_tf) * 1000
@@ -234,7 +237,7 @@ class TradesWatcher(WebsocketWatcher):
             return
         sre_data = orjson.dumps((ohlcvs_sml, self.state_sec.tf_secs))
         async with AsyncRedis() as redis:
-            pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+            pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
             await redis.publish(pub_key, sre_data)
         # 更新1m级别bar，写入数据库
         ohlcv_old = [self.state_save.wait_bar] if self.state_save.wait_bar else []
@@ -271,7 +274,7 @@ class OhlcvWatcher(WebsocketWatcher):
             self.notify_ts = cur_ts
             sre_data = orjson.dumps((ohlcvs_sml, self.state_ws.tf_secs))
             async with AsyncRedis() as redis:
-                pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+                pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
                 await redis.publish(pub_key, sre_data)
         finish_bars: list = ohlcvs_sml[:-1]
         cur_bar = ohlcvs_sml[-1]
@@ -375,14 +378,14 @@ class LiveMiner:
             # 检查是否有完成的bar。写入到数据库
             measure.start_for(f'write_db:{len(ohlcvs)}')
             with db():
-                sid = ExSymbol.get_id(self.exchange.name, job.pair, self.exchange.market_type)
+                sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
                 ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
                 KLine.insert(sid, job.timeframe, ohlcvs)
             # 发布小间隔数据到redis订阅方
             measure.start_for('send_pub')
             sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
             async with AsyncRedis() as redis:
-                pub_key = f'{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
+                pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
                 await redis.publish(pub_key, sre_data)
             if do_print:
                 measure.print_all()
@@ -403,7 +406,7 @@ class SpiderJob:
         return orjson.dumps(data)
 
 
-class LiveSpider:
+class LiveSpider(RedisChannel):
     _key = 'spider'
     _job_key = 'spiderjobs'
 
@@ -412,17 +415,12 @@ class LiveSpider:
     历史数据下载请直接调用对应方法，效率更高。
     '''
     def __init__(self):
-        self.redis = AsyncRedis()  # 需要持续监听redis，单独占用一个连接
-        self.conn = self.redis.pubsub()
+        super(LiveSpider, self).__init__()
         self.miners: Dict[str, LiveMiner] = dict()
 
-    async def run_listeners(self):
-        await self.conn.subscribe(self._key)
-        async for msg in self.conn.listen():
-            if msg['type'] != 'message':
-                continue
-            kwargs = orjson.loads(msg['data'])
-            asyncio.create_task(self._run_job(kwargs))
+        def call_self(msg_key, msg_data):
+            asyncio.create_task(self._run_job(msg_data))
+        self.listeners.append((self._key, call_self))
 
     async def _run_job(self, params: dict):
         action, args, kwargs = params['action'], params['args'], params['kwargs']
@@ -481,7 +479,7 @@ class LiveSpider:
         tf_msecs = tf_secs * 1000
         cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
         start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
-        exs = ExSymbol.get(exg_name, symbol, market_type)
+        exs = ExSymbol.get(exg_name, market_type, symbol)
         _, end_ms = KLine.query_range(exs.id, save_tf)
         if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
             # 当缺失数据超过30个时，才执行批量下载
@@ -537,6 +535,10 @@ class LiveSpider:
             from banbot.storage import db
             spider = LiveSpider()
             asyncio.create_task(spider._heartbeat())
+        # 注册策略信号计算事件处理
+        from banbot.worker.sig_sync import reg_redis_event
+        await reg_redis_event()
+
         with db():
             logger.info('[spider] sync timeframe ranges ...')
             sync_timeframes()
@@ -545,7 +547,8 @@ class LiveSpider:
         while True:
             try:
                 logger.info('[spider] wait job ...')
-                await spider.run_listeners()
+                await spider.conn.subscribe(spider._key)
+                await spider.run()
             except Exception:
                 logger.exception('spider listen fail, rebooting...')
             await asyncio.sleep(1)

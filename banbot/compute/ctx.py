@@ -38,8 +38,8 @@ def _update_context(kwargs):
 
 def get_cur_symbol(ctx: Optional[Context] = None) -> Tuple[ExSymbol, str]:
     pair_tf = ctx[symbol_tf] if ctx else symbol_tf.get()
-    exg_name, market, base_code, quote_part, timeframe = pair_tf.split('/')
-    exs = ExSymbol(exchange=exg_name, market=market, symbol=f'{base_code}/{quote_part}')
+    exg_name, market, symbol, timeframe = pair_tf.split('_')
+    exs = ExSymbol(exchange=exg_name, market=market, symbol=symbol)
     return exs, timeframe
 
 
@@ -54,47 +54,54 @@ def get_context(pair_tf: str) -> Context:
     return _symbol_ctx[pair_tf]
 
 
-def set_context(symbol: str):
+def set_context(pair_tf: str):
     '''
     设置交易对和时间单元上下文。
-    :param symbol: BTC/USDT/1m
+    :param pair_tf: binance/future/BTC/USDT/1m
     :return:
     '''
     old_ctx = copy_context()
     if symbol_tf in old_ctx and symbol_tf.get() in _symbol_ctx:
-        if symbol_tf.get() == symbol:
+        if symbol_tf.get() == pair_tf:
             # 上下文未变化，直接退出
             return
         # 保存旧的值到旧的上下文
         save_ctx = _symbol_ctx[symbol_tf.get()]
         save_ctx.run(_update_context, old_ctx.items())
-    if not symbol:
-        symbol_tf.set('')
-        bar_num.set(0)
-        bar_arr.set([])
+    if not pair_tf:
+        reset_context('')
         return
-    if symbol not in _symbol_ctx:
-        symbol_tf.set(symbol)
-        bar_num.set(0)
-        bar_arr.set([])
-        _symbol_ctx[symbol] = copy_context()
+    if pair_tf not in _symbol_ctx:
+        reset_context(pair_tf)
+        _symbol_ctx[pair_tf] = copy_context()
     else:
         # 从新的上下文恢复上次的状态
-        _update_context(_symbol_ctx[symbol].items())
+        _update_context(_symbol_ctx[pair_tf].items())
+
+
+def reset_context(pair_tf: str):
+    symbol_tf.set(pair_tf)
+    bar_num.set(0)
+    bar_arr.set([])
+    bar_time.set((0, 0))
+    if pair_tf:
+        LongVar.reset(pair_tf)
+    if pair_tf:
+        CachedInd.reset(pair_tf)
 
 
 class TempContext:
-    def __init__(self, symbol: str):
-        self.symbol = symbol
+    def __init__(self, pair_tf: str):
+        self.pair_tf = pair_tf
         self.is_locked = False
         self.back_symbol = None
 
     def __enter__(self):
         self.back_symbol = symbol_tf.get()
-        if self.back_symbol != self.symbol:
+        if self.back_symbol != self.pair_tf:
             self.back_symbol = symbol_tf.get()
             self.is_locked = True
-            set_context(self.symbol)
+            set_context(self.pair_tf)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if not self.is_locked:
@@ -179,15 +186,30 @@ class LongVar:
             cls._instances[cache_key] = cls._create(key)
         return cls._instances[cache_key]
 
+    @classmethod
+    def reset(cls, ctx_key: str):
+        for key in cls._instances:
+            if key.startswith(ctx_key):
+                del cls._instances[key]
+
 
 class CachedInd(type):
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
-        cls_key = f'{symbol_tf.get()}_{cls.__name__}{args}{kwargs}'
+        pair_tf = symbol_tf.get()
+        if not pair_tf:
+            raise ValueError('State Inds should be create with context!')
+        cls_key = f'{pair_tf}_{cls.__name__}{args}{kwargs}'
         if cls_key not in cls._instances:
             cls._instances[cls_key] = super(CachedInd, cls).__call__(*args, **kwargs)
         return cls._instances[cls_key]
+
+    @classmethod
+    def reset(cls, ctx_key: str):
+        for key in cls._instances:
+            if key.startswith(ctx_key):
+                del cls._instances[key]
 
 
 class BaseInd(metaclass=CachedInd):

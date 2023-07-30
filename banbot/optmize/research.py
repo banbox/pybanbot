@@ -28,14 +28,12 @@ def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start_ms: i
     logger.info(f'get {len(ohlcvs)} bars range: {range_str}')
     config = AppConfig.get()
     stg = get_strategy(strategy)(config)
-    pair_tf = f'{exs.symbol}/{timeframe}'
+    pair_tf = f'{exs.exchange}_{exs.market}_{exs.symbol}_{timeframe}'
     with TempContext(pair_tf):
         td_signals = []
         create_args = dict(symbol_id=exs.id, timeframe=timeframe, strategy=strategy)
         for i in range(len(ohlcvs)):
             ohlcv_arr = append_new_bar(ohlcvs[i], tf_msecs // 1000)
-            stg.state = dict()
-            stg.bar_signals = dict()
             stg.on_bar(ohlcv_arr)
             bar_ms = ohlcv_arr[-1, tcol] + tf_msecs
             if bar_ms < start_ms:

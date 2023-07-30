@@ -17,6 +17,7 @@ class DataProvider:
     def __init__(self, config: Config, callback: Callable):
         self.config = config
         self.exg_name = self.config['exchange']['name']
+        self.market = self.config['market_type']
         self._init_args = dict()
         self.holders: List[DataFeeder] = []
 

@@ -83,7 +83,7 @@ class BTAnalysis:
             start_ms = self.result['ts_from']
         if not stop_ms:
             stop_ms = self.result['ts_to']
-        exs = ExSymbol.get('binance', pair)
+        exs = ExSymbol.get('binance', 'spot', pair)
         candles = KLine.query(exs, timeframe, start_ms, stop_ms + 1)
         df = pd.DataFrame(candles, columns=KCols)
         df['date'] = df['date'].astype(np.int64)

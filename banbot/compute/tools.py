@@ -9,6 +9,11 @@ from banbot.util.common import logger
 
 
 def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
+    bar_start_time = int(row[0])
+    new_ts_range = (bar_start_time, bar_start_time + tf_secs * 1000)
+    old_rg = bar_time.get()
+    if old_rg[1] and old_rg[1] > bar_start_time:
+        raise ValueError(f'{symbol_tf.get()} invalid bar {bar_start_time}, expect: {old_rg[1]}')
     result = bar_arr.get()
     copen, chigh, clow, close = row[ocol:vcol]
     dust = min(0.00001, max(close, 0.001) * 0.0001)
@@ -18,8 +23,7 @@ def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
     hline_rate = (chigh - max(close, copen)) / max_chg
     lline_rate = (min(close, copen) - clow) / max_chg
     bar_num.set(bar_num.get() + 1)
-    bar_start_time = int(row[0])
-    bar_time.set((bar_start_time, bar_start_time + tf_secs * 1000))
+    bar_time.set(new_ts_range)
     ext_row = row + [max_chg, real, solid_rate, hline_rate, lline_rate]
     if not len(result):
         fea_col_start.set(len(row))

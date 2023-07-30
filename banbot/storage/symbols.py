@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import re
-from typing import ClassVar,Tuple
+from typing import *
 
 from banbot.storage.base import *
 from banbot.util import btime
@@ -45,9 +45,9 @@ class ExSymbol(BaseDbModel):
 
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):
-        records = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
+        records: Iterable[ExSymbol] = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
         for r in records:
-            rkey = f'{r.exchange}:{r.symbol}:{r.market}'
+            rkey = f'{r.exchange}:{r.market}:{r.symbol}'
             if rkey in cls._object_map:
                 old_id = cls._object_map[rkey].id
                 if old_id != r.id:
@@ -57,8 +57,8 @@ class ExSymbol(BaseDbModel):
             cls._object_map[rkey] = r
 
     @classmethod
-    def get(cls, exg_name: str, symbol: str, market='spot') -> 'ExSymbol':
-        key = f'{exg_name}:{symbol}:{market}'
+    def get(cls, exg_name: str, market: str, symbol: str) -> 'ExSymbol':
+        key = f'{exg_name}:{market}:{symbol}'
         cache_val = cls._object_map.get(key)
         if cache_val:
             return cache_val
@@ -76,8 +76,8 @@ class ExSymbol(BaseDbModel):
         return obj
 
     @classmethod
-    def get_id(cls, exg_name: str, symbol: str, market='spot') -> int:
-        return cls.get(exg_name, symbol, market).id
+    def get_id(cls, exg_name: str, market: str, symbol: str) -> int:
+        return cls.get(exg_name, market, symbol).id
 
     @classmethod
     def search(cls, keyword: str) -> List['ExSymbol']:

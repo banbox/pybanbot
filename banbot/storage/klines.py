@@ -335,6 +335,9 @@ group by 1'''
 
     @classmethod
     def query_range(cls, sid: int, timeframe: str) -> Tuple[Optional[int], Optional[int]]:
+        if timeframe not in cls.agg_map:
+            # 当查询聚合周期时，最小相邻周期计算
+            timeframe = cls._get_sub_tf(timeframe)[0]
         sess = db.session
         fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
         kinfo: KInfo = sess.query(KInfo).filter(*fts).first()

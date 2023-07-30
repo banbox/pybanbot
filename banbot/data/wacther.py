@@ -3,7 +3,10 @@
 # File  : wacther.py
 # Author: anyongjin
 # Date  : 2023/4/30
-from typing import List, Tuple, Callable, Optional
+import asyncio
+import six
+from typing import *
+import re
 
 from banbot.storage import BotGlobal
 from banbot.util import btime
@@ -53,6 +56,108 @@ class Watcher:
                 logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)
 
 
+class RedisChannel:
+    '''
+    通过redis进行多进程通信的通道。
+    '''
+    _obj: Optional['RedisChannel'] = None
+
+    def __init__(self):
+        RedisChannel._obj = self
+        from banbot.util.redis_helper import AsyncRedis
+        self.redis = AsyncRedis()
+        self.conn = self.redis.pubsub()
+        self.listeners: List[Tuple[Union[str, re.Pattern], Callable]] = []
+
+    @classmethod
+    async def subscribe(cls, matcher: Union[str, re.Pattern], handler: Callable):
+        if not cls._obj:
+            raise ValueError('RedisChannel not start')
+        listeners = cls._obj.listeners
+        for i in range(len(listeners)):
+            ptn, func = listeners[i]
+            if ptn == matcher:
+                if handler == func:
+                    return
+                listeners.pop(i)
+                break
+        listeners.append((matcher, handler))
+        if isinstance(matcher, six.string_types):
+            await cls._obj.conn.subscribe(matcher)
+
+    @classmethod
+    def unsubscribe(cls, matcher: Union[str, re.Pattern]):
+        if not cls._obj:
+            raise ValueError('RedisChannel not start')
+        listeners = cls._obj.listeners
+        for i in range(len(listeners)):
+            ptn, func = listeners[i]
+            if ptn == matcher:
+                listeners.pop(i)
+                break
+
+    @classmethod
+    async def call_remote(cls, action: str, data, timeout: int = 10):
+        '''
+        调用远程过程调用。通过Redis的SubPub机制。
+        发送一次消息，监听一次，收到返回消息后取消监听
+        '''
+        if not cls._obj:
+            raise ValueError('RedisChannel not start')
+        future = asyncio.get_running_loop().create_future()
+
+        def call_back(msg_key: str, msg_data):
+            if not future.done():
+                future.set_result((msg_key, msg_data))
+
+        reply_key = f'{action}_{data}'
+        await cls.subscribe(reply_key, call_back)
+        await cls._obj.conn.subscribe(reply_key)
+        await cls._obj.redis.publish(action, data)
+        try:
+            ret_key, ret_data = await asyncio.wait_for(future, timeout=timeout)
+            cls.unsubscribe(reply_key)
+            return ret_data
+        except asyncio.TimeoutError:
+            logger.warning(f'wait redis channel complete timeout: {action} {data} {timeout}')
+
+    @classmethod
+    async def run(cls):
+        import orjson
+        assert cls._obj, '`RedisChannel` is not initialized yet!'
+        logger.info(f'run RedisChannel ...')
+        # 监听个假的，防止立刻退出
+        await cls._obj.conn.subscribe('fake')
+        async for msg in cls._obj.conn.listen():
+            if msg['type'] != 'message':
+                continue
+            try:
+                msg_key = msg['channel'].decode()
+                msg_data = msg['data'].decode()
+                try:
+                    msg_data = orjson.loads(msg_data)
+                except Exception:
+                    pass
+                handle_func = None
+                for key, func in cls._obj.listeners:
+                    if isinstance(key, re.Pattern):
+                        if key.fullmatch(msg_key):
+                            handle_func = func
+                            break
+                    elif key == msg_key:
+                        handle_func = func
+                        break
+                if handle_func:
+                    ret_data = handle_func(msg_key, msg_data)
+                    if ret_data and len(ret_data) == 2:
+                        await cls._obj.redis.publish(ret_data[0], ret_data[1])
+                    elif ret_data:
+                        logger.info(f'invalid ret data from {handle_func}: {ret_data}')
+                else:
+                    logger.info(f'unhandle redis channel msg: {msg_key}')
+            except Exception:
+                logger.exception(f'handle RedisChannel msg error: {msg}')
+
 @dataclass
 class WatchParam:
     exchange: str
@@ -62,19 +167,17 @@ class WatchParam:
     since: int = None
 
 
-class KlineLiveConsumer:
+class KlineLiveConsumer(RedisChannel):
     '''
     这是通用的从爬虫端监听K线数据的消费者端。
     用于：
     机器人的实时数据反馈：LiveDataProvider
     网站端实时K线推送：KlineMonitor
     '''
-    _obj: Optional['KlineLiveConsumer'] = None
 
     def __init__(self):
-        from banbot.util.redis_helper import AsyncRedis
-        self.redis = AsyncRedis()
-        self.conn = self.redis.pubsub()
+        super(KlineLiveConsumer, self).__init__()
+        self.listeners.append((re.compile(r'^ohlcv_.*'), self._handle_ohlcv))
 
     async def watch_klines(self, *jobs: WatchParam):
         from banbot.data.spider import LiveSpider, SpiderJob
@@ -102,21 +205,10 @@ class KlineLiveConsumer:
             await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
 
     @classmethod
-    async def run(cls):
-        import orjson
-        assert cls._obj, '`KlineLiveConsumer` is not initialized yet!'
-        logger.info(f'start watching ohlcvs from {cls.__name__}...')
-        # 监听个假的，防止立刻退出
-        await cls._obj.conn.subscribe('fake')
-        async for msg in cls._obj.conn.listen():
-            if msg['type'] != 'message':
-                continue
-            try:
-                exg_name, market, pair = msg['channel'].decode().split('_')
-                ohlc_arr, fetch_tfsecs = orjson.loads(msg['data'])
-                cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs)
-            except Exception:
-                logger.exception(f'handle live ohlcv listen error: {msg}')
+    def _handle_ohlcv(cls, msg_key: str, msg_data):
+        _, exg_name, market, pair = msg_key.split('_')
+        ohlc_arr, fetch_tfsecs = msg_data
+        cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs)
 
     @classmethod
     def _on_ohlcv_msg(cls, exg_name, market, pair, ohlc_arr, fetch_tfsecs):

@@ -35,7 +35,7 @@ class Trader:
             if pair not in pair_tfs:
                 pair_tfs[pair] = dict()
             pair_tfs[pair][timeframe] = warm_num
-            symbol = f'{pair}/{timeframe}'
+            symbol = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
             with TempContext(symbol):
                 self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
                 stg_pairs.extend([(cls.__name__, pair, timeframe) for cls in stg_set])
@@ -48,7 +48,7 @@ class Trader:
         return pair_tfs
 
     def on_data_feed(self, pair, timeframe, row: list):
-        pair_tf = f'{pair}/{timeframe}'
+        pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_wramup:
             logger.debug('data_feed %s %s %s', pair, timeframe, row)
         tf_secs = tf_to_secs(timeframe)
@@ -69,8 +69,6 @@ class Trader:
             enter_list, exit_list = [], []
             for strategy in strategy_list:
                 stg_name = strategy.name
-                strategy.state = dict()
-                strategy.bar_signals = dict()
                 strategy.on_bar(pair_arr)
                 if not BotGlobal.is_wramup:
                     # 调用策略生成入场和出场信号

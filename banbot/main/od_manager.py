@@ -58,7 +58,8 @@ class OrderManager(metaclass=SingletonArg):
             self.fatal_stop[int(k)] = v
 
     def _fire(self, od: InOutOrder, enter: bool):
-        with TempContext(f'{od.symbol}/{od.timeframe}'):
+        pair_tf = f'{self.name}_{self.data_mgr.market}_{od.symbol}_{od.timeframe}'
+        with TempContext(pair_tf):
             try:
                 self.callback(od, enter)
             except Exception:
@@ -463,7 +464,7 @@ class LiveOrderManager(OrderManager):
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
             # 取过去5m数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
-            exs = ExSymbol.get(self.exchange.name, pair, self.exchange.market_type)
+            exs = ExSymbol.get(self.exchange.name, self.exchange.market_type, pair)
             his_ohlcvs = await auto_fetch_ohlcv(self.exchange, exs, '1m', limit=5)
             vol_arr = np.array(his_ohlcvs)[:, vcol]
             if not vol_secs:

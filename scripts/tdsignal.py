@@ -47,7 +47,7 @@ async def load_file_signal(xls_path: str, timezone_off: int = 0):
             else:
                 raise ValueError(f'not support interval: {interval}')
         symbol, market = get_symbol_market(row['ticker'])
-        exs = ExSymbol.get(row['exchange'], symbol, market)
+        exs = ExSymbol.get(row['exchange'], market, symbol)
         sig_time = row['time']
         if hasattr(sig_time, 'to_pydatetime'):
             create_time = sig_time.to_pydatetime()
