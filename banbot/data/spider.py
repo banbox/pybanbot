@@ -525,7 +525,7 @@ class LiveSpider(RedisChannel):
 
     @classmethod
     async def run_spider(cls):
-        from banbot.data.toolbox import sync_timeframes
+        from banbot.data.toolbox import sync_timeframes, purge_kline_un
         redis = AsyncRedis()
         if await redis.get(cls._key):
             return
@@ -542,6 +542,7 @@ class LiveSpider(RedisChannel):
         with db():
             logger.info('[spider] sync timeframe ranges ...')
             sync_timeframes()
+            purge_kline_un()
             logger.info('[spider] init exchange, markets...')
             await spider.init_pairs()
         while True:

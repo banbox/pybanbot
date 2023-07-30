@@ -254,3 +254,14 @@ def _correct_ohlcv_range(sid: int, timeframe: str, ohlcvs: List[Tuple], agg_ohlc
         KLine.force_insert(sid, timeframe, ins_rows)
         ins_ts = [row[0] // 1000 for row in ins_rows]
         logger.info(f'insert {sid} {timeframe}: {ins_ts}')
+
+
+def purge_kline_un():
+    '''
+    全部清空kline_un表，在spider刚启动时执行。
+    '''
+    sess = db.session
+    sql = 'delete from kline_un'
+    exc_res = sess.execute(sa.text(sql))
+    logger.info(f'kline_un delete {exc_res.rowcount} records')
+    sess.commit()
