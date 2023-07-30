@@ -26,6 +26,9 @@ async def ensure_sig_update(exs: ExSymbol, timeframe: str, stgy_ver: str, end_ms
     确认信号已更新到指定位置。
     此方法由web进程调用。
     '''
+    if tf_to_secs(timeframe) < 300:
+        # 跳过5分钟以下维度
+        return
     strategy, version = stgy_ver.split(':')
     redis = SyncRedis()
     # 检查缓存策略是否和当前指定策略一致，如不一致则无法计算，直接退出
