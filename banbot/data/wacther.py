@@ -185,7 +185,7 @@ class KlineLiveConsumer(RedisChannel):
         for job in jobs:
             args = [job.exchange, job.symbol, job.market, job.timeframe, job.since]
             job_list.append(SpiderJob('watch_ohlcv', *args))
-            key = f'{job.exchange}_{job.market}_{job.symbol}'
+            key = f'ohlcv_{job.exchange}_{job.market}_{job.symbol}'
             await self.conn.subscribe(key)
         # 发送消息给爬虫，实时抓取数据
         await LiveSpider.send(*job_list)
@@ -194,7 +194,7 @@ class KlineLiveConsumer(RedisChannel):
         from banbot.data.spider import LiveSpider, SpiderJob
         cache_key, symbol_list = (None, None), []
         for job in jobs:
-            await self.conn.unsubscribe(f'{job.exchange}_{job.market}_{job.symbol}')
+            await self.conn.unsubscribe(f'ohlcv_{job.exchange}_{job.market}_{job.symbol}')
             cur_key = job.exchange, job.market
             if symbol_list and cache_key != cur_key:
                 await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
