@@ -190,31 +190,19 @@ class StrFormatLogRecord(logging.LogRecord):
 
 
 class NotifyHandler(logging.Handler):
+    '''
+    异常发送通知给管理员
+    '''
     def __init__(self, level=logging.NOTSET):
         super(NotifyHandler, self).__init__(level)
         self.loop = None
 
     def emit(self, record: logging.LogRecord) -> None:
-        from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
-        from banbot.config import AppConfig
+        from banbot.worker.exc_notify import try_send_exc_notify
         try:
-            if not RPCManager.instance:
-                if AppConfig.obj:
-                    RPCManager(AppConfig.get())
-                else:
-                    return
-            try:
-                if self.loop is None:
-                    self.loop = asyncio.get_running_loop()
-            except RuntimeError:
-                return
-            msg = self.format(record)
-            self.loop.create_task(RPCManager.instance.send_msg(dict(
-                type=RPCMessageType.EXCEPTION,
-                status=msg,
-            )))
-        except RecursionError:  # See issue 36272
-            raise
+            cache_key = f'{record.name}:{record.module}:{record.funcName}:{record.lineno}'
+            content = self.format(record)
+            try_send_exc_notify(cache_key, content)
         except Exception:
             self.handleError(record)
 

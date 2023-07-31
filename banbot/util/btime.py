@@ -91,6 +91,15 @@ def to_datestr(ts_or_dt: Union[float, datetime.datetime] = None, fmt: str = '%Y-
     return dt.strftime(fmt)
 
 
+def sys_timezone() -> str:
+    '''
+    获取当前系统时区代码：Asia/Shanghai
+    '''
+    import tzlocal
+    tz = tzlocal.get_localzone()
+    return str(tz)
+
+
 def allow_order_enter(ctx=None) -> bool:
     if run_mode in NORDER_MODES:
         return False

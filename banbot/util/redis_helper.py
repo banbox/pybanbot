@@ -26,6 +26,20 @@ Expire_time_hour = 3600
 Expire_time_minute = 60
 
 
+def get_conn_args(connect_timeout=10, decode_rsp=False):
+    from redis.connection import parse_url
+    conn_args = dict(
+        health_check_interval=10,
+        socket_keepalive=True,
+        retry_on_timeout=True,
+        socket_connect_timeout=connect_timeout,
+        decode_responses=decode_rsp,
+        socket_timeout=15
+    )
+    conn_args.update(parse_url(AppConfig.get()['redis_url']))
+    return conn_args
+
+
 def _get_redis_pool(is_async: bool, **kwargs):
 
     def create_redis():
