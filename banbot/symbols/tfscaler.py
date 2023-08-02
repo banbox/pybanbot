@@ -8,7 +8,8 @@ from typing import List, Tuple, Dict
 from banbot.compute.sta_inds import ocol, hcol, lcol, ccol
 from banbot.data.tools import bulk_ohlcv_do
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.storage import KLine
+from banbot.storage import KLine, ExSymbol
+from banbot.util.common import logger
 
 
 async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\
@@ -18,10 +19,10 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
     pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}
     res_list = []
 
-    def ohlcv_cb(candles, pair, timeframe, **kwargs):
-        kscore = calc_candles_score(candles, pip_prices.get(pair))
+    def ohlcv_cb(candles, exs: ExSymbol, timeframe: str, **kwargs):
+        kscore = calc_candles_score(exs, candles, pip_prices.get(exs))
         tf_secs = tf_to_secs(timeframe)
-        res_list.append((pair, timeframe, tf_secs, kscore))
+        res_list.append((exs.symbol, timeframe, tf_secs, kscore))
 
     for agg in agg_list:
         down_args = dict(limit=back_num, allow_lack=0.1)
@@ -37,7 +38,7 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
     return result
 
 
-def calc_candles_score(candles: List[Tuple], pip_chg: float) -> float:
+def calc_candles_score(exs: ExSymbol, candles: List[Tuple], pip_chg: float) -> float:
     '''
     计算K线质量。用于淘汰变动太小，波动不足的交易对；或计算交易对的最佳周期。阈值取0.8较合适
     价格变动：四价相同-1分；bar变动=最小变动单位-1分；70%权重
@@ -47,6 +48,9 @@ def calc_candles_score(candles: List[Tuple], pip_chg: float) -> float:
     '''
     if not candles:
         return 0
+    if not pip_chg:
+        logger.warning(f'pip change for {exs} invalid, skip filter')
+        return 1
     total_val = fin_score = len(candles)
     jump_rates, prow = [], None
     for i, row in enumerate(candles):

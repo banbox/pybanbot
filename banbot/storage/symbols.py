@@ -6,6 +6,8 @@
 import re
 from typing import *
 
+import ccxt
+
 from banbot.storage.base import *
 from banbot.util import btime
 re_symbol = re.compile(r'^(\w+)/(\w+)(([:.])(\S+))?')
@@ -15,12 +17,14 @@ re_symbol_tv = re.compile(r'^(\w+)(USDT|TUSD|USDC|BUSD)((\.)(\S+))?')  # Trading
 class ExSymbol(BaseDbModel):
     __tablename__ = 'symbol'
     _object_map: ClassVar[Dict[str, 'ExSymbol']] = dict()
+    _id_map: ClassVar[Dict[int, 'ExSymbol']] = dict()
 
     id = Column(sa.Integer, primary_key=True)
     exchange = Column(sa.String(50))
     symbol = Column(sa.String(20))  # BTC/USDT  BTC/USDT:USDT  BTC/USDT:USDT-230630
     market = Column(sa.String(20))
     list_dt = Column(sa.DateTime)
+    delist_dt = Column(sa.DateTime)
 
     @orm.reconstructor
     def __init__(self, **kwargs):
@@ -28,7 +32,10 @@ class ExSymbol(BaseDbModel):
         self.base_code = ''
         symbol: str = kwargs.get('symbol')
         if symbol:
-            self.base_code, quote_part = symbol.split('/')
+            pair_arr = symbol.split('/')
+            if len(pair_arr) != 2:
+                raise ValueError(f'invalid symbol: {kwargs}')
+            self.base_code, quote_part = pair_arr
             self.quote_code = quote_part.split(':')[0]
         super(ExSymbol, self).__init__(**kwargs)
 
@@ -45,7 +52,8 @@ class ExSymbol(BaseDbModel):
 
     @classmethod
     def _load_objects(cls, sess: SqlSession, more_than: int = 0):
-        records: Iterable[ExSymbol] = sess.query(ExSymbol).filter(ExSymbol.id > more_than).all()
+        fts = [ExSymbol.id > more_than, ExSymbol.delist_dt.is_(None)]
+        records: Iterable[ExSymbol] = sess.query(ExSymbol).filter(*fts).all()
         for r in records:
             rkey = f'{r.exchange}:{r.market}:{r.symbol}'
             if rkey in cls._object_map:
@@ -55,6 +63,7 @@ class ExSymbol(BaseDbModel):
                 continue
             detach_obj(sess, r)
             cls._object_map[rkey] = r
+            cls._id_map[r.id] = r
 
     @classmethod
     def get(cls, exg_name: str, market: str, symbol: str) -> 'ExSymbol':
@@ -73,11 +82,23 @@ class ExSymbol(BaseDbModel):
         logger.info(f'create symbol: {key}, id: {obj.id}')
         detach_obj(sess, obj)
         cls._object_map[key] = obj
+        cls._id_map[obj.id] = obj
         return obj
 
     @classmethod
     def get_id(cls, exg_name: str, market: str, symbol: str) -> int:
         return cls.get(exg_name, market, symbol).id
+
+    @classmethod
+    def get_by_id(cls, sid: int) -> 'ExSymbol':
+        cache_val = cls._id_map.get(sid)
+        if cache_val:
+            return cache_val
+        sess = db.session
+        cls._load_objects(sess)
+        if sid not in cls._id_map:
+            raise ValueError(f'invalid sid: {sid}')
+        return cls._id_map[sid]
 
     @classmethod
     def search(cls, keyword: str) -> List['ExSymbol']:
@@ -123,8 +144,12 @@ class ExSymbol(BaseDbModel):
         for key, obj in cls._object_map.items():
             if obj.list_dt:
                 continue
-            await obj.init_list_dt()
+            try:
+                await obj.init_list_dt()
+            except ccxt.BadSymbol:
+                obj.delist_dt = btime.now()
         cost = time.monotonic() - start
+        sess.commit()
         if cost > 0.5:
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
 

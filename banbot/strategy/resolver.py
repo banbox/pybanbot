@@ -95,9 +95,10 @@ class StrategyResolver(IResolver):
         '''
         PTFJob.reset()
         exg_name = config['exchange']['name']
+        market_type = config['market_type']
         allow_filter = True
         if not pairlist:
-            pairlist = ['BTC/USDT']
+            pairlist = ['BTC/USDT' if market_type == 'spot' else 'BTC/USDT:USDT']
             allow_filter = False
         if not pair_tfscores:
             pair_tfscores = dict()

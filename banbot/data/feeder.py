@@ -7,6 +7,7 @@
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import *
 from banbot.storage import BotGlobal
+from banbot.data.tools import *
 
 
 class DataFeeder(Watcher):
@@ -181,7 +182,7 @@ class DBDataFeeder(HistDataFeeder):
         exg_name = app_config['exchange']['name']
         if not market:
             market = app_config['market_type']
-        self.exs = ExSymbol.get(exg_name, self.pair, market)
+        self.exs = ExSymbol.get(exg_name, market, self.pair)
         self._batch_size = 3000
         self._row_id = 0
         self._cache_arr = []

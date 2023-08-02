@@ -12,6 +12,7 @@ from banbot.storage.orders import *
 from banbot.strategy.base import BaseStrategy
 from banbot.util.common import SingletonArg
 from banbot.util.misc import *
+from banbot.data.tools import auto_fetch_ohlcv
 from banbot.util.num_utils import to_pytypes
 
 
@@ -38,6 +39,7 @@ class OrderBook():
 class OrderManager(metaclass=SingletonArg):
     def __init__(self, config: dict, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
         self.config = config
+        self.market_type = config.get('market_type')
         self.name = data_hd.exg_name
         self.wallets = wallets
         self.data_mgr = data_hd
@@ -64,6 +66,10 @@ class OrderManager(metaclass=SingletonArg):
                 self.callback(od, enter)
             except Exception:
                 logger.exception(f'fire od callback fail {od.id}, enter: {enter}')
+
+    def get_context(self, od: InOutOrder):
+        pair_tf = f'{self.name}_{self.market_type}_{od.symbol}_{od.timeframe}'
+        return get_context(pair_tf)
 
     def allow_pair(self, pair: str) -> bool:
         if self.disabled:
@@ -121,6 +127,11 @@ class OrderManager(metaclass=SingletonArg):
         :param do_check: 是否执行入场检查
         :return:
         '''
+        if 'short' not in sigin:
+            if self.market_type == 'spot':
+                sigin['short'] = False
+            else:
+                raise ValueError(f'`short` is required from `on_entry` in market: {self.market_type}')
         exs, timeframe = get_cur_symbol(ctx)
         if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(exs.symbol)):
             logger.debug('pair %s enter not allowed', exs.symbol)
@@ -157,27 +168,31 @@ class OrderManager(metaclass=SingletonArg):
     def _put_order(self, od: InOutOrder, is_enter: bool):
         pass
 
-    def exit_open_orders(self, sigout: Union[str, dict], price: Optional[float] = None, strategy: str = None,
-                         pairs: Union[str, List[str]] = None, is_force=False) -> List[InOutOrder]:
+    def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
+                         pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None) -> List[InOutOrder]:
         order_list = InOutOrder.open_orders(strategy, pairs)
         result = []
+        if od_dir in {'long', 'both'} or sigout.get('for_short') == False:
+            order_list = [od for od in order_list if not od.short]
+        elif od_dir in {'short', 'both'} or sigout.get('for_short'):
+            order_list = [od for od in order_list if od.short]
+        elif self.market_type != 'spot':
+            raise ValueError(f'`od_dir` is required in market: {self.market_type}')
         for od in order_list:
             if not od.can_close():
                 # 订单正在退出、或刚入场需等到下个bar退出
                 if not is_force:
                     continue
                 # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
-            ctx = get_context(f'{od.symbol}/{od.timeframe}')
+            ctx = self.get_context(od)
             if self.exit_order(ctx, od, sigout, price):
                 result.append(od)
         return result
 
-    def exit_order(self, ctx: Context, od: InOutOrder, sigout: Union[str, dict], price: Optional[float] = None
+    def exit_order(self, ctx: Context, od: InOutOrder, sigout: dict, price: Optional[float] = None
                    ) -> Optional[InOutOrder]:
         if od.exit_tag:
             return
-        if isinstance(sigout, six.string_types):
-            sigout = dict(tag=sigout)
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
         exs, _ = get_cur_symbol(ctx)
@@ -313,7 +328,7 @@ class LocalOrderManager(OrderManager):
         if not sub_od.amount:
             sub_od.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
         quote_amount = enter_price * sub_od.amount
-        ctx = get_context(f'{od.symbol}/{od.timeframe}')
+        ctx = self.get_context(od)
         exs, timeframe = get_cur_symbol(ctx)
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
@@ -340,7 +355,7 @@ class LocalOrderManager(OrderManager):
         if fees['rate']:
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
-        ctx = get_context(f'{od.symbol}/{od.timeframe}')
+        ctx = self.get_context(od)
         exs, timeframe = get_cur_symbol(ctx)
         quote_amt = quote_amount * (1 - sub_od.fee)
         self.wallets.update_wallets(**{exs.quote_code: quote_amt, exs.base_code: -sub_od.amount})
@@ -418,7 +433,7 @@ class LocalOrderManager(OrderManager):
                 self._fill_pending_enter(candle, od)
 
     def cleanup(self):
-        self.exit_open_orders('bot_stop', 0)
+        self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both')
         self.fill_pending_orders()
         if not self.config.get('no_db'):
             InOutOrder.dump_to_db()
@@ -790,7 +805,7 @@ class LiveOrderManager(OrderManager):
 
     async def cleanup(self):
         with db():
-            exit_ods = self.exit_open_orders('bot_stop', 0, is_force=True)
+            exit_ods = self.exit_open_orders(dict(tag='bot_stop'), 0, is_force=True, od_dir='both')
             if exit_ods:
                 logger.info('exit %d open trades', len(exit_ods))
         await self.order_q.join()

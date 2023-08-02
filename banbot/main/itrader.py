@@ -75,7 +75,8 @@ class Trader:
                     sigin = strategy.on_entry(pair_arr)
                     sigout = strategy.on_exit(pair_arr)
                     if sigin and not bar_expired and (not strategy.skip_enter_on_exit or not sigout):
-                        sigin['legal_cost'] = strategy.custom_cost(sigin)
+                        if 'legal_cost' not in sigin:
+                            sigin['legal_cost'] = strategy.custom_cost(sigin)
                         enter_list.append((stg_name, sigin))
                     if not strategy.skip_exit_on_enter or not sigin:
                         if sigout:
@@ -85,7 +86,10 @@ class Trader:
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
-        self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
+        ent_ods, ext_ods = self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
+        if ent_ods or ext_ods:
+            for stgy in strategy_list:
+                stgy.update_orders(ent_ods, ext_ods)
         return enter_list, exit_list, ext_tags
 
     async def run(self):

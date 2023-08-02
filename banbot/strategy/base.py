@@ -29,7 +29,9 @@ class BaseStrategy:
         self.state = dict()  # 仅在当前bar生效的临时缓存
         self._state_fn = dict()
         self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
+        self.orders: List[InOutOrder] = []  # 打开的订单，下单未成交的在内，离场未成交的不在内
         self.calc_num = 0
+        self.base_cost = self.config.get('stake_amount', 1000)  # 每笔下单金额基数
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -98,7 +100,7 @@ class BaseStrategy:
         '''
         时间升序，最近的是最后一个
         :param arr:
-        :return:
+        :return: InOutOrder的属性。额外：tag,short,legal_cost,cost_rate
         '''
         pass
 
@@ -108,13 +110,31 @@ class BaseStrategy:
         :param sigin:
         :return:
         '''
-        return self.config.get('stake_amount', 1000)
+        rate = sigin.get('cost_rate', 1)
+        return self.base_cost * rate
 
     def on_exit(self, arr: np.ndarray) -> Optional[dict]:
+        '''
+        检查是否有退出信号。
+        :return: Order的属性，额外：tag, for_short
+        '''
         pass
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[dict]:
         return None
+
+    def update_orders(self, enters: List[InOutOrder], exits: List[InOutOrder]):
+        cur_name = self.name
+        cur_exts = [od for od in exits if od.strategy == cur_name]
+        for od in cur_exts:
+            if od.strategy != cur_name:
+                continue
+            try:
+                idx = self.orders.index(od)
+                self.orders.pop(idx)
+            except ValueError:
+                continue
+        self.orders.extend([od for od in enters if od.strategy == cur_name])
 
     @property
     def name(self):

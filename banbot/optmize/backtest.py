@@ -46,7 +46,8 @@ class BackTest(Trader):
             self.result['ts_to'] = row[0]
         enter_list, exit_list, ext_tags = super(BackTest, self).on_data_feed(pair, timeframe, row)
         if enter_list:
-            ctx = get_context(f'{pair}/{timeframe}')
+            pair_tf = f'{self.exchange.name}_{self.exchange.market_type}_{pair}_{timeframe}'
+            ctx = get_context(pair_tf)
             price = to_pytypes(row[ccol])
             enter_text = ','.join([str(v[1]) for v in enter_list])
             self.enter_list.append((ctx[bar_num], enter_text, price))

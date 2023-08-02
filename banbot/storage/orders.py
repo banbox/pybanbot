@@ -3,12 +3,14 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
+import json
 
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
 from banbot.util.misc import del_dict_prefix
 from banbot.util.redis_helper import AsyncRedis
+from banbot.util import btime
 
 
 class OrderStatus:
@@ -136,7 +138,9 @@ class InOutOrder(BaseDbModel):
     id = Column(sa.Integer, primary_key=True)
     task_id = Column(sa.Integer)
     symbol = Column(sa.String(50))
+    sid = Column(sa.Integer)
     timeframe = Column(sa.String(5))
+    short = Column(sa.Boolean)  # 是否是做空单
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
     lock_key = Column(sa.String(30))  # 交易加锁的键，阻止相同键同时下单
     enter_tag = Column(sa.String(30))
@@ -149,16 +153,26 @@ class InOutOrder(BaseDbModel):
     stg_ver = Column(sa.Integer, default=0)
     profit_rate = Column(sa.Float, default=0)
     profit = Column(sa.Float, default=0)
+    info = Column(sa.String(1024))
 
     @orm.reconstructor
     def __init__(self, **kwargs):
         self.enter: Optional[Order] = None
         self.exit: Optional[Order] = None
+        db_keys = set(self.__table__.columns.keys())
+        tmp_keys = {k for k in kwargs if k not in db_keys}
+        self._info = {k: kwargs.pop(k) for k in tmp_keys}
         if self.id:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
             super(InOutOrder, self).__init__(**kwargs)
+            if self.info:
+                # 数据库初始化的必然只包含列名，这里可以直接覆盖
+                self._info = json.loads(self.info)
             return
         # 仅针对新创建的订单执行下面初始化
+        if self._info:
+            # 自行实例化的对象，忽略info参数
+            kwargs['info'] = json.dumps(self._info)
         from banbot.storage import BotTask
         from banbot.strategy.resolver import get_strategy
         data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id)
@@ -187,7 +201,8 @@ class InOutOrder(BaseDbModel):
         return f'{self.symbol}_{self.strategy}_{self.lock_key}'
 
     def _elp_num_offset(self, time_ms: int):
-        ctx = get_context(f'{self.symbol}/{self.timeframe}')
+        exs = ExSymbol.get_by_id(self.sid)
+        ctx = get_context(f'{exs.exchange}_{exs.market}_{exs.symbol}_{self.timeframe}')
         tf_secs = tf_to_secs(self.timeframe)
         return round((ctx[bar_arr][-1][0] - time_ms) / tf_secs / 1000)
 
@@ -280,6 +295,15 @@ class InOutOrder(BaseDbModel):
             self._save_to_mem()
         else:
             self._save_to_db()
+
+    def get_info(self, key: str, def_val):
+        if not self._info:
+            return def_val
+        return self._info.get(key, def_val)
+
+    def set_info(self, key: str, val):
+        self._info[key] = val
+        self.info = json.dumps(self._info)
 
     @classmethod
     def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\

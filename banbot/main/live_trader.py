@@ -109,7 +109,7 @@ class LiveTrader(Trader):
         if del_symbols:
             logger.info(f"remove symbols: {del_symbols}")
             await self.exchange.cancel_open_orders(del_symbols)
-            self.order_mgr.exit_open_orders('pair_del', pairs=del_symbols)
+            self.order_mgr.exit_open_orders(dict(tag='pair_del'), pairs=del_symbols, od_dir='both')
             await self.data_mgr.unsub_pairs(del_symbols)
         # 处理新增的交易对
         add_symbols = list(set(now_symbols).difference(old_symbols))

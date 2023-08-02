@@ -60,7 +60,7 @@ async def test_get_kline():
     symbol = 'BTC/USDT:USDT'
     timeframe = '1d'
     exg = get_exchange('binance', 'future')
-    # exs = ExSymbol.get('binance', symbol, 'future')
+    # exs = ExSymbol.get('binance', 'future', symbol)
     end_ms = btime.utcstamp()
     # start_ms = end_ms - 30 * 24 * 3600 * 1000
     start_ms = 1689573795000

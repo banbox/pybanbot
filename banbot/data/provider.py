@@ -3,7 +3,7 @@
 # File  : live_provider.py
 # Author: anyongjin
 # Date  : 2023/3/28
-
+import time
 from tqdm import tqdm
 
 from banbot.data.feeder import *
@@ -178,9 +178,9 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
 
             hold_map = {h.pair: h for h, _ in warm_jobs}
 
-            def ohlcv_cb(data, pair, timeframe, **kwargs):
-                since_ms = hold_map[pair].warm_tfs({timeframe: data})
-                since_map[f'{pair}/{timeframe}'] = since_ms
+            def ohlcv_cb(data, exs: ExSymbol, timeframe: str, **kwargs):
+                since_ms = hold_map[exs].warm_tfs({timeframe: data})
+                since_map[f'{exs}/{timeframe}'] = since_ms
 
             exg = get_exchange(self.exg_name)
             for tf, pairs in tf_symbols.items():
