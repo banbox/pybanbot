@@ -31,7 +31,8 @@ class WalletsLocal:
                 raise ValueError(f'unsupport val type: {key} {type(val)}')
 
     def _update_wallet(self, symbol: str, amount: float, is_frz=True):
-        ava_val, frz_val = self.data.get(symbol)
+        old_val = self.data.get(symbol)
+        ava_val, frz_val = old_val if old_val else (0, 0)
         if amount > 0:
             # 增加钱包金额，不影响冻结值，直接更新
             # TODO: 取消订单时，可能需要增加可用余额，减少冻结金额
@@ -90,6 +91,9 @@ class WalletsLocal:
         req_amount = (legal_cost * 0.99) / price
         ava_val, frz_val = self.get(symbol)
         fin_amount = min(req_amount, ava_val)
+        if fin_amount < req_amount * 0.1:
+            # 可用金额不足要求金额的10%时，不开单
+            return 0
         if fin_amount < MIN_STAKE_AMOUNT:
             return 0
         return fin_amount

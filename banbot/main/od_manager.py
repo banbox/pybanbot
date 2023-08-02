@@ -3,6 +3,7 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
+import copy
 from asyncio import Queue
 from collections import OrderedDict
 
@@ -132,6 +133,9 @@ class OrderManager(metaclass=SingletonArg):
                 sigin['short'] = False
             else:
                 raise ValueError(f'`short` is required from `on_entry` in market: {self.market_type}')
+        elif self.market_type == 'spot' and sigin.get('short'):
+            # 现货市场，忽略做空单
+            return
         exs, timeframe = get_cur_symbol(ctx)
         if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(exs.symbol)):
             logger.debug('pair %s enter not allowed', exs.symbol)
@@ -151,6 +155,7 @@ class OrderManager(metaclass=SingletonArg):
             return
         od = InOutOrder(
             **sigin,
+            sid=exs.id,
             symbol=exs.symbol,
             timeframe=timeframe,
             quote_cost=quote_cost,
@@ -185,7 +190,7 @@ class OrderManager(metaclass=SingletonArg):
                     continue
                 # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
             ctx = self.get_context(od)
-            if self.exit_order(ctx, od, sigout, price):
+            if self.exit_order(ctx, od, copy.copy(sigout), price):
                 result.append(od)
         return result
 

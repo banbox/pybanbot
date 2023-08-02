@@ -296,7 +296,7 @@ class InOutOrder(BaseDbModel):
         else:
             self._save_to_db()
 
-    def get_info(self, key: str, def_val):
+    def get_info(self, key: str, def_val=None):
         if not self._info:
             return def_val
         return self._info.get(key, def_val)

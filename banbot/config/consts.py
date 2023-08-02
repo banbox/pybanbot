@@ -5,7 +5,7 @@
 # Date  : 2023/3/27
 from enum import Enum
 from typing import Dict, Any
-MIN_STAKE_AMOUNT = 10
+MIN_STAKE_AMOUNT = 50
 MAX_FETCH_NUM = 1000  # 单次请求最大返回数量
 MAX_CONC_OHLCV = 10  # 最大并发下载K线数量，过大会导致卡死
 

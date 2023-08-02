@@ -267,7 +267,7 @@ class CryptoExchange:
     async def _check_fee_limits(self):
         exg_fees = await self.api_async.fetch_trading_fees()
         for symbol, fee in exg_fees.items():
-            currency = symbol.split('/')[-1]
+            currency = symbol.split('/')[-1].split(':')[0]
             if currency not in self.quote_symbols:
                 continue
             if 'maker' in fee:
@@ -296,7 +296,7 @@ class CryptoExchange:
         fee_limit = self.pair_fee_limits.get(symbol)
         if fee_limit is not None and btime.run_mode != RunMode.PROD:
             # 非生产模式，直接使用指定手续费限制作为手续费率
-            return dict(rate=fee_limit, currency=symbol.split('/')[0])
+            return dict(rate=fee_limit, currency=symbol.split('/')[0].split(':')[0])
         calc_fee = self.api_async.calculate_fee(symbol, order_type, side, amount, price, taker_maker)
         if fee_limit is not None and calc_fee['rate'] > fee_limit:
             # 有手续费限制，且计算的手续费超过限制。

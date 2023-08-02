@@ -30,7 +30,7 @@ class ExSymbol(BaseDbModel):
     def __init__(self, **kwargs):
         self.quote_code = ''
         self.base_code = ''
-        symbol: str = kwargs.get('symbol')
+        symbol: str = kwargs.get('symbol') or self.symbol
         if symbol:
             pair_arr = symbol.split('/')
             if len(pair_arr) != 2:

@@ -39,7 +39,7 @@ def _update_context(kwargs):
 def get_cur_symbol(ctx: Optional[Context] = None) -> Tuple[ExSymbol, str]:
     pair_tf = ctx[symbol_tf] if ctx else symbol_tf.get()
     exg_name, market, symbol, timeframe = pair_tf.split('_')
-    exs = ExSymbol(exchange=exg_name, market=market, symbol=symbol)
+    exs = ExSymbol.get(exg_name, market, symbol)
     return exs, timeframe
 
 

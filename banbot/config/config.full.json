@@ -7,6 +7,7 @@
   "quote_base": "USDT",
   "stake_amount": 1000,
   "stake_currency": ["USDT", "TUSD"],
+  "wallet_amounts": {"USDT": 10000},
   "max_market_rate": 0.0001,
   "odbook_ttl": 1000,
   "limit_vol_secs": 5,

@@ -55,8 +55,8 @@ class BackTest(Trader):
     async def init(self):
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
-        self.min_balance = self.stake_amount
-        self.max_balance = self.stake_amount
+        self.min_balance = sys.maxsize
+        self.max_balance = 0
         with db():
             BotTask.init()
             sync_timeframes()
@@ -65,9 +65,17 @@ class BackTest(Trader):
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
             self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id
-        for pair in self.pair_mgr.symbols:
-            base_s, quote_s = pair.split('/')
-            self.wallets.set_wallets(**{base_s: 0, quote_s: self.stake_amount})
+        # 初始化钱包余额
+        wallet_amounts = self.config.get('wallet_amounts')
+        if wallet_amounts:
+            self.wallets.set_wallets(**wallet_amounts)
+        else:
+            quote_amounts = dict()
+            for pair in self.pair_mgr.symbols:
+                base_s, quote_s = pair.split('/')
+                quote_s = quote_s.split(':')[0]
+                quote_amounts[quote_s] = self.stake_amount * 10
+            self.wallets.set_wallets(**quote_amounts)
         self.result['start_balance'] = self.order_mgr.get_legal_value()
 
     async def run(self):
@@ -95,10 +103,10 @@ class BackTest(Trader):
         if is_enter:
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
         elif not open_orders:
-            quote_s = od.symbol.split('/')[1]
+            quote_s = od.symbol.split('/')[1].split(':')[0]
             balance = sum(self.wallets.get(quote_s))
             self.min_balance = min(self.min_balance, balance)
-            self.max_balance = min(self.max_balance, balance)
+            self.max_balance = max(self.max_balance, balance)
 
     def _calc_result_done(self):
         # 输出入场信号
