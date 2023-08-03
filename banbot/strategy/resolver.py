@@ -113,7 +113,7 @@ class StrategyResolver(IResolver):
             if policy.get('max_fee') is not None:
                 strategy_cls.max_fee = policy.get('max_fee')
             if policy.get('run_timeframes'):
-                run_tfs.update(*policy.get('run_timeframes'))
+                run_tfs.update(policy.get('run_timeframes'))
             elif strategy_cls.run_timeframes:
                 run_tfs.update(strategy_cls.run_timeframes)
             max_num = policy.get('max_pair') or 999  # 默认一个策略最多999个交易对
@@ -140,10 +140,11 @@ class StrategyResolver(IResolver):
         BotGlobal.stg_hash = PTFJob.strategy_hash()
         # 记录涉及的所有运行周期
         if not run_tfs:
-            run_tfs = set(config.get('run_timeframes'))
+            if config.get('run_timeframes'):
+                run_tfs = set(config.get('run_timeframes'))
             if not run_tfs:
                 from banbot.storage import KLine
-                run_tfs.update(*[k.tf for k in KLine.agg_list])
+                run_tfs.update([k.tf for k in KLine.agg_list])
         from banbot.exchange.exchange_utils import tf_to_secs
         tf_sec_list = [(tf, tf_to_secs(tf)) for tf in run_tfs]
         tf_sec_list = sorted(tf_sec_list, key=lambda x: x[1])

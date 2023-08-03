@@ -177,9 +177,11 @@ class OrderManager(metaclass=SingletonArg):
                          pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None) -> List[InOutOrder]:
         order_list = InOutOrder.open_orders(strategy, pairs)
         result = []
-        if od_dir in {'long', 'both'} or sigout.get('for_short') == False:
+        if od_dir == 'both':
+            pass
+        elif od_dir == 'long' or sigout.get('for_short') == False:
             order_list = [od for od in order_list if not od.short]
-        elif od_dir in {'short', 'both'} or sigout.get('for_short'):
+        elif od_dir == 'short' or sigout.get('for_short'):
             order_list = [od for od in order_list if od.short]
         elif self.market_type != 'spot':
             raise ValueError(f'`od_dir` is required in market: {self.market_type}')
@@ -221,6 +223,9 @@ class OrderManager(metaclass=SingletonArg):
         if od.exit.price and od.enter.price:
             od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
             od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
+            if od.short:
+                od.profit = -od.profit
+                od.profit_rate = -od.profit_rate
         if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
             limit_fee = self.pair_fee_limits.get(od.symbol)
             if limit_fee is not None and fee_rate > limit_fee * 2:

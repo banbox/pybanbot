@@ -13,7 +13,9 @@ def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
     new_ts_range = (bar_start_time, bar_start_time + tf_secs * 1000)
     old_rg = bar_time.get()
     if old_rg[1] and old_rg[1] > bar_start_time:
-        raise ValueError(f'{symbol_tf.get()} invalid bar {bar_start_time}, expect: {old_rg[1]}')
+        exp_date = f'{old_rg[1]}({btime.to_datestr(old_rg[1])})'
+        get_date = f'{bar_start_time}({btime.to_datestr(bar_start_time)})'
+        raise ValueError(f'{symbol_tf.get()}, expect: {exp_date} get invalid bar {get_date}')
     result = bar_arr.get()
     copen, chigh, clow, close = row[ocol:vcol]
     dust = min(0.00001, max(close, 0.001) * 0.0001)
