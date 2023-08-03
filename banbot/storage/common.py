@@ -3,7 +3,7 @@
 # File  : global.py
 # Author: anyongjin
 # Date  : 2023/4/1
-from typing import Optional
+from typing import *
 
 from banbot.config.consts import BotState
 
@@ -16,3 +16,6 @@ class BotGlobal:
 
     is_wramup = False
     '当前是否处于预热状态'
+
+    run_tf_secs: List[Tuple[str, int]] = []
+    '本次运行指定的时间周期'

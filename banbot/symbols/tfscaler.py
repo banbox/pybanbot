@@ -8,14 +8,15 @@ from typing import List, Tuple, Dict
 from banbot.compute.sta_inds import ocol, hcol, lcol, ccol
 from banbot.data.tools import bulk_ohlcv_do
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.storage import KLine, ExSymbol
+from banbot.storage import KLine, ExSymbol, BotGlobal
 from banbot.util.common import logger
 
 
 async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\
         -> Dict[str, List[Tuple[str, float]]]:
     from banbot.exchange.exchange_utils import tf_to_secs
-    agg_list = [agg for agg in KLine.agg_list if agg.secs < 1800]
+    if not BotGlobal.run_tf_secs:
+        raise ValueError('`run_timeframes` not set in `StrategyResolver.load_run_jobs`')
     pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}
     res_list = []
 
@@ -24,9 +25,9 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
         tf_secs = tf_to_secs(timeframe)
         res_list.append((exs.symbol, timeframe, tf_secs, kscore))
 
-    for agg in agg_list:
+    for cur_tf, _ in BotGlobal.run_tf_secs:
         down_args = dict(limit=back_num, allow_lack=0.1)
-        await bulk_ohlcv_do(exg, symbols, agg.tf, down_args, ohlcv_cb)
+        await bulk_ohlcv_do(exg, symbols, cur_tf, down_args, ohlcv_cb)
 
     from itertools import groupby
     res_list = sorted(res_list, key=lambda x: x[0])

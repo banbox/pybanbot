@@ -58,7 +58,9 @@ class BackTest(Trader):
         self.min_balance = sys.maxsize
         self.max_balance = 0
         with db():
+            # 创建回测任务，记录相关周期
             BotTask.init()
+            # 同步K线数据，防止不同周期数据有未更新
             sync_timeframes()
             await ExSymbol.fill_list_dts()
             await self.pair_mgr.refresh_pairlist()

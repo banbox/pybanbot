@@ -8,6 +8,7 @@
   "stake_amount": 1000,
   "stake_currency": ["USDT", "TUSD"],
   "wallet_amounts": {"USDT": 10000},
+  "run_timeframes": ["30m"],
   "max_market_rate": 0.0001,
   "odbook_ttl": 1000,
   "limit_vol_secs": 5,
@@ -29,7 +30,7 @@
     {"name": "OffsetFilter", "limit": 30}
   ],
   "run_policy": [
-    {"name": "NoFee", "max_pair": 1, "max_fee": 0.0}
+    {"name": "NoFee", "max_pair": 1, "max_fee": 0.0, "run_timeframes": ["30m"]}
   ],
   "add_config_files": [],
   "data_dir": "E:\\trade\\ban_data",

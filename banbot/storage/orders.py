@@ -260,6 +260,9 @@ class InOutOrder(BaseDbModel):
             # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
             self.profit = (row[ccol] - self.enter.price) * self.enter.amount
             self.profit_rate = row[ccol] / self.enter.price - 1
+            if self.short:
+                self.profit = -self.profit
+                self.profit_rate = -self.profit_rate
 
     def _save_to_db(self):
         sess = db.session

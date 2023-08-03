@@ -13,6 +13,8 @@ class BaseStrategy:
     策略基类。每个交易对，每种时间帧，每个策略，对应一个策略实例。
     可直接在策略的__init__中存储本策略在此交易对和交易维度上的缓存信息。不会和其他交易对冲突。
     '''
+    run_timeframes = []
+    '指定运行周期，从里面计算最小符合分数的周期，不提供尝试使用config.json中run_timeframes或Kline.agg_list'
     warmup_num = 600
     min_tfscore = 0.8
     nofee_tfscore = 0.6

@@ -51,6 +51,10 @@ def time_ms() -> int:
 
 
 def now():
+    '''
+    实盘模式下返回真实时间戳。
+    回测模式返回bar对应时间戳
+    '''
     if run_mode in LIVE_MODES:
         return datetime.datetime.now(datetime.timezone.utc)
     return datetime.datetime.utcfromtimestamp(cur_timestamp)

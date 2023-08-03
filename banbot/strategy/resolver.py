@@ -92,6 +92,7 @@ class StrategyResolver(IResolver):
             -> List[Tuple[str, str, int, Set[Type[BaseStrategy]]]]:
         '''
         加载策略和交易对，返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
+        记录涉及的时间周期到：BotGlobal.run_timeframes
         '''
         PTFJob.reset()
         exg_name = config['exchange']['name']
@@ -104,12 +105,17 @@ class StrategyResolver(IResolver):
             pair_tfscores = dict()
             for pair in pairlist:
                 pair_tfscores[pair] = [('1m', 1.)]
+        run_tfs = set()
         for policy in config['run_policy']:
             strategy_cls = get_strategy(policy['name'])
             if not strategy_cls:
                 raise RuntimeError(f'unknown Strategy: {policy["name"]}')
             if policy.get('max_fee') is not None:
                 strategy_cls.max_fee = policy.get('max_fee')
+            if policy.get('run_timeframes'):
+                run_tfs.update(*policy.get('run_timeframes'))
+            elif strategy_cls.run_timeframes:
+                run_tfs.update(strategy_cls.run_timeframes)
             max_num = policy.get('max_pair') or 999  # 默认一个策略最多999个交易对
             stg_process = 0
             stg_name = strategy_cls.__name__
@@ -122,6 +128,7 @@ class StrategyResolver(IResolver):
                         continue
                     else:
                         timeframe = '1m'
+                        logger.warning(f'{exg_name}/{pair} {stg_name} pick_timeframe fail, use 1m')
                 stg_process += 1
                 PTFJob.add(pair, timeframe, strategy_cls)
                 if stg_process >= max_num:
@@ -129,8 +136,18 @@ class StrategyResolver(IResolver):
                     if skip_num:
                         logger.warning(f'{skip_num} pairs skipped by {stg_name}, as max_num: {max_num} reached')
                     break
-        # 记录此次任务的策略哈希值。
+        # 记录此次任务的策略哈希值：策略名+版本进行哈希
         BotGlobal.stg_hash = PTFJob.strategy_hash()
+        # 记录涉及的所有运行周期
+        if not run_tfs:
+            run_tfs = set(config.get('run_timeframes'))
+            if not run_tfs:
+                from banbot.storage import KLine
+                run_tfs.update(*[k.tf for k in KLine.agg_list])
+        from banbot.exchange.exchange_utils import tf_to_secs
+        tf_sec_list = [(tf, tf_to_secs(tf)) for tf in run_tfs]
+        tf_sec_list = sorted(tf_sec_list, key=lambda x: x[1])
+        BotGlobal.run_tf_secs = tf_sec_list
         return PTFJob.tojobs()
 
 

@@ -24,12 +24,17 @@ class BotTask(BaseDbModel):
 
     @classmethod
     def init(cls, start_at: Optional[float] = None):
+        '''
+        创建交易任务。记录涉及的时间周期
+        '''
         if cls.obj is not None:
             return
         live_mode = btime.run_mode in btime.LIVE_MODES
         from banbot.strategy.resolver import StrategyResolver
         config = AppConfig.get()
+        # 这里只是为了获取stg_hash:策略哈希特征
         run_jobs = StrategyResolver.load_run_jobs(config, [])
+        # 计算任务开始时间
         rmode = btime.run_mode.value
         if not live_mode:
             # 非实时模式，需要设置初始模拟时钟
