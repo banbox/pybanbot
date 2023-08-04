@@ -19,6 +19,7 @@ class BaseStrategy:
     min_tfscore = 0.8
     nofee_tfscore = 0.6
     max_fee = 0.002
+    stop_loss = 0.05
     skip_exit_on_enter = True
     skip_enter_on_exit = True
     version = 1

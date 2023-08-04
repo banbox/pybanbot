@@ -59,6 +59,57 @@ def order_plot_ind(task_id: int, symbol: str, in_color=None, out_color=None, lin
     )
 
 
+def dump_orders(task_id: int, out_dir: str):
+    '''
+    将任务订单输出到CSV文件方便对比
+    '''
+    if not task_id or task_id < 0:
+        return
+    from banbot.storage.orders import get_db_orders
+    from banbot.util import btime
+    iorders = get_db_orders(task_id)
+    iorders = sorted(iorders, key=lambda x: x.enter_at)
+    result = []
+    for iod in iorders:
+        weight = iod.get_info('weight')
+        cost_rate = iod.get_info('cost_rate')
+        item = dict(
+            sid=iod.sid,
+            symbol=iod.symbol,
+            timeframe=iod.timeframe,
+            lock_key=iod.lock_key,
+            direction='short' if iod.short else 'long',
+            weight=weight,
+            cost_rate=cost_rate,
+            enter_at=btime.to_datestr(iod.enter_at),
+            enter_tag=iod.enter_tag,
+        )
+        total_fee = 0
+        if iod.enter:
+            item.update(dict(
+                enter_price=iod.enter.price,
+                enter_amount=iod.enter.amount,
+                enter_cost=iod.enter.price * iod.enter.amount
+            ))
+            total_fee = iod.enter.fee
+        item.update(dict(
+            exit_at=btime.to_datestr(iod.exit_at),
+            exit_tag=iod.exit_tag
+        ))
+        if iod.exit:
+            total_fee += iod.exit.fee
+            item.update(dict(
+                exit_price=iod.exit.price,
+                exit_amount=iod.exit.amount,
+                exit_got=iod.exit.price * (1 - total_fee) * iod.exit.amount
+            ))
+        item.update(dict(profit_rate=iod.profit_rate, profit=iod.profit))
+        result.append(item)
+    df = pd.DataFrame(result)
+    out_path = os.path.join(out_dir, f'task_{task_id}.csv')
+    df.to_csv(out_path, sep=',')
+
+
 class BTAnalysis:
     def __init__(self, **kwargs):
         self.result = kwargs
@@ -67,6 +118,8 @@ class BTAnalysis:
         dump_path = os.path.join(save_dir, 'backtest.json')
         async with aiof.open(dump_path, 'wb') as fout:
             await fout.write(orjson.dumps(self.result))
+        # 保存订单记录到CSV
+        dump_orders(self.result['task_id'], save_dir)
 
     @staticmethod
     async def load(save_dir: str) -> 'BTAnalysis':

@@ -313,7 +313,8 @@ class InOutOrder(BaseDbModel):
     def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\
             -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
-            return get_db_orders(strategy, pairs, status)
+            from banbot.storage.bot_task import BotTask
+            return get_db_orders(BotTask.cur_id, strategy, pairs, status)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -384,13 +385,13 @@ class OrderJob:
         self.is_enter = is_enter
 
 
-def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None) -> List['InOutOrder']:
+def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None,
+                  status: str = None) -> List[InOutOrder]:
     '''
     此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
     '''
-    from banbot.storage.bot_task import BotTask
     sess = db.session
-    where_list = [InOutOrder.task_id == BotTask.cur_id]
+    where_list = [InOutOrder.task_id == task_id]
     if status:
         if status == 'his':
             where_list.append(InOutOrder.status == InOutStatus.FullExit)
@@ -405,7 +406,7 @@ def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None, sta
             where_list.append(InOutOrder.symbol.in_(set(pairs)))
     io_rows = sess.query(InOutOrder).filter(*where_list).all()
     io_ids = {row.id for row in io_rows}
-    ex_filters = [Order.task_id == BotTask.cur_id, Order.inout_id.in_(io_ids)]
+    ex_filters = [Order.task_id == task_id, Order.inout_id.in_(io_ids)]
     ex_ods = sess.query(Order).filter(*ex_filters).order_by(Order.inout_id).all()
     ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
     ex_exits = {od.inout_id: od for od in ex_ods if not od.enter}

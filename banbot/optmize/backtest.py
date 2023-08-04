@@ -97,7 +97,7 @@ class BackTest(Trader):
 
             print_backtest(self.result)
 
-        await BTAnalysis(**self.result).save(self.out_dir)
+            await BTAnalysis(**self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
