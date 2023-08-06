@@ -148,17 +148,26 @@ class OrderManager(metaclass=SingletonArg):
             if random.random() < 0.2 and lock_od.elp_num_exit > 5:
                 logger.error('lock order exit timeout: %s, exit bar: %d', lock_od, lock_od.elp_num_exit)
             return
+        is_short = sigin.get('short')
         legal_cost = sigin.pop('legal_cost')
-        quote_cost = self.wallets.get_avaiable_by_cost(exs.quote_code, legal_cost, self.last_ts)
-        if not quote_cost:
-            logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
-            return
+        if is_short:
+            # 空单锁定base，允许金额为负
+            base_cost = self.wallets.get_amount_by_legal(exs.base_code, legal_cost)
+            base_cost = self.wallets.cost_ava(exs.base_code, base_cost, negative=True, after_ts=self.last_ts)
+            sigin['enter_amount'] = base_cost
+        else:
+            # 多单锁定quote
+            quote_cost = self.wallets.get_amount_by_legal(exs.quote_code, legal_cost)
+            quote_cost = self.wallets.cost_ava(exs.quote_code, quote_cost, after_ts=self.last_ts)
+            if not quote_cost:
+                logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
+                return
+            sigin['quote_cost'] = quote_cost
         od = InOutOrder(
             **sigin,
             sid=exs.id,
             symbol=exs.symbol,
             timeframe=timeframe,
-            quote_cost=quote_cost,
             enter_price=price,
             enter_tag=tag,
             enter_at=btime.time_ms(),
@@ -203,15 +212,26 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
         exs, _ = get_cur_symbol(ctx)
-        if od.enter.filled:
-            # 订单已至少部分成交
-            ava_amt, lock_amt = self.wallets.get(exs.base_code, od.enter.create_at)
-            exit_amount = od.enter.filled
-            if 0 < ava_amt < exit_amount or abs(ava_amt - exit_amount) / exit_amount <= 0.03:
-                exit_amount = ava_amt
+        org_amount = od.enter.filled  # 入场实际对应的数量
+        pending_amount = od.enter.amount - org_amount
+        get_amount = org_amount * (1 - od.enter.fee)  # 扣除手续费后才是实际得到的
+        if od.short:
+            # 空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
+            if pending_amount:
+                self.wallets.cancel(exs.base_code, pending_amount)
+            # 这里不用预先扣除，价格可能为None
         else:
-            exit_amount = 0
-        od.update_exit(**sigout, price=price, amount=exit_amount)
+            # 多单，从base的available卖，计算到quote的available，从quote的pending未成交部分取消
+            wallet = self.wallets.get(exs.base_code, od.enter.create_at)
+            if 0 < wallet.available < get_amount or abs(wallet.available / get_amount - 1) <= 0.01:
+                get_amount = wallet.available
+                if pending_amount:
+                    # 取消quote的pending未成交部分
+                    quote_pending = od.enter.price * pending_amount
+                    self.wallets.cancel(exs.quote_code, quote_pending)
+            if get_amount:
+                self.wallets.cost_ava(exs.base_code, get_amount, after_ts=self.last_ts, min_rate=0.01)
+        od.update_exit(**sigout, price=price, amount=get_amount)
         od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od.symbol, od.exit_tag)
@@ -234,6 +254,9 @@ class OrderManager(metaclass=SingletonArg):
         od.save()
 
     def update_by_bar(self, row):
+        self.last_ts = btime.time()
+        if btime.run_mode not in LIVE_MODES:
+            self.wallets.update_at = btime.time()
         op_orders = InOutOrder.open_orders()
         # 更新订单利润
         for od in op_orders:
@@ -242,6 +265,8 @@ class OrderManager(metaclass=SingletonArg):
         exs, timeframe = get_cur_symbol()
         if exs.quote_code.find('USD') >= 0:
             self.prices[exs.base_code] = float(row[ccol])
+            if len(self.prices) != len(self.wallets.prices):
+                self.wallets.prices = self.prices
 
     def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, dict]:
         result = dict()
@@ -293,7 +318,7 @@ class OrderManager(metaclass=SingletonArg):
     def _get_legal_value(self, symbol: str):
         if symbol not in self.wallets.data:
             return 0
-        amount = sum(self.wallets.data[symbol])
+        amount = self.wallets.data[symbol].total
         if symbol.find('USD') >= 0:
             return amount
         elif not amount:
@@ -336,6 +361,8 @@ class LocalOrderManager(OrderManager):
         enter_price = self.exchange.pres_price(od.symbol, enter_price)
         sub_od = od.enter
         if not sub_od.amount:
+            if od.short:
+                raise ValueError('`enter_amount` is require for short order')
             sub_od.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
         quote_amount = enter_price * sub_od.amount
         ctx = self.get_context(od)
@@ -344,8 +371,12 @@ class LocalOrderManager(OrderManager):
         if fees['rate']:
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
-        base_amt = sub_od.amount * (1 - sub_od.fee)
-        self.wallets.update_wallets(**{exs.quote_code: -quote_amount, exs.base_code: base_amt})
+        if od.short:
+            quote_amount *= (1 - sub_od.fee)
+            self.wallets.confirm_pending(exs.base_code, sub_od.amount, exs.quote_code, quote_amount, True)
+        else:
+            base_amt = sub_od.amount * (1 - sub_od.fee)
+            self.wallets.confirm_pending(exs.quote_code, quote_amount, exs.base_code, base_amt)
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
@@ -360,15 +391,28 @@ class LocalOrderManager(OrderManager):
     def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
         exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
         sub_od = od.exit
-        quote_amount = exit_price * sub_od.amount
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         ctx = self.get_context(od)
         exs, timeframe = get_cur_symbol(ctx)
-        quote_amt = quote_amount * (1 - sub_od.fee)
-        self.wallets.update_wallets(**{exs.quote_code: quote_amt, exs.base_code: -sub_od.amount})
+        if od.short:
+            # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
+            org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
+            if org_amount:
+                # 执行quote买入，中和base的欠债
+                self.wallets.cost_frozen(exs.quote_code, org_amount * exit_price)
+            if exit_price < od.enter.price:
+                # 空单，出场价低于入场价，有利润，将冻结的利润置为available
+                quote_profit = org_amount * (1 - od.enter.fee) * (od.enter.price - exit_price)
+                self.wallets.cancel(exs.quote_code, quote_profit, from_pending=False)
+            quote_amount = exit_price * org_amount
+            self.wallets.confirm_pending(exs.quote_code, quote_amount, exs.base_code, org_amount)
+        else:
+            # 多单，从base的avaiable卖，兑换为quote的available
+            quote_amount = exit_price * sub_od.amount * (1 - sub_od.fee)
+            self.wallets.confirm_pending(exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit

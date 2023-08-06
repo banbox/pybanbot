@@ -1,4 +1,7 @@
 # 安装
+## Windows安装
+如安装Postgresql 15及之后版本，需要先安装[OpenSSL 1.1.1](https://slproweb.com/products/Win32OpenSSL.html)  
+## Linux中安装
 必须使用CentOS 7，测试CentOS8安装时遇到很多不兼容错误。
 可直接按照官方文档中Red Hat 7的安装指引：
 Timescale Documentation | Install TimescaleDB on Linux

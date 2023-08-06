@@ -106,7 +106,7 @@ class BackTest(Trader):
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
         elif not open_orders:
             quote_s = od.symbol.split('/')[1].split(':')[0]
-            balance = sum(self.wallets.get(quote_s))
+            balance = self.wallets.get(quote_s).total
             self.min_balance = min(self.min_balance, balance)
             self.max_balance = max(self.max_balance, balance)
 
@@ -123,7 +123,7 @@ class BackTest(Trader):
         self.result['bar_num'] = self.bar_count
         his_orders = InOutOrder.his_orders()
         self.result['orders_num'] = len(his_orders)
-        fin_balance = self.wallets.get(quote_s)[0]
+        fin_balance = self.wallets.get(quote_s).available
         start_balance = self.result['start_balance']
         self.result['final_balance'] = f"{fin_balance:.3f} {quote_s}"
         abs_profit = sum(od.profit for od in his_orders) if his_orders else 0

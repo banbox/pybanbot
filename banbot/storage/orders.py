@@ -86,11 +86,16 @@ class Order(BaseDbModel):
     order_type = Column(sa.String(50), default='limit')
     order_id = Column(sa.String(164))  # 交易所订单ID，如修改订单会变化，记录最新的值
     side = Column(sa.String(10))
+    'buy/sell'
     create_at = Column(sa.BIGINT)  # 创建时间，13位整型时间戳
-    price = Column(sa.Float)  # 入场价格，市价单此项为空
-    average = Column(sa.Float)  # 平均成交价格
-    amount = Column(sa.Float)  # 交易量；这里无需扣除手续费，这里和实际钱包到账金额不同
-    filled = Column(sa.Float)  # 已成交数量，这里不用扣除手续费，完全成交时和amount相等
+    price = Column(sa.Float)
+    '入场价格，市价单此项为空'
+    average = Column(sa.Float)
+    '平均成交价格'
+    amount = Column(sa.Float)
+    'base币的数量；这里无需扣除手续费，这里和实际钱包到账金额不同'
+    filled = Column(sa.Float)
+    '已成交数量，这里不用扣除手续费，完全成交时和amount相等'
     status = Column(sa.SMALLINT, default=OrderStatus.Init)
     fee = Column(sa.Float)
     fee_type = Column(sa.String(10))
@@ -160,7 +165,7 @@ class InOutOrder(BaseDbModel):
         self.enter: Optional[Order] = None
         self.exit: Optional[Order] = None
         db_keys = set(self.__table__.columns.keys())
-        tmp_keys = {k for k in kwargs if k not in db_keys}
+        tmp_keys = {k for k in kwargs if k not in db_keys and not k.startswith('enter_') and not k.startswith('exit_')}
         self._info = {k: kwargs.pop(k) for k in tmp_keys}
         if self.id:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
@@ -189,6 +194,7 @@ class InOutOrder(BaseDbModel):
             InOutOrder._next_id += 1
         enter_kwargs = del_dict_prefix(kwargs, 'enter_')
         enter_kwargs['inout_id'] = self.id
+        enter_kwargs['side'] = 'sell' if self.short else 'buy'
         self.enter: Order = Order(**enter_kwargs, enter=True)
         if 'exit_amount' in kwargs:
             exit_kwargs = del_dict_prefix(kwargs, 'exit_')

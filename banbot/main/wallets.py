@@ -5,7 +5,8 @@
 # Date  : 2023/3/29
 
 from numbers import Number
-from typing import List
+from typing import *
+from dataclasses import dataclass
 
 import ccxt
 
@@ -15,88 +16,151 @@ from banbot.util import btime
 from banbot.util.common import logger
 
 
+@dataclass
+class ItemWallet:
+    available: float = 0
+    '可用余额'
+    pending: float = 0
+    '买入卖出时锁定金额'
+    frozen: float = 0
+    '空单等长期冻结金额'
+
+    @property
+    def total(self):
+        return self.available + self.pending + self.frozen
+
+
 class WalletsLocal:
     def __init__(self):
-        self.data = dict()
+        self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
+        self.prices = dict()  # 保存各个币相对USD的价格，仅用于回测，从od_manager更新
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
-            if isinstance(val, (tuple, list)):
-                assert len(val) == 2
+            if isinstance(val, ItemWallet):
                 self.data[key] = val
-            elif isinstance(val, Number):
-                self.data[key] = val, 0
+            elif isinstance(val, (int, float)):
+                self.data[key] = ItemWallet(available=val)
             else:
                 raise ValueError(f'unsupport val type: {key} {type(val)}')
 
-    def _update_wallet(self, symbol: str, amount: float, is_frz=True):
-        old_val = self.data.get(symbol)
-        ava_val, frz_val = old_val if old_val else (0, 0)
-        if amount > 0:
-            # 增加钱包金额，不影响冻结值，直接更新
-            # TODO: 取消订单时，可能需要增加可用余额，减少冻结金额
-            ava_val += amount
-        elif abs(frz_val / abs(amount) - 1) <= 0.02:
-            ava_val = ava_val + frz_val + amount
-            frz_val = 0
-        else:
-            ava_val += amount
-            if is_frz:
-                frz_val -= amount
-        self.data[symbol] = (max(0, ava_val), max(0, frz_val))
-
-    def update_wallets(self, **kwargs):
+    def cost_ava(self, key: str, amount: float, negative: bool = False, after_ts: float = 0,
+                 min_rate: float = 0.1) -> float:
         '''
-        【目前仅在回测、模拟实盘等模式下使用】
-        更新钱包，可同时更新两个钱包，或只更新一个钱包：
-        只更新一个钱包时，变化值记录为冻结。
-        :param kwargs:
-        :return:
+        从某个币的可用余额中扣除，仅用于回测
+        :param key: 币代码
+        :param amount: 金额
+        :param negative: 是否允许负数余额（空单用到）
+        :param after_ts: 是否要求更新时间戳
+        :param min_rate: 最低扣除比率
+        :return 实际扣除数量
         '''
-        items = list(kwargs.items())
-        assert 0 < len(items) <= 2, 'update wallets should be 2 keys'
-        if len(items) == 2:
-            # 同时更新2个钱包时，必须是一增一减
-            (keya, vala), (keyb, valb) = items
-            assert vala * valb < 0, f'two amount should different signs {vala} - {valb}'
-            self._update_wallet(keya, vala, False)
-            self._update_wallet(keyb, valb, False)
+        assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
+        if key not in self.data:
+            self.data[key] = ItemWallet()
+        wallet = self.data[key]
+        src_amount = wallet.available
+        if src_amount >= amount or negative:
+            # 余额充足，或允许负数，直接扣除
+            real_cost = amount
+        elif src_amount / amount > min_rate:
+            # 差额在近似允许范围内，扣除实际值
+            real_cost = src_amount
         else:
-            self._update_wallet(*items[0])
+            return 0
+        if key.find('USD') >= 0 and real_cost < MIN_STAKE_AMOUNT:
+            return 0
+        wallet.available -= real_cost
+        wallet.pending += real_cost
         self.update_at = btime.time()
+        return real_cost
+
+    def cost_frozen(self, key: str, amount: float, after_ts: float = 0):
+        '''
+        从frozen中扣除，如果不够，从available扣除剩余部分
+        扣除后，添加到pending中
+        '''
+        assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
+        if key not in self.data:
+            return 0
+        wallet = self.data[key]
+        real_cost = amount
+        wallet.frozen -= real_cost
+        if wallet.frozen < 0:
+            wallet.available += wallet.frozen
+            wallet.frozen = 0
+        if wallet.available < 0:
+            real_cost += wallet.available
+            wallet.available = 0
+        wallet.pending += real_cost
+        self.update_at = btime.time()
+        return real_cost
+
+    def confirm_pending(self, src_key: str, src_amount: float, tgt_key: str, tgt_amount: float,
+                        to_frozen: bool = False):
+        '''
+        从src中确认扣除，添加到tgt的余额中
+        '''
+        self.update_at = btime.time()
+        src, tgt = self.data.get(src_key), self.data.get(tgt_key)
+        if not src or not tgt:
+            return False
+        if src.pending >= src_amount:
+            src.pending -= src_amount
+        elif src.pending / src_amount > 0.999:
+            src.pending = 0
+        else:
+            return False
+        if to_frozen:
+            tgt.frozen += tgt_amount
+        else:
+            tgt.available += tgt_amount
+        return True
+
+    def cancel(self, symbol: str, amount: float, from_pending: bool = True):
+        '''
+        取消对币种的数量锁定(frozen/pending)，重新加到available上
+        '''
+        self.update_at = btime.time()
+        wallet = self.data.get(symbol)
+        if not wallet:
+            return
+        src_amount = wallet.pending if from_pending else wallet.frozen
+        if src_amount >= amount:
+            real_amount = amount
+        elif src_amount:
+            real_amount = src_amount
+        else:
+            return
+        wallet.available += real_amount
+        if from_pending:
+            wallet.pending -= real_amount
+        else:
+            wallet.frozen -= real_amount
 
     def get(self, symbol: str, after_ts: float = 0):
         assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'
         if symbol not in self.data:
-            return 0, 0
+            self.data[symbol] = ItemWallet()
         return self.data[symbol]
 
     def _get_symbol_price(self, symbol: str):
+        if symbol in self.prices:
+            return self.prices[symbol]
         raise ValueError(f'unsupport quote symbol: {symbol}')
 
-    def get_avaiable_by_cost(self, symbol: str, legal_cost: float, after_ts: float = 0):
+    def get_amount_by_legal(self, symbol: str, legal_cost: float):
         '''
         根据花费的USDT计算需要的数量，并返回可用数量
         :param symbol: 产品，不是交易对。如：USDT
         :param legal_cost: 花费法币金额（一般是USDT）
-        :param after_ts:
-        :return:
         '''
-        assert self.update_at - after_ts >= -1, f'wallet ava ts expired: {self.update_at} > {after_ts}'
         if symbol.find('USD') >= 0:
-            price = 1
+            return legal_cost
         else:
             price = self._get_symbol_price(symbol)
-        req_amount = (legal_cost * 0.99) / price
-        ava_val, frz_val = self.get(symbol)
-        fin_amount = min(req_amount, ava_val)
-        if fin_amount < req_amount * 0.1:
-            # 可用金额不足要求金额的10%时，不开单
-            return 0
-        if fin_amount < MIN_STAKE_AMOUNT:
-            return 0
-        return fin_amount
+            return legal_cost / price
 
 
 class CryptoWallet(WalletsLocal):
@@ -116,7 +180,7 @@ class CryptoWallet(WalletsLocal):
         for symbol in self._symbols:
             state = balances[symbol]
             free, used = state['free'], state['used']
-            self.data[symbol] = free, used
+            self.data[symbol] = ItemWallet(available=free, pending=used)
             if free + used < 0.00001:
                 continue
             message.append(f'{symbol}: {free}/{used}')
