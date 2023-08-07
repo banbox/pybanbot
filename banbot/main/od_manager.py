@@ -153,12 +153,13 @@ class OrderManager(metaclass=SingletonArg):
         if is_short:
             # 空单锁定base，允许金额为负
             base_cost = self.wallets.get_amount_by_legal(exs.base_code, legal_cost)
-            base_cost = self.wallets.cost_ava(exs.base_code, base_cost, negative=True, after_ts=self.last_ts)
+            base_cost = self.wallets.cost_ava(lock_key, exs.base_code, base_cost,
+                                              negative=True, after_ts=self.last_ts)
             sigin['enter_amount'] = base_cost
         else:
             # 多单锁定quote
             quote_cost = self.wallets.get_amount_by_legal(exs.quote_code, legal_cost)
-            quote_cost = self.wallets.cost_ava(exs.quote_code, quote_cost, after_ts=self.last_ts)
+            quote_cost = self.wallets.cost_ava(lock_key, exs.quote_code, quote_cost, after_ts=self.last_ts)
             if not quote_cost:
                 logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
                 return
@@ -212,25 +213,20 @@ class OrderManager(metaclass=SingletonArg):
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
         exs, _ = get_cur_symbol(ctx)
-        org_amount = od.enter.filled  # 入场实际对应的数量
-        pending_amount = od.enter.amount - org_amount
-        get_amount = org_amount * (1 - od.enter.fee)  # 扣除手续费后才是实际得到的
+        get_amount = od.enter.filled * (1 - od.enter.fee)  # 扣除手续费后才是实际得到的
         if od.short:
             # 空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
-            if pending_amount:
-                self.wallets.cancel(exs.base_code, pending_amount)
+            self.wallets.cancel(od.lock_key, exs.base_code)
             # 这里不用预先扣除，价格可能为None
         else:
             # 多单，从base的available卖，计算到quote的available，从quote的pending未成交部分取消
             wallet = self.wallets.get(exs.base_code, od.enter.create_at)
             if 0 < wallet.available < get_amount or abs(wallet.available / get_amount - 1) <= 0.01:
                 get_amount = wallet.available
-                if pending_amount:
-                    # 取消quote的pending未成交部分
-                    quote_pending = od.enter.price * pending_amount
-                    self.wallets.cancel(exs.quote_code, quote_pending)
+                # 取消quote的pending未成交部分
+                self.wallets.cancel(od.lock_key, exs.quote_code)
             if get_amount:
-                self.wallets.cost_ava(exs.base_code, get_amount, after_ts=self.last_ts, min_rate=0.01)
+                self.wallets.cost_ava(od.lock_key, exs.base_code, get_amount, after_ts=self.last_ts, min_rate=0.01)
         od.update_exit(**sigout, price=price, amount=get_amount)
         od.save()
         if btime.run_mode in LIVE_MODES:
@@ -354,7 +350,9 @@ class LocalOrderManager(OrderManager):
         super(LocalOrderManager, self).update_by_bar(row)
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
-            self.fill_pending_orders(exs.symbol, timeframe, row)
+            affect_num = self.fill_pending_orders(exs.symbol, timeframe, row)
+            # if affect_num:
+            #     logger.info(f"wallets: {self.wallets}")
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
@@ -373,10 +371,10 @@ class LocalOrderManager(OrderManager):
             sub_od.fee_type = fees['currency']
         if od.short:
             quote_amount *= (1 - sub_od.fee)
-            self.wallets.confirm_pending(exs.base_code, sub_od.amount, exs.quote_code, quote_amount, True)
+            self.wallets.confirm_pending(od.lock_key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount, True)
         else:
             base_amt = sub_od.amount * (1 - sub_od.fee)
-            self.wallets.confirm_pending(exs.quote_code, quote_amount, exs.base_code, base_amt)
+            self.wallets.confirm_pending(od.lock_key, exs.quote_code, quote_amount, exs.base_code, base_amt)
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
@@ -402,17 +400,16 @@ class LocalOrderManager(OrderManager):
             org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
             if org_amount:
                 # 执行quote买入，中和base的欠债
-                self.wallets.cost_frozen(exs.quote_code, org_amount * exit_price)
+                self.wallets.cost_frozen(od.lock_key, exs.quote_code, org_amount * exit_price)
             if exit_price < od.enter.price:
                 # 空单，出场价低于入场价，有利润，将冻结的利润置为available
-                quote_profit = org_amount * (1 - od.enter.fee) * (od.enter.price - exit_price)
-                self.wallets.cancel(exs.quote_code, quote_profit, from_pending=False)
+                self.wallets.cancel(od.lock_key, exs.quote_code, from_pending=False)
             quote_amount = exit_price * org_amount
-            self.wallets.confirm_pending(exs.quote_code, quote_amount, exs.base_code, org_amount)
+            self.wallets.confirm_pending(od.lock_key, exs.quote_code, quote_amount, exs.base_code, org_amount)
         else:
             # 多单，从base的avaiable卖，兑换为quote的available
             quote_amount = exit_price * sub_od.amount * (1 - sub_od.fee)
-            self.wallets.confirm_pending(exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
+            self.wallets.confirm_pending(od.lock_key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
@@ -478,13 +475,17 @@ class LocalOrderManager(OrderManager):
         if btime.prod_mode():
             raise RuntimeError('fill_pending_orders unavaiable in PROD mode')
         op_orders = InOutOrder.open_orders()
+        affect_num = 0
         for od in op_orders:
             if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
                 continue
             if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
                 self._fill_pending_exit(candle, od)
+                affect_num += 1
             elif od.enter.status != OrderStatus.Close:
                 self._fill_pending_enter(candle, od)
+                affect_num += 1
+        return affect_num
 
     def cleanup(self):
         self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both')

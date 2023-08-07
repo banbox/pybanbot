@@ -6,7 +6,7 @@
 
 from numbers import Number
 from typing import *
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import ccxt
 
@@ -20,14 +20,19 @@ from banbot.util.common import logger
 class ItemWallet:
     available: float = 0
     '可用余额'
-    pending: float = 0
-    '买入卖出时锁定金额'
-    frozen: float = 0
-    '空单等长期冻结金额'
+    pendings: Dict[str, float] = field(default_factory=dict)
+    '买入卖出时锁定金额，键可以是订单id'
+    frozens: Dict[str, float] = field(default_factory=dict)
+    '空单等长期冻结金额，键可以是订单id'
 
     @property
     def total(self):
-        return self.available + self.pending + self.frozen
+        sum_val = self.available
+        for k, v in self.pendings:
+            sum_val += v
+        for k, v in self.frozens:
+            sum_val += v
+        return sum_val
 
 
 class WalletsLocal:
@@ -45,11 +50,12 @@ class WalletsLocal:
             else:
                 raise ValueError(f'unsupport val type: {key} {type(val)}')
 
-    def cost_ava(self, key: str, amount: float, negative: bool = False, after_ts: float = 0,
+    def cost_ava(self, lock_key: str, symbol: str, amount: float, negative: bool = False, after_ts: float = 0,
                  min_rate: float = 0.1) -> float:
         '''
         从某个币的可用余额中扣除，仅用于回测
-        :param key: 币代码
+        :param lock_key: 锁定的键
+        :param symbol: 币代码
         :param amount: 金额
         :param negative: 是否允许负数余额（空单用到）
         :param after_ts: 是否要求更新时间戳
@@ -57,9 +63,9 @@ class WalletsLocal:
         :return 实际扣除数量
         '''
         assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
-        if key not in self.data:
-            self.data[key] = ItemWallet()
-        wallet = self.data[key]
+        if symbol not in self.data:
+            self.data[symbol] = ItemWallet()
+        wallet = self.data[symbol]
         src_amount = wallet.available
         if src_amount >= amount or negative:
             # 余额充足，或允许负数，直接扣除
@@ -69,35 +75,36 @@ class WalletsLocal:
             real_cost = src_amount
         else:
             return 0
-        if key.find('USD') >= 0 and real_cost < MIN_STAKE_AMOUNT:
+        if symbol.find('USD') >= 0 and real_cost < MIN_STAKE_AMOUNT:
             return 0
         wallet.available -= real_cost
-        wallet.pending += real_cost
+        wallet.pendings[lock_key] = real_cost
         self.update_at = btime.time()
         return real_cost
 
-    def cost_frozen(self, key: str, amount: float, after_ts: float = 0):
+    def cost_frozen(self, lock_key: str, symbol: str, amount: float, after_ts: float = 0):
         '''
         从frozen中扣除，如果不够，从available扣除剩余部分
         扣除后，添加到pending中
         '''
         assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
-        if key not in self.data:
+        if symbol not in self.data:
             return 0
-        wallet = self.data[key]
+        wallet = self.data[symbol]
+        frozen_amt = wallet.frozens.get(lock_key, 0)
+        if frozen_amt:
+            del wallet.frozens[lock_key]
+        # 将冻结的剩余部分归还到available，正负都有可能
+        wallet.available += frozen_amt - amount
         real_cost = amount
-        wallet.frozen -= real_cost
-        if wallet.frozen < 0:
-            wallet.available += wallet.frozen
-            wallet.frozen = 0
         if wallet.available < 0:
             real_cost += wallet.available
             wallet.available = 0
-        wallet.pending += real_cost
+        wallet.pendings[lock_key] = real_cost
         self.update_at = btime.time()
         return real_cost
 
-    def confirm_pending(self, src_key: str, src_amount: float, tgt_key: str, tgt_amount: float,
+    def confirm_pending(self, lock_key: str, src_key: str, src_amount: float, tgt_key: str, tgt_amount: float,
                         to_frozen: bool = False):
         '''
         从src中确认扣除，添加到tgt的余额中
@@ -106,38 +113,32 @@ class WalletsLocal:
         src, tgt = self.data.get(src_key), self.data.get(tgt_key)
         if not src or not tgt:
             return False
-        if src.pending >= src_amount:
-            src.pending -= src_amount
-        elif src.pending / src_amount > 0.999:
-            src.pending = 0
-        else:
+        pending_amt = src.pendings.get(lock_key, 0)
+        if not pending_amt:
             return False
+        left_pending = pending_amt - src_amount
+        del src.pendings[lock_key]
+        src.available += left_pending  # 剩余pending归还到available，（正负都可能）
         if to_frozen:
-            tgt.frozen += tgt_amount
+            tgt.frozens[lock_key] = tgt_amount
         else:
             tgt.available += tgt_amount
         return True
 
-    def cancel(self, symbol: str, amount: float, from_pending: bool = True):
+    def cancel(self, lock_key: str, symbol: str, from_pending: bool = True):
         '''
-        取消对币种的数量锁定(frozen/pending)，重新加到available上
+        取消对币种的数量锁定(frozens/pendings)，重新加到available上
         '''
         self.update_at = btime.time()
         wallet = self.data.get(symbol)
         if not wallet:
             return
-        src_amount = wallet.pending if from_pending else wallet.frozen
-        if src_amount >= amount:
-            real_amount = amount
-        elif src_amount:
-            real_amount = src_amount
-        else:
+        src_dic = wallet.pendings if from_pending else wallet.frozens
+        src_amount = src_dic.get(lock_key)
+        if not src_amount:
             return
-        wallet.available += real_amount
-        if from_pending:
-            wallet.pending -= real_amount
-        else:
-            wallet.frozen -= real_amount
+        del src_dic[lock_key]
+        wallet.available += src_amount
 
     def get(self, symbol: str, after_ts: float = 0):
         assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'
@@ -162,6 +163,21 @@ class WalletsLocal:
             price = self._get_symbol_price(symbol)
             return legal_cost / price
 
+    def total_legal(self):
+        legal_sum = 0
+        for key, item in self.data.items():
+            legal_sum += item.total * self._get_symbol_price(key)
+        return legal_sum
+
+    def __str__(self):
+        from io import StringIO
+        builder = StringIO()
+        for key, item in self.data.items():
+            pend_sum = sum([v for k, v in item.pendings.items()])
+            frozen_sum = sum([v for k, v in item.frozens.items()])
+            builder.write(f"{key}: {item.available:.4f}|{pend_sum:.4f}|{frozen_sum:.4f} ")
+        return builder.getvalue()
+
 
 class CryptoWallet(WalletsLocal):
     def __init__(self, config: dict, exchange: CryptoExchange):
@@ -180,7 +196,7 @@ class CryptoWallet(WalletsLocal):
         for symbol in self._symbols:
             state = balances[symbol]
             free, used = state['free'], state['used']
-            self.data[symbol] = ItemWallet(available=free, pending=used)
+            self.data[symbol] = ItemWallet(available=free, pendings={'*': used})
             if free + used < 0.00001:
                 continue
             message.append(f'{symbol}: {free}/{used}')
