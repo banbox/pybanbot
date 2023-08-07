@@ -6,6 +6,7 @@
 '''
 分析回测结果，优化策略
 '''
+import datetime
 import os.path
 
 import aiofiles as aiof
@@ -106,8 +107,25 @@ def dump_orders(task_id: int, out_dir: str):
         item.update(dict(profit_rate=iod.profit_rate, profit=iod.profit))
         result.append(item)
     df = pd.DataFrame(result)
-    out_path = os.path.join(out_dir, f'task_{task_id}.csv')
+    out_path = os.path.join(out_dir, 'orders.csv')
     df.to_csv(out_path, sep=',')
+
+
+def dump_hist_assets(assets: List[Tuple[datetime.datetime, float]], out_dir: str, max_num: int = 600):
+    '''
+    输出总资产曲线
+    '''
+    if len(assets) > max_num * 2:
+        step = round(len(assets) / max_num)
+        assets = [r for i, r in enumerate(assets) if i % step == 0]
+    x_dates, y_values = list(zip(*assets))
+    import plotly.graph_objects as go
+    fig = go.Figure(
+        data=[go.Scatter(x=x_dates, y=y_values, line=dict(color='blue'))],
+        layout=dict(title=dict(text='总资产曲线'))
+    )
+    out_path = os.path.join(out_dir, 'assets.html')
+    fig.write_html(out_path)
 
 
 class BTAnalysis:
@@ -115,11 +133,17 @@ class BTAnalysis:
         self.result = kwargs
 
     async def save(self, save_dir: str):
-        dump_path = os.path.join(save_dir, 'backtest.json')
+        task_id = self.result['task_id']
+        task_dir = os.path.join(save_dir, f'task_{task_id}')
+        if not os.path.isdir(task_dir):
+            os.mkdir(task_dir)
+        dump_path = os.path.join(task_dir, 'result.json')
         async with aiof.open(dump_path, 'wb') as fout:
             await fout.write(orjson.dumps(self.result))
         # 保存订单记录到CSV
-        dump_orders(self.result['task_id'], save_dir)
+        dump_orders(task_id, task_dir)
+        # 保存总资产曲线
+        dump_hist_assets(self.result['bar_assets'], task_dir)
 
     @staticmethod
     async def load(save_dir: str) -> 'BTAnalysis':

@@ -28,9 +28,9 @@ class ItemWallet:
     @property
     def total(self):
         sum_val = self.available
-        for k, v in self.pendings:
+        for k, v in self.pendings.items():
             sum_val += v
-        for k, v in self.frozens:
+        for k, v in self.frozens.items():
             sum_val += v
         return sum_val
 
@@ -149,6 +149,8 @@ class WalletsLocal:
     def _get_symbol_price(self, symbol: str):
         if symbol in self.prices:
             return self.prices[symbol]
+        if symbol.find('USD') >= 0:
+            return 1
         raise ValueError(f'unsupport quote symbol: {symbol}')
 
     def get_amount_by_legal(self, symbol: str, legal_cost: float):
@@ -157,11 +159,8 @@ class WalletsLocal:
         :param symbol: 产品，不是交易对。如：USDT
         :param legal_cost: 花费法币金额（一般是USDT）
         '''
-        if symbol.find('USD') >= 0:
-            return legal_cost
-        else:
-            price = self._get_symbol_price(symbol)
-            return legal_cost / price
+        price = self._get_symbol_price(symbol)
+        return legal_cost / price
 
     def total_legal(self):
         legal_sum = 0

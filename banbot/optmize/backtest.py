@@ -30,6 +30,7 @@ class BackTest(Trader):
         self.open_price = 0
         self.close_price = 0
         self.enter_list = []
+        self.bar_assets = []
 
     def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
@@ -45,6 +46,7 @@ class BackTest(Trader):
             self.result['date_to'] = row[0]
             self.result['ts_to'] = row[0]
         enter_list, exit_list, ext_tags = super(BackTest, self).on_data_feed(pair, timeframe, row)
+        self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal()))
         if enter_list:
             pair_tf = f'{self.exchange.name}_{self.exchange.market_type}_{pair}_{timeframe}'
             ctx = get_context(pair_tf)
@@ -111,6 +113,7 @@ class BackTest(Trader):
             self.max_balance = max(self.max_balance, balance)
 
     def _calc_result_done(self):
+        self.result['bar_assets'] = self.bar_assets
         # 输出入场信号
         if self.enter_list:
             enter_ids, enter_tags, enter_prices = list(zip(*self.enter_list))
