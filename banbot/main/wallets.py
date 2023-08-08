@@ -162,9 +162,13 @@ class WalletsLocal:
         price = self._get_symbol_price(symbol)
         return legal_cost / price
 
-    def total_legal(self):
+    def total_legal(self, symbols: Iterable[str] = None):
         legal_sum = 0
-        for key, item in self.data.items():
+        if symbols:
+            data = {k: self.data[k] for k in symbols if k in self.data}
+        else:
+            data = self.data
+        for key, item in data.items():
             legal_sum += item.total * self._get_symbol_price(key)
         return legal_sum
 
