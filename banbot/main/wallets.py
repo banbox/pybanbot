@@ -12,6 +12,7 @@ import ccxt
 
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
+from banbot.storage import InOutOrder, ExSymbol
 from banbot.util import btime
 from banbot.util.common import logger
 
@@ -139,6 +140,117 @@ class WalletsLocal:
             return
         del src_dic[lock_key]
         wallet.available += src_amount
+
+    def enter_od(self, exs: ExSymbol, sigin: dict, lock_key: str, after_ts=0):
+        is_short = sigin.get('short')
+        legal_cost = sigin.pop('legal_cost')
+        is_future = exs.market == 'future'
+        if is_future or not is_short:
+            # 期货合约，现货多单锁定quote
+            quote_cost = self.get_amount_by_legal(exs.quote_code, legal_cost)
+            quote_cost = self.cost_ava(lock_key, exs.quote_code, quote_cost, after_ts=after_ts)
+            if not quote_cost:
+                logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
+                return 0
+            if is_future:
+                # 期货合约，名义价值=保证金*杠杆
+                quote_cost *= sigin['leverage']
+            sigin['quote_cost'] = quote_cost
+        else:
+            # 现货空单，锁定base，允许金额为负
+            base_cost = self.get_amount_by_legal(exs.base_code, legal_cost)
+            base_cost = self.cost_ava(lock_key, exs.base_code, base_cost, negative=True, after_ts=after_ts)
+            sigin['enter_amount'] = base_cost
+        return legal_cost
+
+    def confirm_od_enter(self, od: InOutOrder, enter_price: float):
+        exs = ExSymbol.get_by_id(od.sid)
+        sub_od = od.enter
+        quote_amount = enter_price * sub_od.amount
+        if exs.market == 'future':
+            # 期货合约，只锁定定价币，不涉及base币的增加
+            quote_amount /= od.leverage
+            self.confirm_pending(od.lock_key, exs.quote_code, quote_amount, exs.quote_code, quote_amount, True)
+        elif od.short:
+            quote_amount *= (1 - sub_od.fee)
+            self.confirm_pending(od.lock_key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount, True)
+        else:
+            base_amt = sub_od.amount * (1 - sub_od.fee)
+            self.confirm_pending(od.lock_key, exs.quote_code, quote_amount, exs.base_code, base_amt)
+
+    def exit_od(self, od: InOutOrder, base_amount: float, after_ts=0):
+        exs = ExSymbol.get_by_id(od.sid)
+        if exs.market == 'future':
+            # 期货合约，不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
+            pass
+        elif od.short:
+            # 现货空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
+            self.cancel(od.lock_key, exs.base_code)
+            # 这里不用预先扣除，价格可能为None
+        else:
+            # 现货多单，从base的available卖，计算到quote的available，从quote的pending未成交部分取消
+            wallet = self.get(exs.base_code, od.enter.create_at)
+            if 0 < wallet.available < base_amount or abs(wallet.available / base_amount - 1) <= 0.01:
+                base_amount = wallet.available
+                # 取消quote的pending未成交部分
+                self.cancel(od.lock_key, exs.quote_code)
+            if base_amount:
+                self.cost_ava(od.lock_key, exs.base_code, base_amount, after_ts=after_ts, min_rate=0.01)
+
+    def confirm_od_exit(self, od: InOutOrder, exit_price: float):
+        exs = ExSymbol.get_by_id(od.sid)
+        sub_od = od.exit
+        if exs.market == 'future':
+            # 期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
+            self.cancel(od.lock_key, exs.quote_code, from_pending=False)
+        elif od.short:
+            # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
+            org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
+            if org_amount:
+                # 执行quote买入，中和base的欠债
+                self.cost_frozen(od.lock_key, exs.quote_code, org_amount * exit_price)
+            if exit_price < od.enter.price:
+                # 空单，出场价低于入场价，有利润，将冻结的利润置为available
+                self.cancel(od.lock_key, exs.quote_code, from_pending=False)
+            quote_amount = exit_price * org_amount
+            self.confirm_pending(od.lock_key, exs.quote_code, quote_amount, exs.base_code, org_amount)
+        else:
+            # 多单，从base的avaiable卖，兑换为quote的available
+            quote_amount = exit_price * sub_od.amount * (1 - sub_od.fee)
+            self.confirm_pending(od.lock_key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
+
+    def update_ods(self, od_list: List[InOutOrder]):
+        '''
+        更新订单。目前只针对期货合约订单，需要更新合约订单的保证金比率。
+        保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
+        钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
+        '''
+        from banbot.exchange.crypto_exchange import get_exchange
+        bomb_ods = []
+        for od in od_list:
+            if not od.enter.filled:
+                continue
+            exs = ExSymbol.get_by_id(od.sid)
+            exchange = get_exchange(exs.exchange, exs.market)
+            quote_amount = od.enter.filled * self._get_symbol_price(exs.symbol)
+            init_margin = od.enter.filled * od.enter.price / od.leverage  # 初始保证金
+            min_margin = exchange.min_margin(quote_amount)  # 要求的最低保证金
+            wallet = self.get(exs.quote_code)
+            old_frozen_val = wallet.frozens.get(od.lock_key)
+            frozen_val = init_margin + od.profit
+            if frozen_val < old_frozen_val:
+                # 合约亏损，从available中填充
+                add_val = min(wallet.available, old_frozen_val - frozen_val)
+                frozen_val += add_val
+                wallet.frozens[od.lock_key] = frozen_val
+                wallet.available -= add_val
+            # 这里分母不用再加钱包余额，上面自动从钱包扣除了。这里再加会导致多个订单重用余额
+            od.margin_ratio = min_margin / frozen_val
+            if od.margin_ratio >= 0.999999:
+                # 保证金比率100%，爆仓
+                wallet.frozens[od.lock_key] = 0
+                bomb_ods.append(od)
+        return bomb_ods
 
     def get(self, symbol: str, after_ts: float = 0):
         assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'

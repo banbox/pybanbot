@@ -406,6 +406,39 @@ class CryptoExchange:
     def pres_fee(self, symbol, fee):
         return float(self.api_async.fee_to_precision(symbol, fee))
 
+    def min_margin(self, quote_amount: float, coin_base: bool = False):
+        if self.market_type != 'future':
+            return 0
+        if self.name == 'binance':
+            # https://www.binance.com/zh-CN/futures/trading-rules/perpetual/leverage-margin
+            if coin_base:
+                raise ValueError('not support coin base margin currently')
+            if quote_amount < 50000:
+                mg_rate, cut_amount = 0.004, 0
+            elif quote_amount < 250000:
+                mg_rate, cut_amount = 0.005, 50
+            elif quote_amount < 3000000:
+                mg_rate, cut_amount = 0.01, 1300
+            elif quote_amount < 20000000:
+                mg_rate, cut_amount = 0.025, 46300
+            elif quote_amount < 40000000:
+                mg_rate, cut_amount = 0.05, 546300
+            elif quote_amount < 100000000:
+                mg_rate, cut_amount = 0.1, 2546300
+            elif quote_amount < 120000000:
+                mg_rate, cut_amount = 0.125, 5046300
+            elif quote_amount < 200000000:
+                mg_rate, cut_amount = 0.15, 8046300
+            elif quote_amount < 300000000:
+                mg_rate, cut_amount = 0.25, 28046300
+            elif quote_amount < 500000000:
+                mg_rate, cut_amount = 0.5, 103046300
+            else:
+                raise ValueError(f'invalid quote amount: {quote_amount}')
+            return quote_amount * mg_rate - cut_amount
+        else:
+            raise ValueError(f'unsupport exchange: {self.name}')
+
     @net_retry
     async def fetch_ticker(self, symbol, params={}):
         return await self.api_async.fetch_ticker(symbol, params)

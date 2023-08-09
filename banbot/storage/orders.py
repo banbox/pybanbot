@@ -145,15 +145,23 @@ class InOutOrder(BaseDbModel):
     symbol = Column(sa.String(50))
     sid = Column(sa.Integer)
     timeframe = Column(sa.String(5))
-    short = Column(sa.Boolean)  # 是否是做空单
+    short = Column(sa.Boolean)
+    '是否是做空单'
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
-    lock_key = Column(sa.String(30))  # 交易加锁的键，阻止相同键同时下单
+    lock_key = Column(sa.String(30))
+    '交易加锁的键，阻止相同键同时下单'
     enter_tag = Column(sa.String(30))
-    init_price = Column(sa.Float)  # 发出信号时入场价格，仅用于策略后续计算
-    quote_cost = Column(sa.Float)  # 花费定价币金额，当价格不确定时，可先不设置amount，后续通过此字段计算amount
+    init_price = Column(sa.Float)
+    '发出信号时入场价格，仅用于策略后续计算'
+    quote_cost = Column(sa.Float)
+    '花费定价币金额，当价格不确定时，可先不设置amount，后续通过此字段计算amount'
     exit_tag = Column(sa.String(30))
-    enter_at = Column(sa.BIGINT)  # 13位时间戳，策略决定入场时间戳
-    exit_at = Column(sa.BIGINT)  # 13位时间戳，策略决定出场时间戳
+    leverage = Column(sa.Integer, default=1)
+    '杠杆倍数；现货杠杆和期货合约都可使用'
+    enter_at = Column(sa.BIGINT)
+    '13位时间戳，策略决定入场时间戳'
+    exit_at = Column(sa.BIGINT)
+    '13位时间戳，策略决定出场时间戳'
     strategy = Column(sa.String(20))
     stg_ver = Column(sa.Integer, default=0)
     profit_rate = Column(sa.Float, default=0)
@@ -164,6 +172,7 @@ class InOutOrder(BaseDbModel):
     def __init__(self, **kwargs):
         self.enter: Optional[Order] = None
         self.exit: Optional[Order] = None
+        self.margin_ratio = 0  # 合约的保证金比率
         db_keys = set(self.__table__.columns.keys())
         tmp_keys = {k for k in kwargs if k not in db_keys and not k.startswith('enter_') and not k.startswith('exit_')}
         self._info = {k: kwargs.pop(k) for k in tmp_keys}
@@ -180,7 +189,7 @@ class InOutOrder(BaseDbModel):
             kwargs['info'] = json.dumps(self._info)
         from banbot.storage import BotTask
         from banbot.strategy.resolver import get_strategy
-        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id)
+        data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id, leverage=1)
         stg = get_strategy(kwargs.get('strategy'))
         if stg:
             data['stg_ver'] = stg.version
