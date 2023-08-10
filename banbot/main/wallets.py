@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 import ccxt
 
+from banbot.config import AppConfig
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
 from banbot.storage import InOutOrder, ExSymbol
@@ -40,6 +41,7 @@ class WalletsLocal:
     def __init__(self):
         self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
+        self.refill_margin = AppConfig.get().get('refill_margin', True)
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
@@ -77,6 +79,7 @@ class WalletsLocal:
             return 0
         if symbol.find('USD') >= 0 and real_cost < MIN_STAKE_AMOUNT:
             return 0
+        # logger.info(f'cost_ava wallet {lock_key}.{symbol} {wallet.available} - {real_cost}')
         wallet.available -= real_cost
         wallet.pendings[lock_key] = real_cost
         self.update_at = btime.time()
@@ -95,6 +98,7 @@ class WalletsLocal:
         if frozen_amt:
             del wallet.frozens[lock_key]
         # 将冻结的剩余部分归还到available，正负都有可能
+        # logger.info(f'cost_frozen wallet {lock_key}.{symbol} {wallet.available} + {frozen_amt - amount}')
         wallet.available += frozen_amt - amount
         real_cost = amount
         if wallet.available < 0:
@@ -118,14 +122,16 @@ class WalletsLocal:
             return False
         left_pending = pending_amt - src_amount
         del src.pendings[lock_key]
+        # logger.info(f'confirm_pending wallet {lock_key}.{src_key} {src.available} + {left_pending}')
         src.available += left_pending  # 剩余pending归还到available，（正负都可能）
         if to_frozen:
             tgt.frozens[lock_key] = tgt_amount
         else:
             tgt.available += tgt_amount
+            # logger.info(f'confirm_pending tgt wallet {lock_key}.{tgt_key} {tgt.available} + {tgt_amount}')
         return True
 
-    def cancel(self, lock_key: str, symbol: str, from_pending: bool = True):
+    def cancel(self, lock_key: str, symbol: str, add_amount: float = 0, from_pending: bool = True):
         '''
         取消对币种的数量锁定(frozens/pendings)，重新加到available上
         '''
@@ -137,6 +143,8 @@ class WalletsLocal:
         src_amount = src_dic.get(lock_key)
         if not src_amount:
             return
+        # logger.info(f'cancel wallet {lock_key}.{symbol} {wallet.available} + {src_amount} + {add_amount}')
+        src_amount += add_amount
         del src_dic[lock_key]
         wallet.available += src_amount
 
@@ -154,6 +162,8 @@ class WalletsLocal:
             if is_future:
                 # 期货合约，名义价值=保证金*杠杆
                 quote_cost *= sigin['leverage']
+            wallet = self.data[exs.quote_code]
+            sigin['wallet_left'] = wallet.available
             sigin['quote_cost'] = quote_cost
         else:
             # 现货空单，锁定base，允许金额为负
@@ -201,7 +211,12 @@ class WalletsLocal:
         sub_od = od.exit
         if exs.market == 'future':
             # 期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
-            self.cancel(od.lock_key, exs.quote_code, from_pending=False)
+            if od.exit_tag == 'bomb':
+                # 爆仓，将利润置为0-全部占用保证金
+                wallet = self.data.get(exs.quote_code)
+                od.profit = 0 - wallet.frozens[od.lock_key]
+                od.profit_rate = od.profit / (od.enter.price * od.enter.amount)
+            self.cancel(od.lock_key, exs.quote_code, add_amount=od.profit, from_pending=False)
         elif od.short:
             # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
             org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
@@ -231,20 +246,22 @@ class WalletsLocal:
                 continue
             exs = ExSymbol.get_by_id(od.sid)
             exchange = get_exchange(exs.exchange, exs.market)
-            quote_amount = od.enter.filled * self._get_symbol_price(exs.symbol)
-            init_margin = od.enter.filled * od.enter.price / od.leverage  # 初始保证金
+            quote_amount = od.enter.filled * MarketPrice.get(exs.symbol)
             min_margin = exchange.min_margin(quote_amount)  # 要求的最低保证金
             wallet = self.get(exs.quote_code)
-            old_frozen_val = wallet.frozens.get(od.lock_key)
-            frozen_val = init_margin + od.profit
-            if frozen_val < old_frozen_val:
-                # 合约亏损，从available中填充
-                add_val = min(wallet.available, old_frozen_val - frozen_val)
-                frozen_val += add_val
-                wallet.frozens[od.lock_key] = frozen_val
-                wallet.available -= add_val
+            frozen_val = wallet.frozens.get(od.lock_key)
+            if self.refill_margin:
+                # 自动从可用余额中填补保证金
+                init_margin = od.enter.filled * od.enter.price / od.leverage  # 初始保证金
+                if frozen_val + od.profit < init_margin:
+                    # 合约亏损，从available中填充
+                    add_val = min(wallet.available, init_margin - (frozen_val + od.profit))
+                    frozen_val += add_val
+                    wallet.frozens[od.lock_key] = frozen_val
+                    # logger.info(f'update_ods wallet {exs.quote_code} {wallet.available} - {add_val}, profit: {od.profit}')
+                    wallet.available -= add_val
             # 这里分母不用再加钱包余额，上面自动从钱包扣除了。这里再加会导致多个订单重用余额
-            od.margin_ratio = min_margin / frozen_val
+            od.margin_ratio = min_margin / (frozen_val + od.profit)
             if od.margin_ratio >= 0.999999:
                 # 保证金比率100%，爆仓
                 wallet.frozens[od.lock_key] = 0
@@ -272,7 +289,11 @@ class WalletsLocal:
         else:
             data = self.data
         for key, item in data.items():
-            legal_sum += item.total * MarketPrice.get(key)
+            if key.find('USD') >= 0:
+                price = 1
+            else:
+                price = MarketPrice.get(key)
+            legal_sum += item.total * price
         return legal_sum
 
     def __str__(self):

@@ -47,7 +47,7 @@ class Trader:
             logger.info(f'{key}: {items}')
         return pair_tfs
 
-    def on_data_feed(self, pair, timeframe, row: list):
+    def on_data_feed(self, pair: str, timeframe: str, row: list):
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_wramup:
             logger.debug('data_feed %s %s %s', pair, timeframe, row)
@@ -59,7 +59,7 @@ class Trader:
         if bar_expired and is_live_mode and not BotGlobal.is_wramup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         # 更新最新价格
-        MarketPrice.bar_prices[pair] = float(row[ccol])
+        MarketPrice.set_bar_price(pair, float(row[ccol]))
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]

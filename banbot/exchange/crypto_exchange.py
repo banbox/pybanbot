@@ -553,9 +553,9 @@ class CryptoExchange:
     async def update_symbol_prices(self):
         if not BotGlobal.live_mode:
             return
-        for symbol in MarketPrice.prices:
+        for symbol in MarketPrice.pairs():
             od_books = await self.api_async.fetch_order_book(symbol, limit=5)
-            MarketPrice.prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
+            MarketPrice.set_new_price(symbol, od_books['bids'][0][0] + od_books['asks'][0][0])
 
     async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
         return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)

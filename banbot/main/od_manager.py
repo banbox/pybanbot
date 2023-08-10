@@ -212,11 +212,7 @@ class OrderManager(metaclass=SingletonArg):
     def _finish_order(self, od: InOutOrder):
         fee_rate = od.enter.fee + od.exit.fee
         if od.exit.price and od.enter.price:
-            od.profit_rate = float(od.exit.price / od.enter.price) - 1 - fee_rate
-            od.profit = float(od.profit_rate * od.enter.price * od.enter.amount)
-            if od.short:
-                od.profit = -od.profit
-                od.profit_rate = -od.profit_rate
+            od.update_by_price(od.exit.price)
         if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
             limit_fee = self.pair_fee_limits.get(od.symbol)
             if limit_fee is not None and fee_rate > limit_fee * 2:
@@ -230,10 +226,10 @@ class OrderManager(metaclass=SingletonArg):
             self.wallets.update_at = btime.time()
         op_orders = InOutOrder.open_orders()
         # 更新订单利润
+        close_price = float(row[ccol])
         for od in op_orders:
-            od.update_by_bar(row)
+            od.update_by_price(close_price)
         if self.market_type == 'future':
-            close_price = float(row[ccol])
             # 期货合约需要计算更新保证金
             bomb_ods = self.wallets.update_ods(op_orders)
             for od in bomb_ods:
@@ -249,7 +245,8 @@ class OrderManager(metaclass=SingletonArg):
         for od in op_orders:
             if not od.can_close():
                 continue
-            if sigout := strategy.custom_exit(pair_arr, od):
+            sigout = strategy.custom_exit(pair_arr, od)
+            if sigout:
                 result[od.id] = sigout
         return result
 
@@ -358,7 +355,6 @@ class LocalOrderManager(OrderManager):
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         ctx = self.get_context(od)
-        self.wallets.confirm_od_exit(od, exit_price)
         update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
@@ -370,6 +366,8 @@ class LocalOrderManager(OrderManager):
             average=exit_price,
         )
         self._finish_order(od)
+        # 用计算的利润更新钱包
+        self.wallets.confirm_od_exit(od, exit_price)
         self._fire(od, False)
 
     def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:

@@ -263,22 +263,27 @@ class InOutOrder(BaseDbModel):
         else:
             self.exit.update_props(**kwargs)
 
-    def update_by_bar(self, row):
+    def update_by_price(self, price: float):
         '''
         此方法由接口调用，策略中不应该调用此方法。
-        :param row:
+        :param price:
         :return:
         '''
-        if not self.status or self.status == InOutStatus.FullExit:
+        if not self.status or not self.enter.price or not self.enter.filled:
             return
-        if self.enter.price and self.enter.amount:
-            # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
-            fee_rate = self.enter.fee
-            self.profit_rate = float(row[ccol] / self.enter.price) - 1 - fee_rate
-            self.profit = float(self.profit_rate * self.enter.price * self.enter.amount)
-            if self.short:
-                self.profit = -self.profit
-                self.profit_rate = -self.profit_rate
+        fee_rate = self.enter.fee
+        get_amount = self.enter.filled * (1 - fee_rate)  # 入场后的数量
+        if self.status == InOutStatus.FullExit:
+            # 已完全退出
+            get_amount *= (1 - self.exit.fee)  # 出场后的数量
+        # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
+        ent_quote_amount = self.enter.price * self.enter.amount
+        self.profit = get_amount * price - ent_quote_amount
+        if self.short:
+            self.profit = 0 - self.profit
+        if self.leverage:
+            ent_quote_amount /= self.leverage
+        self.profit_rate = self.profit / ent_quote_amount
 
     def _save_to_db(self):
         sess = db.session

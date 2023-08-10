@@ -74,6 +74,7 @@ def dump_orders(task_id: int, out_dir: str):
     for iod in iorders:
         weight = iod.get_info('weight')
         cost_rate = iod.get_info('cost_rate')
+        wallet_left = iod.get_info('wallet_left')
         item = dict(
             sid=iod.sid,
             symbol=iod.symbol,
@@ -82,27 +83,30 @@ def dump_orders(task_id: int, out_dir: str):
             direction='short' if iod.short else 'long',
             weight=weight,
             cost_rate=cost_rate,
+            leverage=iod.leverage,
+            wallet_left=wallet_left,
             enter_at=btime.to_datestr(iod.enter_at),
             enter_tag=iod.enter_tag,
         )
-        total_fee = 0
+        enter_cost = 0
         if iod.enter:
+            enter_cost = iod.enter.price * iod.enter.amount
+            if iod.leverage and iod.leverage > 1:
+                enter_cost /= iod.leverage
             item.update(dict(
                 enter_price=iod.enter.price,
                 enter_amount=iod.enter.amount,
-                enter_cost=iod.enter.price * iod.enter.amount
+                enter_cost=enter_cost
             ))
-            total_fee = iod.enter.fee
         item.update(dict(
             exit_at=btime.to_datestr(iod.exit_at),
             exit_tag=iod.exit_tag
         ))
         if iod.exit:
-            total_fee += iod.exit.fee
             item.update(dict(
                 exit_price=iod.exit.price,
                 exit_amount=iod.exit.amount,
-                exit_got=iod.exit.price * (1 - total_fee) * iod.exit.amount
+                exit_got=enter_cost + iod.profit
             ))
         item.update(dict(profit_rate=iod.profit_rate, profit=iod.profit))
         result.append(item)
