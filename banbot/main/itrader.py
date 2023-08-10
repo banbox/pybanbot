@@ -58,6 +58,8 @@ class Trader:
         is_live_mode = btime.run_mode == RunMode.PROD
         if bar_expired and is_live_mode and not BotGlobal.is_wramup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
+        # 更新最新价格
+        MarketPrice.bar_prices[pair] = float(row[ccol])
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]

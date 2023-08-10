@@ -8,7 +8,22 @@ from typing import *
 from banbot.config.consts import BotState
 
 
-class BotGlobal:
+class _BotStateMeta(type):
+    @property
+    def is_future(cls: Type['BotGlobal']):
+        return cls.market_type == 'future'
+
+    @property
+    def live_mode(cls):
+        from banbot.util import btime
+        return btime.run_mode in btime.LIVE_MODES
+
+
+class BotGlobal(metaclass=_BotStateMeta):
+    '''
+    当前交易机器人的全局状态信息。
+    一个机器人进程，只允许运行一个交易所的一个市场。
+    '''
     state = BotState.STOPPED
 
     stg_hash: Optional[str] = None
@@ -19,3 +34,9 @@ class BotGlobal:
 
     run_tf_secs: List[Tuple[str, int]] = []
     '本次运行指定的时间周期'
+
+    exg_name: str = 'binance'
+    '当前运行的交易所'
+
+    market_type: str = 'spot'
+    '当前运行的市场:spot/future'

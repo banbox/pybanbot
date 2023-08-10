@@ -17,6 +17,8 @@ from banbot.util.misc import *
 from banbot.util.common import logger
 from banbot.config.consts import *
 from banbot.exchange.exchange_utils import *
+from banbot.storage import BotGlobal
+from banbot.main.addons import MarketPrice
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
@@ -214,7 +216,6 @@ class CryptoExchange:
         self.name = self.exg_config['name']
         self.bot_name = config.get('name', 'noname')
         self.market_type = market_type or config.get('market_type')
-        self.quote_prices: Dict[str, float] = dict()
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
@@ -228,7 +229,7 @@ class CryptoExchange:
             os.mkdir(self.market_dir)
 
     async def init(self, pairs: List[str]):
-        await self.update_quote_price()
+        await self.update_symbol_prices()
         await self._check_fee_limits()
         await self.cancel_open_orders(pairs)
 
@@ -549,15 +550,12 @@ class CryptoExchange:
             ohlc_arr = ohlc_arr[:-1]
         return ohlc_arr
 
-    async def update_quote_price(self):
-        if btime.run_mode not in LIVE_MODES:
+    async def update_symbol_prices(self):
+        if not BotGlobal.live_mode:
             return
-        for symbol in self.quote_symbols:
-            if symbol.find('USD') >= 0:
-                self.quote_prices[symbol] = 1
-            else:
-                od_books = await self.api_async.fetch_order_book(f'{symbol}/USDT', limit=5)
-                self.quote_prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
+        for symbol in MarketPrice.prices:
+            od_books = await self.api_async.fetch_order_book(symbol, limit=5)
+            MarketPrice.prices[symbol] = od_books['bids'][0][0] + od_books['asks'][0][0]
 
     async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
         return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)

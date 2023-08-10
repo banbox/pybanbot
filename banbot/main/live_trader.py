@@ -70,8 +70,8 @@ class LiveTrader(Trader):
         await self._loop_tasks([
             # 两小时更新一次货币行情信息
             [self.exchange.load_markets, 7200, 7200],
-            # 定时更新定价货币的价格
-            [self.exchange.update_quote_price, 60, 0],
+            # 定时更新货币的价格
+            [self.exchange.update_symbol_prices, 60, 0],
             # 定时检查整体损失是否触发限制
             [self.order_mgr.check_fatal_stop, 300, 300]
         ])

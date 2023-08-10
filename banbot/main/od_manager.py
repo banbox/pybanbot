@@ -45,7 +45,6 @@ class OrderManager(metaclass=SingletonArg):
         self.name = data_hd.exg_name
         self.wallets = wallets
         self.data_mgr = data_hd
-        self.prices = dict()  # 所有产品对法币的价格
         self.callback = callback
         self.fatal_stop = dict()
         self.last_ts = btime.time()  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
@@ -233,14 +232,8 @@ class OrderManager(metaclass=SingletonArg):
         # 更新订单利润
         for od in op_orders:
             od.update_by_bar(row)
-        # 更新价格
-        exs, timeframe = get_cur_symbol()
-        close_price = float(row[ccol])
-        if exs.quote_code.find('USD') >= 0:
-            self.prices[exs.base_code] = close_price
-            if len(self.prices) != len(self.wallets.prices):
-                self.wallets.prices = self.prices
         if self.market_type == 'future':
+            close_price = float(row[ccol])
             # 期货合约需要计算更新保证金
             bomb_ods = self.wallets.update_ods(op_orders)
             for od in bomb_ods:
@@ -288,11 +281,6 @@ class OrderManager(metaclass=SingletonArg):
         fin_loss = abs(fin_loss)
         return fin_loss / (fin_loss + self.get_legal_value())
 
-    def _symbol_price(self, symbol: str):
-        if symbol not in self.prices:
-            raise RuntimeError(f'{symbol} price to USD unknown')
-        return self.prices[symbol]
-
     def _get_legal_value(self, symbol: str):
         if symbol not in self.wallets.data:
             return 0
@@ -301,7 +289,7 @@ class OrderManager(metaclass=SingletonArg):
             return amount
         elif not amount:
             return 0
-        return amount * self._symbol_price(symbol)
+        return amount * MarketPrice.get(symbol)
 
     def get_legal_value(self, symbol: str = None):
         '''
@@ -333,8 +321,8 @@ class LocalOrderManager(OrderManager):
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
             affect_num = self.fill_pending_orders(exs.symbol, timeframe, row)
-            # if affect_num:
-            #     logger.info(f"wallets: {self.wallets}")
+            if affect_num:
+                logger.info(f"wallets: {self.wallets}")
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)

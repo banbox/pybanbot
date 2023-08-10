@@ -172,6 +172,10 @@ class AppConfig(metaclass=Singleton):
         from banbot.util.common import set_log_notify
         if allow_exc_notify(config):
             set_log_notify(logger)
+        # 更新BotGlobal
+        from banbot.storage import BotGlobal
+        BotGlobal.exg_name = config['exchange']['name']
+        BotGlobal.market_type = config['market_type']
         return config
 
     @classmethod

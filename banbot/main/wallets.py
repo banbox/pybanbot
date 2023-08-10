@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/29
 
-from numbers import Number
 from typing import *
 from dataclasses import dataclass, field
 
@@ -13,6 +12,7 @@ import ccxt
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
 from banbot.storage import InOutOrder, ExSymbol
+from banbot.main.addons import *
 from banbot.util import btime
 from banbot.util.common import logger
 
@@ -40,7 +40,6 @@ class WalletsLocal:
     def __init__(self):
         self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
-        self.prices = dict()  # 保存各个币相对USD的价格，仅用于回测，从od_manager更新
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
@@ -258,21 +257,13 @@ class WalletsLocal:
             self.data[symbol] = ItemWallet()
         return self.data[symbol]
 
-    def _get_symbol_price(self, symbol: str):
-        if symbol in self.prices:
-            return self.prices[symbol]
-        if symbol.find('USD') >= 0:
-            return 1
-        raise ValueError(f'unsupport quote symbol: {symbol}')
-
     def get_amount_by_legal(self, symbol: str, legal_cost: float):
         '''
         根据花费的USDT计算需要的数量，并返回可用数量
         :param symbol: 产品，不是交易对。如：USDT
         :param legal_cost: 花费法币金额（一般是USDT）
         '''
-        price = self._get_symbol_price(symbol)
-        return legal_cost / price
+        return legal_cost / MarketPrice.get(symbol)
 
     def total_legal(self, symbols: Iterable[str] = None):
         legal_sum = 0
@@ -281,7 +272,7 @@ class WalletsLocal:
         else:
             data = self.data
         for key, item in data.items():
-            legal_sum += item.total * self._get_symbol_price(key)
+            legal_sum += item.total * MarketPrice.get(key)
         return legal_sum
 
     def __str__(self):
@@ -300,11 +291,6 @@ class CryptoWallet(WalletsLocal):
         self.exchange = exchange
         self.config = config
         self._symbols = set()
-
-    def _get_symbol_price(self, symbol: str):
-        if symbol not in self.exchange.quote_prices:
-            raise ValueError(f'unsupport quote symbol: {symbol}')
-        return self.exchange.quote_prices[symbol]
 
     def _update_local(self, balances: dict):
         message = []
