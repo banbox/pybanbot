@@ -167,6 +167,11 @@ class AppConfig(metaclass=Singleton):
                 raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
                                    'and exec `select pg_reload_conf();` to apply; then re-download all data')
             logger.info(f'Connect DataBase Success')
+        # 检查是否启用了异常通知，如启用则设置
+        from banbot.worker.exc_notify import allow_exc_notify
+        from banbot.util.common import set_log_notify
+        if allow_exc_notify(config):
+            set_log_notify(logger)
         return config
 
     @classmethod

@@ -228,10 +228,13 @@ def get_logger(level=logging.INFO):
     error_handler.setFormatter(formatter)
     log.addHandler(error_handler)
 
+    return log
+
+
+def set_log_notify(log: logging.Logger):
     notify_handler = NotifyHandler(logging.ERROR)
     notify_handler.setFormatter(logging.Formatter(fmt='%(message)s'))
     log.addHandler(notify_handler)
-    return log
 
 
 logging.setLogRecordFactory(StrFormatLogRecord)

@@ -6,8 +6,16 @@
 import re
 import asyncio
 import datetime
+from banbot.config import Config
 _re_err_stack = re.compile(r'^\s+File\s*"([^"]+)"')
-_allow_exc_notify = None
+
+
+def allow_exc_notify(config: Config):
+    '''
+    是否启用了异常通知
+    '''
+    webhook = config.get('webhook')
+    return bool(webhook and webhook.get('exception'))
 
 
 def try_send_exc_notify(cache_key: str, content: str):
@@ -15,14 +23,6 @@ def try_send_exc_notify(cache_key: str, content: str):
     尝试发送异常通知给管理员。
     如未限流，则立刻发送。如被限流，则记录数量
     '''
-    global _allow_exc_notify
-    if _allow_exc_notify is None:
-        from banbot.config import AppConfig
-        webhook = AppConfig.get().get('webhook')
-        _allow_exc_notify = bool(webhook and webhook.get('exception'))
-    if not _allow_exc_notify:
-        # 当前环境未启用异常通知，退出
-        return
     from banbot.util.redis_helper import SyncRedis
     redis = SyncRedis()
     # 对异常消息进行限流
@@ -72,11 +72,13 @@ def send_exc_notify_after(secs: int, key: str, desp: str):
     :param desp:
     :return:
     '''
-    from banbot.worker.sched import get_sched
+    from banbot.worker.sched import get_sched, STATE_STOPPED
     sched = get_sched()
     start_at = datetime.datetime.now() + datetime.timedelta(seconds=secs)
     args = [key, desp]
     sched.add_job(_send_exc_notify, 'date', run_date=start_at, args=args)
+    if sched.state == STATE_STOPPED:
+        sched.start()
 
 
 def _send_exc_notify(key: str, desp: str):

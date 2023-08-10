@@ -11,6 +11,7 @@
 '''
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.redis import RedisJobStore
+from apscheduler.schedulers.base import STATE_STOPPED  # noqa
 global _sched
 _sched = None
 
@@ -34,6 +35,10 @@ def get_sched():
 
 
 def start_scheduler():
+    '''
+    启动定时轮训，爬虫，机器人，web进程都可使用，不同进程可注册不同的任务。
+    默认注册的：异常通知
+    '''
     sched = get_sched()
     # sched.add_job(send_timeout_tips, 'interval', seconds=5)
     sched.start()
