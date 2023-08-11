@@ -3,8 +3,9 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
+import random
 import sys
-
+from banbot.storage import Overlay
 from banbot.strategy.common import *
 
 
@@ -139,6 +140,9 @@ class BaseStrategy:
                 continue
         self.orders.extend([od for od in enters if od.strategy == cur_name])
 
+    def on_bot_stop(self):
+        pass
+
     @property
     def name(self):
         return self.__class__.__name__
@@ -155,3 +159,47 @@ class BaseStrategy:
         for tf, score in tfscores:
             if score >= min_score:
                 return tf
+
+    @classmethod
+    def paint(cls, name: str, points: List[OlayPoint], paneId: str = 'candle_pane', mode: str = 'normal',
+              lock: bool = True, groupId='ban_stg', styles: dict = None, visible: bool = True,
+              zLevel: int = 1000, extendData=None, ):
+        '''
+        绘制内容到K线图上
+        :param name: 覆盖物名称: arc, circle, line, polygon, rect, text, rectText, segment, simpleTag, ...
+        :param points: 定位覆盖物的点
+        :param paneId: 所属子图，默认candle_pane是主K线图
+        :param mode: `normal`，`weak_magnet`，`strong_magnet`
+        :param lock: 是否锁定，不触发事件，默认锁定
+        :param groupId: 分组ID
+        :param styles: 样式配置字典，参考：https://klinecharts.com/guide/styles.html 中 "overlay:"，会自动包装name属性
+        :param visible: 是否可见，默认true
+        :param zLevel: 显示层级，越大显示越上面
+        :param extendData: 扩展数据
+        '''
+        exs, timeframe = get_cur_symbol()
+        if styles:
+            styles = dict(name=styles)
+        olay_data = dict(
+            id=f'{cls.__name__}_{cls.version}_{name}_{bar_num.get()}_{random.randrange(100, 999)}',
+            name=name,
+            points=[p.dict() for p in points],
+            paneId=paneId,
+            mode=mode,
+            lock=lock,
+            groupId=groupId,
+            styles=styles,
+            visible=visible,
+            zLevel=zLevel,
+            extendData=extendData
+        )
+        Overlay.create(0, exs.id, timeframe, olay_data)
+
+    @classmethod
+    def draw_circle(cls, value: float, radius: int, paneId: str = 'candle_pane', mode: str = 'normal',
+              lock: bool = True, groupId='ban_stg', styles: dict = None, visible: bool = True,
+              zLevel: int = 1000, extendData=None, ):
+        bar_start, bar_stop = bar_time.get()
+        end_ms = bar_start + radius * (bar_stop - bar_start)
+        points = [OlayPoint(bar_start, value), OlayPoint(end_ms, value)]
+        cls.paint('circle', points, paneId, mode, lock, groupId, styles, visible, zLevel, extendData)

@@ -4,6 +4,26 @@
 # Author: anyongjin
 # Date  : 2023/3/27
 from banbot.storage.orders import *
+from dataclasses import dataclass
+
+
+@dataclass
+class OlayPoint(dict):
+    '''
+    覆盖物的点信息。
+    '''
+    timestamp: int
+    '毫秒时间戳'
+    value: float
+    '对应y轴的值'
+    dataIndex: int = None
+    'bar索引，默认为空'
+
+    def dict(self):
+        res = dict(timestamp=self.timestamp, value=self.value)
+        if self.dataIndex:
+            res['dataIndex'] = self.dataIndex
+        return res
 
 
 def trail_info(arr: np.ndarray, elp_num: int, enter_price: float):

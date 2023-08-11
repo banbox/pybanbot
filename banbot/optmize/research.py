@@ -27,10 +27,11 @@ def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start_ms: i
     range_str = f'{ohlcvs[0][0]} {ohlcvs[-1][0]}' if ohlcvs else 'empty'
     logger.info(f'get {len(ohlcvs)} bars range: {range_str}')
     config = AppConfig.get()
-    stg = get_strategy(strategy)(config)
     pair_tf = f'{exs.exchange}_{exs.market}_{exs.symbol}_{timeframe}'
     with TempContext(pair_tf):
         td_signals = []
+        stg = get_strategy(strategy)(config)
+        Overlay.delete(0, exs.id, timeframe, fetch_start, end_ms)
         create_args = dict(symbol_id=exs.id, timeframe=timeframe, strategy=strategy)
         for i in range(len(ohlcvs)):
             ohlcv_arr = append_new_bar(ohlcvs[i], tf_msecs // 1000)
@@ -40,6 +41,7 @@ def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start_ms: i
                 continue
             for tag, price in stg.bar_signals.items():
                 td_signals.append(TdSignal(**create_args, action=tag, bar_ms=bar_ms, create_at=bar_ms, price=price))
+        stg.on_bot_stop()
         sess.add_all(td_signals)
         logger.info(f'insert {len(td_signals)} signals')
     sess.commit()
@@ -49,9 +51,9 @@ def _test_strategy():
     sess = db.session
     fts = [ExSymbol.exchange == 'binance', ExSymbol.market == 'future', ExSymbol.symbol == 'BCH/USDT:USDT']
     exs: ExSymbol = sess.query(ExSymbol).filter(*fts).first()
-    start_ms, end_ms = 1690415400000, btime.utcstamp()
+    start_ms, end_ms = 1690866160016, btime.utcstamp()
     logger.info(f'start test symbol: {exs}')
-    calc_strategy_sigs(exs, '5m', 'DigoChain', start_ms, end_ms)
+    calc_strategy_sigs(exs, '5m', 'Ban1', start_ms, end_ms)
 
 
 if __name__ == '__main__':
