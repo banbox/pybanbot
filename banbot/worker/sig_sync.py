@@ -48,10 +48,7 @@ async def ensure_sig_update(exs: ExSymbol, timeframe: str, stgy_ver: str, end_ms
         # 加载策略版本不一致，退出
         return False, None
     from banbot.data.wacther import RedisChannel
-    time_start = time.monotonic()
-    ret_data = await RedisChannel.call_remote(f'calcsig', f'{ctx_key}_{end_ms}')
-    cost_ts = time.monotonic() - time_start
-    logger.info(f'cost {cost_ts} s for {ctx_key}, return: {ret_data}')
+    await RedisChannel.call('spider', 'calcsig', f'{ctx_key}_{end_ms}', raise_dead=False)
     return True, stg_cls
 
 

@@ -97,13 +97,19 @@ class RedisChannel:
                 break
 
     @classmethod
-    async def call_remote(cls, action: str, data, timeout: int = 10):
+    async def call(cls, remote: str, action: str, data, timeout: int = 10, raise_dead: bool = True):
         '''
         调用远程过程调用。通过Redis的SubPub机制。
         发送一次消息，监听一次，收到返回消息后取消监听
         '''
+        import time
         if not cls._obj:
             raise ValueError('RedisChannel not start')
+        time_start = time.monotonic()
+        if not await cls._obj.redis.get(remote):
+            if raise_dead:
+                raise ValueError(f'{remote} is dead, call {action}: {data} fail')
+            return
         future = asyncio.get_running_loop().create_future()
 
         def call_back(msg_key: str, msg_data):
@@ -114,12 +120,15 @@ class RedisChannel:
         await cls.subscribe(reply_key, call_back)
         await cls._obj.conn.subscribe(reply_key)
         await cls._obj.redis.publish(action, data)
+        ret_data = None
         try:
             ret_key, ret_data = await asyncio.wait_for(future, timeout=timeout)
             cls.unsubscribe(reply_key)
-            return ret_data
         except asyncio.TimeoutError:
             logger.warning(f'wait redis channel complete timeout: {action} {data} {timeout}')
+        cost_ts = time.monotonic() - time_start
+        logger.info(f'cost {cost_ts} s for {data}, return: {ret_data}')
+        return ret_data
 
     @classmethod
     async def run(cls):
