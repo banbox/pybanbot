@@ -158,6 +158,13 @@ def get_strategy(name: str) -> Optional[Type[BaseStrategy]]:
     '''
     if not name:
         return None
+    return get_strategy_map().get(name)
+
+
+def get_strategy_map() -> Dict[str, Type[BaseStrategy]]:
+    '''
+    获取所有扫描到的策略名称
+    '''
     global strategy_map
     if strategy_map is None:
         from banbot.config import AppConfig
@@ -166,4 +173,4 @@ def get_strategy(name: str) -> Optional[Type[BaseStrategy]]:
         strategy_list = StrategyResolver.load_object_list(config, extra_dirs)
         strategy_map = {item.__name__: item for item in strategy_list}
         logger.info('found strategy: %s', list(strategy_map.keys()))
-    return strategy_map.get(name)
+    return strategy_map

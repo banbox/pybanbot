@@ -16,6 +16,8 @@ class BaseStrategy:
     '''
     run_timeframes = []
     '指定运行周期，从里面计算最小符合分数的周期，不提供尝试使用config.json中run_timeframes或Kline.agg_list'
+    paintFields: Dict[str, str] = dict()
+    '要绘制显示到K线图的字段列表'
     warmup_num = 600
     min_tfscore = 0.8
     nofee_tfscore = 0.6
