@@ -122,7 +122,7 @@ class BaseStrategy:
     def on_exit(self, arr: np.ndarray) -> Optional[dict]:
         '''
         检查是否有退出信号。
-        :return: Order的属性，额外：tag, for_short
+        :return: Order的属性，额外：tag, short
         '''
         pass
 

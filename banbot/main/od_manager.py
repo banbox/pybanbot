@@ -141,7 +141,7 @@ class OrderManager(metaclass=SingletonArg):
             logger.debug('pair %s enter not allowed', exs.symbol)
             return
         tag = sigin.pop('tag')
-        lock_key = sigin.get('lock_key') or tag
+        lock_key = sigin.get('lock_key') or f'{tag}_{ctx[bar_num]}'
         if lock_od := InOutOrder.get_order(exs.symbol, strategy, lock_key):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
@@ -150,7 +150,8 @@ class OrderManager(metaclass=SingletonArg):
             return
         if 'leverage' not in sigin and self.market_type == 'future':
             sigin['leverage'] = self.leverage
-        legal_cost = self.wallets.enter_od(exs, sigin, lock_key, self.last_ts)
+        od_key = f'{exs.symbol}_{strategy}_{lock_key}'
+        legal_cost = self.wallets.enter_od(exs, sigin, od_key, self.last_ts)
         if not legal_cost:
             # 余额不足
             return
@@ -159,6 +160,7 @@ class OrderManager(metaclass=SingletonArg):
             sid=exs.id,
             symbol=exs.symbol,
             timeframe=timeframe,
+            lock_key=lock_key,
             enter_price=price,
             enter_tag=tag,
             enter_at=btime.time_ms(),
@@ -179,9 +181,9 @@ class OrderManager(metaclass=SingletonArg):
         result = []
         if od_dir == 'both':
             pass
-        elif od_dir == 'long' or sigout.get('for_short') == False:
+        elif od_dir == 'long' or sigout.get('short') == False:
             order_list = [od for od in order_list if not od.short]
-        elif od_dir == 'short' or sigout.get('for_short'):
+        elif od_dir == 'short' or sigout.get('short'):
             order_list = [od for od in order_list if od.short]
         elif self.market_type != 'spot':
             raise ValueError(f'`od_dir` is required in market: {self.market_type}')
@@ -318,8 +320,8 @@ class LocalOrderManager(OrderManager):
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
             affect_num = self.fill_pending_orders(exs.symbol, timeframe, row)
-            if affect_num:
-                logger.info(f"wallets: {self.wallets}")
+            # if affect_num:
+            #     logger.info(f"wallets: {self.wallets}")
 
     def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
         enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)

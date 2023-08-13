@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 import json
+import random
 
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
@@ -195,7 +196,7 @@ class InOutOrder(BaseDbModel):
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
         if not kwargs.get('lock_key'):
-            kwargs['lock_key'] = kwargs['enter_tag']
+            kwargs['lock_key'] = f"{kwargs['enter_tag']}_{random.randrange(100, 999)}"
         super(InOutOrder, self).__init__(**kwargs)
         live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:

@@ -72,6 +72,9 @@ class BackTest(Trader):
             sync_timeframes()
             await ExSymbol.fill_list_dts()
             await self.pair_mgr.refresh_pairlist()
+            if not self.pair_mgr.symbols:
+                raise ValueError('no pairs generate from PairManager')
+            logger.info(f'backtest for {len(self.pair_mgr.symbols)} symbols: {self.pair_mgr.symbols[:5]}...')
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
             self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id

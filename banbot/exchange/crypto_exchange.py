@@ -29,6 +29,9 @@ exg_fut_map: Dict[str, str] = dict(
     kucoin='kucoinfutures',
     poloniex='poloniexfutures'
 )
+exg_mtype_map = dict(
+    future='contract'
+)
 
 
 def loop_forever(func):
@@ -216,6 +219,7 @@ class CryptoExchange:
         self.name = self.exg_config['name']
         self.bot_name = config.get('name', 'noname')
         self.market_type = market_type or config.get('market_type')
+        self.mtype = exg_mtype_map.get(self.market_type) or self.market_type
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
@@ -309,7 +313,7 @@ class CryptoExchange:
             market.get('quote') is not None
             and market.get('base') is not None
             and (self.precisionMode != TICK_SIZE or market.get('precision', {}).get('price', 0) > 1e-11)
-            and bool(market.get(self.market_type))
+            and bool(market.get(self.mtype))
         )
 
     def market_is_future(self, market: Dict[str, Any]) -> bool:
@@ -336,7 +340,6 @@ class CryptoExchange:
                 trade_modes = set(trade_modes)
             spot_only = 'spot' in trade_modes
             margin_only = 'margin' in trade_modes
-            futures_only = 'future' in trade_modes
 
         def ia_valid(v: dict):
             if base_currs and v['base'] not in base_currs:
@@ -350,8 +353,6 @@ class CryptoExchange:
             if spot_only and not v.get('spot'):
                 return False
             if margin_only and not v.get('margin'):
-                return False
-            if futures_only and not self.market_is_future(v):
                 return False
             return True
 
@@ -408,7 +409,7 @@ class CryptoExchange:
         return float(self.api_async.fee_to_precision(symbol, fee))
 
     def min_margin(self, quote_amount: float, coin_base: bool = False):
-        if self.market_type != 'future':
+        if self.mtype != 'contract':
             return 0
         if self.name == 'binance':
             # https://www.binance.com/zh-CN/futures/trading-rules/perpetual/leverage-margin
@@ -453,7 +454,7 @@ class CryptoExchange:
         if params is None:
             params = {}
         # 币安期货返回的ohlcv包含未完成的bar，指定时间截取掉
-        cut_end = self.name == 'binance' and self.market_type == 'future'
+        cut_end = self.name == 'binance' and self.mtype == 'contract'
         if cut_end:
             tf_msecs = tf_to_secs(timeframe) * 1000
             cur_time = btime.utcstamp()

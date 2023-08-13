@@ -293,7 +293,8 @@ class StaBBANDS(BaseInd):
 class CrossTrace:
     def __init__(self):
         self.prev_valid = None
-        self.cross_tag = 0
+        self.state = 0
+        self.hist = []
 
     def __call__(self, *args, **kwargs):
         '''
@@ -307,17 +308,18 @@ class CrossTrace:
             cur_diff = args[0]
         else:
             raise ValueError(f'wrong args len: {len(args)}, expect 1 or 2')
-        self.cross_tag = 0
+        self.state = 0
         if not self.prev_valid or not np.isfinite(self.prev_valid):
             self.prev_valid = cur_diff
-            return self.cross_tag
         elif not cur_diff:
-            return self.cross_tag
-        factor = self.prev_valid * cur_diff
-        if factor < 0:
-            self.prev_valid = cur_diff
-            self.cross_tag = 1 if cur_diff > 0 else -1
-        return self.cross_tag
+            pass
+        else:
+            factor = self.prev_valid * cur_diff
+            if factor < 0:
+                self.prev_valid = cur_diff
+                self.state = 1 if cur_diff > 0 else -1
+                self.hist.append((self.state, bar_num.get()))
+        return self.state
 
 
 def _make_sub_malong():
