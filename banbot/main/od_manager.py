@@ -141,7 +141,9 @@ class OrderManager(metaclass=SingletonArg):
             logger.debug('pair %s enter not allowed', exs.symbol)
             return
         tag = sigin.pop('tag')
-        lock_key = sigin.get('lock_key') or f'{tag}_{ctx[bar_num]}'
+        if 'lock_key' not in sigin:
+            sigin['lock_key'] = f'{tag}_{ctx[bar_num]}'
+        lock_key = sigin['lock_key']
         if lock_od := InOutOrder.get_order(exs.symbol, strategy, lock_key):
             # 同一交易对，同一策略，同一信号，只允许一个订单
             logger.debug('order lock, enter forbid: %s', lock_od)
@@ -160,7 +162,6 @@ class OrderManager(metaclass=SingletonArg):
             sid=exs.id,
             symbol=exs.symbol,
             timeframe=timeframe,
-            lock_key=lock_key,
             enter_price=price,
             enter_tag=tag,
             enter_at=btime.time_ms(),

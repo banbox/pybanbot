@@ -22,11 +22,12 @@ class Overlay(BaseDbModel):
     data = Column(sa.Text)
 
     @classmethod
-    def get(cls, user_id: int, sid: int, start_ms: int, end_ms: int) -> List[dict]:
+    def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int) -> List[dict]:
         import orjson
         sess = db.session
         sel_cols = [Overlay.id, Overlay.data]
-        fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.start_ms >= start_ms, Overlay.stop_ms <= end_ms]
+        fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
+               Overlay.start_ms >= start_ms, Overlay.stop_ms <= end_ms]
         overlays = list(sess.query(*sel_cols).filter(*fts).order_by(Overlay.id).all())
         result = []
         for row in overlays:
