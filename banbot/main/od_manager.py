@@ -141,18 +141,10 @@ class OrderManager(metaclass=SingletonArg):
             logger.debug('pair %s enter not allowed', exs.symbol)
             return
         tag = sigin.pop('tag')
-        if 'lock_key' not in sigin:
-            sigin['lock_key'] = f'{tag}_{ctx[bar_num]}'
-        lock_key = sigin['lock_key']
-        if lock_od := InOutOrder.get_order(exs.symbol, strategy, lock_key):
-            # 同一交易对，同一策略，同一信号，只允许一个订单
-            logger.debug('order lock, enter forbid: %s', lock_od)
-            if random.random() < 0.2 and lock_od.elp_num_exit > 5:
-                logger.error('lock order exit timeout: %s, exit bar: %d', lock_od, lock_od.elp_num_exit)
-            return
         if 'leverage' not in sigin and self.market_type == 'future':
             sigin['leverage'] = self.leverage
-        od_key = f'{exs.symbol}_{strategy}_{lock_key}'
+        ent_side = 'sell' if sigin.get('short') else 'buy'
+        od_key = f'{exs.symbol}|{strategy}|{ent_side}|{tag}|{btime.time_ms()}'
         legal_cost = self.wallets.enter_od(exs, sigin, od_key, self.last_ts)
         if not legal_cost:
             # 余额不足

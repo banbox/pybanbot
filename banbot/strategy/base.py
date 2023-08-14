@@ -3,10 +3,10 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-import random
 import sys
 from banbot.storage import Overlay
 from banbot.strategy.common import *
+from banbot.main.wallets import WalletsLocal
 
 
 class BaseStrategy:
@@ -144,6 +144,14 @@ class BaseStrategy:
 
     def on_bot_stop(self):
         pass
+
+    def position(self, side: str = None, enter_tag: str = None):
+        '''
+        获取仓位大小，返回基于基准金额的倍数。
+        '''
+        symbol = symbol_tf.get().split('_')[2]
+        legal_cost = WalletsLocal.obj.position(symbol, self.name, side, enter_tag)
+        return legal_cost / self.base_cost
 
     @property
     def name(self):

@@ -194,3 +194,9 @@ def get_symbol_market(symbol_short: str) -> Tuple[str, str]:
             # 非永续合约，带上后缀
             symbol += '-' + suffix
     return symbol, market
+
+
+def split_symbol(symbol: str):
+    base_s, quote_s = symbol.split('/')
+    quote_s = quote_s.split(':')[0]
+    return base_s, quote_s

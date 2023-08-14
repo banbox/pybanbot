@@ -79,7 +79,6 @@ def dump_orders(task_id: int, out_dir: str):
             sid=iod.sid,
             symbol=iod.symbol,
             timeframe=iod.timeframe,
-            lock_key=iod.lock_key,
             direction='short' if iod.short else 'long',
             weight=weight,
             cost_rate=cost_rate,

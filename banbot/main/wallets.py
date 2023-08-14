@@ -12,7 +12,7 @@ import ccxt
 from banbot.config import AppConfig
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
-from banbot.storage import InOutOrder, ExSymbol
+from banbot.storage import InOutOrder, ExSymbol, split_symbol
 from banbot.main.addons import *
 from banbot.util import btime
 from banbot.util.common import logger
@@ -38,7 +38,10 @@ class ItemWallet:
 
 
 class WalletsLocal:
+    obj: 'WalletsLocal' = None
+
     def __init__(self):
+        WalletsLocal.obj = self
         self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
         self.refill_margin = AppConfig.get().get('refill_margin', True)
@@ -242,7 +245,7 @@ class WalletsLocal:
         from banbot.exchange.crypto_exchange import get_exchange
         bomb_ods = []
         for od in od_list:
-            if not od.enter.filled:
+            if not od.enter.filled or od.exit_tag == 'bomb':
                 continue
             exs = ExSymbol.get_by_id(od.sid)
             exchange = get_exchange(exs.exchange, exs.market)
@@ -251,7 +254,7 @@ class WalletsLocal:
             wallet = self.get(exs.quote_code)
             frozen_val = wallet.frozens.get(od.key)
             if not frozen_val:
-                logger.error(f'no frozen_val for {od.key}  {wallet}')
+                logger.error(f'no frozen_val for {od.key} {od.status} {wallet}')
                 continue
             if self.refill_margin:
                 # 自动从可用余额中填补保证金
@@ -269,6 +272,7 @@ class WalletsLocal:
                 # 保证金比率100%，爆仓
                 wallet.frozens[od.key] = 0
                 bomb_ods.append(od)
+                logger.info(f'bamb: {od.key}')
         return bomb_ods
 
     def get(self, symbol: str, after_ts: float = 0):
@@ -298,6 +302,37 @@ class WalletsLocal:
                 price = MarketPrice.get(key)
             legal_sum += item.total * price
         return legal_sum
+
+    def _position(self, wallet: Optional[ItemWallet], prefix: str, side: str = None, enter_tag: str = None):
+        if not wallet:
+            return 0
+        amt_list = list(wallet.pendings.items()) + list(wallet.frozens.items())
+        total_amount = 0
+        for key, amount in amt_list:
+            if key.startswith(prefix):
+                continue
+            ent_side, tag, ent_at = key.split(':')[2:]
+            if side and side != ent_side:
+                continue
+            if enter_tag and enter_tag != tag:
+                continue
+            total_amount += amount
+        return total_amount
+
+    def position(self, symbol: str, strategy: str, side: str = None, enter_tag: str = None):
+        '''
+        获取指定条件的仓位
+        '''
+        prefix = f'{symbol}|{strategy}|'
+        base_s, quote_s = split_symbol(symbol)
+        base_amount = self._position(self.data.get(base_s), prefix, side, enter_tag)
+        quote_amount = self._position(self.data.get(quote_s), prefix, side, enter_tag)
+        legal_cost = 0
+        if base_amount:
+            legal_cost += base_amount * MarketPrice.get(symbol)
+        if quote_amount:
+            legal_cost += quote_amount * MarketPrice.get(quote_s)
+        return legal_cost
 
     def __str__(self):
         from io import StringIO

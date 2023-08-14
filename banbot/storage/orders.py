@@ -28,41 +28,6 @@ class InOutStatus:
     FullExit = 4
 
 
-class TradeLock:
-    _locks: Dict[str, Any] = dict()
-
-    @classmethod
-    def reset_locks(cls):
-        cls._locks = dict()
-
-    @classmethod
-    def _get_keys(cls, key: str, side: str = '*') -> Set[str]:
-        if side != '*':
-            if side not in {'buy', 'sell'}:
-                raise ValueError(f'invalid trade lock side: {side}')
-            return {f'{key}_{side}'}
-        return {key + '_buy', key + '_sell'}
-
-    @classmethod
-    def lock(cls, key: str, val: Any, side: str = '*'):
-        for lk_key in cls._get_keys(key, side):
-            cls._locks[lk_key] = val
-
-    @classmethod
-    def get_lock(cls, key: str, side: str = '*'):
-        for lk_key in cls._get_keys(key, side):
-            lk_val = cls._locks.get(lk_key)
-            if lk_val is not None:
-                return lk_val
-
-    @classmethod
-    def unlock(cls, key: str, side: str = '*'):
-        for lk_key in cls._get_keys(key, side):
-            if lk_key not in cls._locks:
-                continue
-            cls._locks.pop(lk_key)
-
-
 class Order(BaseDbModel):
     '''
     交易所订单；一次买入（卖出）就会产生一个订单
@@ -149,7 +114,6 @@ class InOutOrder(BaseDbModel):
     short = Column(sa.Boolean)
     '是否是做空单'
     status = Column(sa.SMALLINT, default=InOutStatus.Init)
-    lock_key = Column(sa.String(30))
     '交易加锁的键，阻止相同键同时下单'
     enter_tag = Column(sa.String(30))
     init_price = Column(sa.Float)
@@ -195,8 +159,6 @@ class InOutOrder(BaseDbModel):
         if stg:
             data['stg_ver'] = stg.version
         kwargs = {**data, **kwargs}
-        if not kwargs.get('lock_key'):
-            kwargs['lock_key'] = f"{kwargs['enter_tag']}_{random.randrange(100, 999)}"
         super(InOutOrder, self).__init__(**kwargs)
         live_mode = btime.run_mode in btime.LIVE_MODES
         if not live_mode:
@@ -214,7 +176,11 @@ class InOutOrder(BaseDbModel):
 
     @property
     def key(self):
-        return f'{self.symbol}_{self.strategy}_{self.lock_key}'
+        '''
+        获取一个唯一标识某个订单的字符串
+        币种:策略:方向:入场tag:入场时间戳
+        '''
+        return f'{self.symbol}|{self.strategy}|{self.enter.side}|{self.enter_tag}|{self.enter_at}'
 
     def _elp_num_offset(self, time_ms: int):
         exs = ExSymbol.get_by_id(self.sid)
@@ -292,7 +258,6 @@ class InOutOrder(BaseDbModel):
             if not self.id:
                 sess.add(self)
                 sess.flush()
-            TradeLock.lock(self.key, self.id)
             if self.enter and not self.enter.id:
                 if not self.enter.inout_id:
                     self.enter.inout_id = self.id
@@ -301,16 +266,12 @@ class InOutOrder(BaseDbModel):
                 if not self.exit.inout_id:
                     self.exit.inout_id = self.id
                 sess.add(self.exit)
-        else:
-            TradeLock.unlock(self.key)
         sess.commit()
 
     def _save_to_mem(self):
         if self.status < InOutStatus.FullExit:
-            TradeLock.lock(self.key, self.id)
             self._open_ods[self.id] = self
         else:
-            TradeLock.unlock(self.key)
             if self.id in self._open_ods:
                 self._open_ods.pop(self.id)
             self._his_ods.append(self)
@@ -362,14 +323,6 @@ class InOutOrder(BaseDbModel):
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:
         return cls.get_orders(status='his')
-
-    @classmethod
-    def get_order(cls, symbol: str, strategy: str, lock_key: str):
-        key = f'{symbol}_{strategy}_{lock_key}'
-        lock_id = TradeLock.get_lock(key)
-        if not lock_id:
-            return
-        return cls.get(lock_id)
 
     @classmethod
     def get(cls, od_id: int):
