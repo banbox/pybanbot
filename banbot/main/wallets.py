@@ -364,7 +364,7 @@ class CryptoWallet(WalletsLocal):
 
     async def init(self, pairs: List[str]):
         for p in pairs:
-            self._symbols.update(p.split('/'))
+            self._symbols.update(split_symbol(p))
         balances = await self.exchange.fetch_balance()
         self.update_at = btime.time()
         logger.info('load balances: %s', self._update_local(balances))

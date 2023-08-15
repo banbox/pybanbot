@@ -25,6 +25,7 @@ class DataFeeder(Watcher):
         self.states: List[PairTFCache] = []
         self.auto_prefire = auto_prefire
         self.sub_tflist(*tf_warms.keys())
+        self.last_ts: int = 0  # 外部provider用作缓存
 
     def sub_tflist(self, *timeframes):
         '''
@@ -74,6 +75,11 @@ class DataFeeder(Watcher):
         return max_end_ms
 
     def on_new_data(self, details: List, fetch_intv: int) -> bool:
+        '''
+        有新完成的子周期蜡烛数据，尝试更新
+        :param details: 蜡烛数据，必须是已完成的
+        :param fetch_intv: 蜡烛数据的间隔
+        '''
         # 获取从上次间隔至今期间，更新的子序列
         state = self.states[0]
         prefire = 0.1 if self.auto_prefire else 0

@@ -179,7 +179,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             hold_map = {h.pair: h for h, _ in warm_jobs}
 
             def ohlcv_cb(data, exs: ExSymbol, timeframe: str, **kwargs):
-                since_ms = hold_map[exs].warm_tfs({timeframe: data})
+                since_ms = hold_map[exs.symbol].warm_tfs({timeframe: data})
                 since_map[f'{exs}/{timeframe}'] = since_ms
 
             exg = get_exchange(self.exg_name)
@@ -208,12 +208,21 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         await self.unwatch_klines(*jobs)
 
     @classmethod
-    def _on_ohlcv_msg(cls, exg_name, market, pair, ohlc_arr, fetch_tfsecs):
-        if exg_name != cls._obj.exg_name:
-            logger.error(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
+    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
+                      fetch_tfsecs: int, update_tfsecs: float):
+        if exg_name != cls._obj.exg_name or cls._obj.market != market:
+            logger.warning(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
             return
         hold = next((sta for sta in cls._obj.holders if sta.pair == pair), None)
         if not hold:
             logger.error(f'receive pair ohlcv not found: {pair}')
             return
+        if not hold.last_ts:
+            hold.last_ts = ohlc_arr[-1][0] // 1000
+            return
+        bar_end_ts = hold.last_ts + fetch_tfsecs
+        if btime.utctime() + update_tfsecs - 2 < bar_end_ts:
+            # 过滤掉未完成的bar，等待2s确保完成
+            return
+        hold.last_ts = bar_end_ts
         hold.on_new_data(ohlc_arr, fetch_tfsecs)

@@ -223,6 +223,7 @@ class CryptoExchange:
         self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
+        self.leverages = dict()  # 记录每个币种的杠杆
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = btime.utctime() - 7200
@@ -569,7 +570,18 @@ class CryptoExchange:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         if self.name == 'binance':
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
+            if self.market_type == 'future':
+                params['positionSide'] = 'LONG' if side == 'buy' else 'SHORT'
         return await self.api_async.create_limit_order(symbol, side, amount, price, params)
+
+    async def set_leverage(self, leverage: int, symbol: str, params={}):
+        if self.leverages.get(symbol) == leverage:
+            return
+        if not hasattr(self.api_async, 'set_leverage'):
+            raise ValueError(f'exchange {self.name}.{self.market_type} not support set_leverage')
+        res = await self.api_async.set_leverage(leverage, symbol, params)
+        self.leverages[symbol] = leverage
+        return res
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单

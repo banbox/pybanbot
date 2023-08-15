@@ -154,9 +154,11 @@ class WebsocketWatcher:
                 await self.try_update()
             except ccxt.NetworkError as e:
                 await asyncio.sleep(0.3)
-                logger.error(f'watch trades net fail: {e}')
+                tag = f'{self.exchange.name}/{self.exchange.market_type}/{self.pair}'
+                logger.error(f'watch {tag} trades net fail: {e}')
             except Exception:
-                logger.exception('watch trades fail')
+                tag = f'{self.exchange.name}/{self.exchange.market_type}/{self.pair}'
+                logger.exception(f'watch {tag} trades fail')
 
     async def try_update(self):
         pass
@@ -228,20 +230,21 @@ class TradesWatcher(WebsocketWatcher):
         details = trades_to_ohlcv(details)
         # 交易按小维度归集和通知；减少传输数据大小；
         ohlcvs_sml = [self.state_sec.wait_bar] if self.state_sec.wait_bar else []
-        ohlcvs_sml, _ = build_ohlcvc(details, self.state_sec.tf_secs, ohlcvs=ohlcvs_sml, with_count=False)
+        pub_tf_secs = self.state_sec.tf_secs
+        ohlcvs_sml, _ = build_ohlcvc(details, pub_tf_secs, ohlcvs=ohlcvs_sml, with_count=False)
         if not ohlcvs_sml:
             return
         self.state_sec.wait_bar = ohlcvs_sml[-1]
         ohlcvs_sml = ohlcvs_sml[:-1]  # 完成的秒级ohlcv
         if not ohlcvs_sml:
             return
-        sre_data = orjson.dumps((ohlcvs_sml, self.state_sec.tf_secs))
+        sre_data = orjson.dumps((ohlcvs_sml, pub_tf_secs, pub_tf_secs))
         async with AsyncRedis() as redis:
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
             await redis.publish(pub_key, sre_data)
         # 更新1m级别bar，写入数据库
         ohlcv_old = [self.state_save.wait_bar] if self.state_save.wait_bar else []
-        ohlcvs_save, is_finish = build_ohlcvc(ohlcvs_sml, self.state_save.tf_secs, ohlcvs=ohlcv_old)
+        ohlcvs_save, is_finish = build_ohlcvc(ohlcvs_sml, pub_tf_secs, ohlcvs=ohlcv_old)
         ohlcvs_save = get_finish_ohlcvs(self.state_save, ohlcvs_save, is_finish)
         if not ohlcvs_save:
             return
@@ -272,7 +275,7 @@ class OhlcvWatcher(WebsocketWatcher):
         cur_ts = btime.utctime()
         if cur_ts - self.notify_ts >= 0.9:
             self.notify_ts = cur_ts
-            sre_data = orjson.dumps((ohlcvs_sml, self.state_ws.tf_secs))
+            sre_data = orjson.dumps((ohlcvs_sml, self.state_ws.tf_secs, 1))
             async with AsyncRedis() as redis:
                 pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
                 await redis.publish(pub_key, sre_data)
@@ -383,7 +386,7 @@ class LiveMiner:
                 KLine.insert(sid, job.timeframe, ohlcvs)
             # 发布小间隔数据到redis订阅方
             measure.start_for('send_pub')
-            sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs))
+            sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs, job.check_intv))
             async with AsyncRedis() as redis:
                 pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
                 await redis.publish(pub_key, sre_data)

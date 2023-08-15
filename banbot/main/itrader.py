@@ -63,7 +63,11 @@ class Trader:
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
-            pair_arr = append_new_bar(row, tf_secs)
+            try:
+                pair_arr = append_new_bar(row, tf_secs)
+            except ValueError as e:
+                logger.info(f'skip invalid bar: {e}')
+                return [], [], []
             if not BotGlobal.is_wramup:
                 self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
@@ -72,26 +76,27 @@ class Trader:
             for strategy in strategy_list:
                 stg_name = strategy.name
                 strategy.on_bar(pair_arr)
-                if not BotGlobal.is_wramup:
-                    # 调用策略生成入场和出场信号
-                    sigin = strategy.on_entry(pair_arr)
-                    sigout = strategy.on_exit(pair_arr)
-                    if sigin and not bar_expired and (not strategy.skip_enter_on_exit or not sigout):
-                        if 'legal_cost' not in sigin:
-                            sigin['legal_cost'] = strategy.custom_cost(sigin)
-                        enter_list.append((stg_name, sigin))
-                    if not strategy.skip_exit_on_enter or not sigin:
-                        if sigout:
-                            exit_list.append((stg_name, sigout))
+                # 调用策略生成入场和出场信号
+                sigin = strategy.on_entry(pair_arr)
+                sigout = strategy.on_exit(pair_arr)
+                if sigin and not bar_expired and (not strategy.skip_enter_on_exit or not sigout):
+                    if 'legal_cost' not in sigin:
+                        sigin['legal_cost'] = strategy.custom_cost(sigin)
+                    enter_list.append((stg_name, sigin))
+                if not strategy.skip_exit_on_enter or not sigin:
+                    if sigout:
+                        exit_list.append((stg_name, sigout))
+                    if not BotGlobal.is_wramup:
                         ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
             calc_cost = (time.monotonic() - start_time) * 1000
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
-        ent_ods, ext_ods = self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
-        if ent_ods or ext_ods:
-            for stgy in strategy_list:
-                stgy.update_orders(ent_ods, ext_ods)
+        if not BotGlobal.is_wramup:
+            ent_ods, ext_ods = self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
+            if ent_ods or ext_ods:
+                for stgy in strategy_list:
+                    stgy.update_orders(ent_ods, ext_ods)
         return enter_list, exit_list, ext_tags
 
     async def run(self):

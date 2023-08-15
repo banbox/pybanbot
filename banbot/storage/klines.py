@@ -619,7 +619,7 @@ update "kline_un" set high={phigh},low={plow},
                     sess.execute(sa.text(insert_sql))
                     sess.commit()
                     return
-        logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
+        # logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
         # 当快速更新不可用时，从子周期归集
         sess.execute(sa.text(f"DELETE {from_where}"))
         cur_bar, bar_end_ms = cls._get_unfinish(sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')

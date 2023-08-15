@@ -21,25 +21,17 @@ class PairTFCache:
     wait_bar: tuple = None  # 记录尚未完成的bar。已完成时应置为None
     latest: tuple = None  # 记录最新bar数据，可能未完成，可能已完成
 
-    def set_bar(self, bar_row):
-        self.wait_bar = bar_row
-        self.latest = bar_row
-
 
 class Watcher:
     def __init__(self, callback: Callable):
         self.callback = callback
 
     def _on_state_ohlcv(self, pair: str, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
-        finish_bars = []
-        for i in range(len(ohlcvs)):
-            new_bar = ohlcvs[i]
-            if state.wait_bar and state.wait_bar[0] < new_bar[0]:
-                finish_bars.append(state.wait_bar)
-            state.set_bar(new_bar)
-        if last_finish:
-            finish_bars.append(state.wait_bar)
-            state.wait_bar = None
+        finish_bars = ohlcvs if last_finish else ohlcvs[:-1]
+        if state.wait_bar and state.wait_bar[0] < ohlcvs[0][0]:
+            finish_bars.insert(0, state.wait_bar)
+        state.wait_bar = None if last_finish else ohlcvs[-1]
+        state.latest = ohlcvs[-1]
         if finish_bars and do_fire:
             self._fire_callback(finish_bars, pair, state.timeframe, state.tf_secs)
         return finish_bars
@@ -216,9 +208,15 @@ class KlineLiveConsumer(RedisChannel):
     @classmethod
     def _handle_ohlcv(cls, msg_key: str, msg_data):
         _, exg_name, market, pair = msg_key.split('_')
-        ohlc_arr, fetch_tfsecs = msg_data
-        cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs)
+        ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
+        cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
 
     @classmethod
-    def _on_ohlcv_msg(cls, exg_name, market, pair, ohlc_arr, fetch_tfsecs):
+    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
+                      fetch_tfsecs: int, update_tfsecs: float):
+        '''
+        监听spider的蜡烛数据，收到时会回调此方法。
+        :param fetch_tfsecs: 返回的蜡烛数据bar时间戳间隔
+        :param update_tfsecs: 蜡烛数据更新间隔，可能小于fetch_tfsecs
+        '''
         raise NotImplementedError

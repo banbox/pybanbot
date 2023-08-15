@@ -291,6 +291,28 @@ class InOutOrder(BaseDbModel):
         self._info[key] = val
         self.info = json.dumps(self._info)
 
+    async def force_exit(self):
+        '''
+        强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
+        '''
+        from banbot.main.od_manager import LiveOrderManager, LocalOrderManager
+        if self.exit:
+            if btime.prod_mode():
+                # 实盘模式，提交到交易所平仓
+                price_rate = 100 if self.short else 0.01
+                new_price = (self.exit.price or self.enter.price) * price_rate
+                self.exit_tag = None
+                LiveOrderManager.obj.exit_order(self, dict(tag='force_exit'), new_price)
+            else:
+                # 模拟模式，从订单管理器平仓
+                LocalOrderManager.obj.force_exit(self)
+        else:
+            if btime.prod_mode():
+                LiveOrderManager.obj.exit_order(self, dict(tag='force_exit'))
+            else:
+                LocalOrderManager.obj.exit_order(self, dict(tag='force_exit'))
+        db.session.commit()
+
     @classmethod
     def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\
             -> List['InOutOrder']:

@@ -7,6 +7,7 @@ import sys
 from banbot.storage import Overlay
 from banbot.strategy.common import *
 from banbot.main.wallets import WalletsLocal
+from banbot.config.consts import MIN_STAKE_AMOUNT
 
 
 class BaseStrategy:
@@ -38,6 +39,9 @@ class BaseStrategy:
         self.orders: List[InOutOrder] = []  # 打开的订单，下单未成交的在内，离场未成交的不在内
         self.calc_num = 0
         self.base_cost = self.config.get('stake_amount', 1000)  # 每笔下单金额基数
+        if self.base_cost < MIN_STAKE_AMOUNT * 1.2:
+            raise ValueError(f'stake_amount {self.base_cost} should > '
+                             f'MIN_STAKE_AMOUNT * 1.2: {(MIN_STAKE_AMOUNT * 1.2):.2f}')
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:

@@ -216,7 +216,6 @@ class OrderManager(metaclass=SingletonArg):
         od.save()
 
     def update_by_bar(self, row):
-        self.last_ts = btime.time()
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
         op_orders = InOutOrder.open_orders()
@@ -302,9 +301,12 @@ class OrderManager(metaclass=SingletonArg):
 
 
 class LocalOrderManager(OrderManager):
+    obj: Optional['LocalOrderManager'] = None
+
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider,
                  callback: Callable):
         super(LocalOrderManager, self).__init__(config, wallets, data_hd, callback)
+        LocalOrderManager.obj = self
         self.exchange = exchange
         self.network_cost = 3.  # 模拟网络延迟
 
@@ -316,9 +318,17 @@ class LocalOrderManager(OrderManager):
             # if affect_num:
             #     logger.info(f"wallets: {self.wallets}")
 
-    def _fill_pending_enter(self, candle: np.ndarray, od: InOutOrder):
-        enter_price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        enter_price = self.exchange.pres_price(od.symbol, enter_price)
+    def force_exit(self, od: InOutOrder, tag: Optional[str] = None, price: float = None):
+        if not tag:
+            tag = 'force_exit'
+        self.exit_order(od, dict(tag=tag), price)
+        if not price:
+            candle = self.data_mgr.get_latest_ohlcv(od.symbol)
+            price = self._sim_market_price(od.symbol, od.timeframe, candle)
+        self._fill_pending_exit(od, price)
+
+    def _fill_pending_enter(self, od: InOutOrder, price: float):
+        enter_price = self.exchange.pres_price(od.symbol, price)
         sub_od = od.enter
         if not sub_od.amount:
             if od.short and od.leverage == 1:
@@ -342,8 +352,7 @@ class LocalOrderManager(OrderManager):
             sub_od.price = enter_price
         self._fire(od, True)
 
-    def _fill_pending_exit(self, candle: np.ndarray, od: InOutOrder):
-        exit_price = self._sim_market_price(od.symbol, od.timeframe, candle)
+    def _fill_pending_exit(self, od: InOutOrder, exit_price: float):
         sub_od = od.exit
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
@@ -421,11 +430,12 @@ class LocalOrderManager(OrderManager):
         for od in op_orders:
             if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
                 continue
+            price = self._sim_market_price(od.symbol, od.timeframe, candle)
             if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
-                self._fill_pending_exit(candle, od)
+                self._fill_pending_exit(od, price)
                 affect_num += 1
             elif od.enter.status != OrderStatus.Close:
-                self._fill_pending_enter(candle, od)
+                self._fill_pending_enter(od, price)
                 affect_num += 1
         return affect_num
 
@@ -437,9 +447,12 @@ class LocalOrderManager(OrderManager):
 
 
 class LiveOrderManager(OrderManager):
+    obj: Optional['LiveOrderManager'] = None
+
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
                  callback: Callable):
         super(LiveOrderManager, self).__init__(config, wallets, data_hd, callback)
+        LiveOrderManager.obj = self
         self.exchange = exchange
         self.exg_orders: Dict[Tuple[str, str], int] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
@@ -470,7 +483,11 @@ class LiveOrderManager(OrderManager):
     async def calc_price(self, pair: str, vol_secs=0):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
         candle = self.data_mgr.get_latest_ohlcv(pair)
-        high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
+        if not candle:
+            # 机器人刚启动，没有最新bar时，如果有之前的未完成订单，这里需要给默认值
+            high_price, low_price, close_price, vol_amount = 99999, 0.0000001, 1, 10
+        else:
+            high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
         od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
         fees = self.exchange.calc_fee(od.symbol, od.order_type, od.side, od.amount, od.price)
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
@@ -591,11 +608,16 @@ class LiveOrderManager(OrderManager):
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
+        if od.leverage and self.exchange.leverages.get(od.symbol) != od.leverage:
+            await self.exchange.set_leverage(od.leverage, od.symbol)
+        logger.info(f'create limit order: {[od.symbol, side, amount, price]}')
         order = await self.exchange.create_limit_order(od.symbol, side, amount, price)
-        self.last_ts = btime.time()
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
-        await self._update_subod_by_ccxtres(od, is_enter, order)
-        self._fire(od, is_enter)
+        try:
+            await self._update_subod_by_ccxtres(od, is_enter, order)
+            self._fire(od, is_enter)
+        except Exception:
+            logger.exception(f'error after put exchange order: {od}')
 
     def _put_order(self, od: InOutOrder, is_enter: bool):
         if not btime.prod_mode():
@@ -638,6 +660,7 @@ class LiveOrderManager(OrderManager):
                     inout_status = InOutStatus.FullEnter
                 else:
                     inout_status = InOutStatus.FullExit
+            self.last_ts = btime.time()
         else:
             logger.error('unknown bnb order status: %s, %s', state, data)
             return
@@ -664,7 +687,7 @@ class LiveOrderManager(OrderManager):
         except ccxt.NetworkError as e:
             logger.error(f'watch_my_trades net error: {e}')
             return
-        logger.debug('get my trades: %s', trades)
+        logger.info('get my trades: %s', trades)
         with db():
             sess = db.session
             related_ods = set()
@@ -702,6 +725,8 @@ class LiveOrderManager(OrderManager):
             enter_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[0]
             od.enter.price = self.exchange.pres_price(od.symbol, enter_price)
         if not od.enter.amount:
+            if not od.quote_cost:
+                raise ValueError(f'quote_cost is required to calc enter_amount')
             od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
         await self._create_exg_order(od, True)
 
@@ -725,28 +750,45 @@ class LiveOrderManager(OrderManager):
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 
-    async def exec_order(self, job: OrderJob):
-        od = InOutOrder.get(job.od_id)
-        if job.is_enter:
-            await self._exec_order_enter(od)
-        else:
-            await self._exec_order_exit(od)
-        db.session.commit()
-
     async def consume_queue(self):
         while True:
             job = await self.order_q.get()
+            od: Optional[InOutOrder] = None
             try:
                 with db():
-                    await self.exec_order(job)
+                    od = InOutOrder.get(job.od_id)
+                    if job.is_enter:
+                        await self._exec_order_enter(od)
+                    else:
+                        await self._exec_order_exit(od)
+                    db.session.commit()
             except Exception:
-                logger.exception('consume order exception: %s', job)
+                if od:
+                    await od.force_exit()
+                    logger.exception('consume order exception: %s, force exit', job)
+                else:
+                    logger.exception('consume order exception: %s', job)
             self.order_q.task_done()
+
+    async def edit_pending_order(self, od: InOutOrder, is_enter: bool, price: float):
+        sub_od = od.enter if is_enter else od.exit
+        sub_od.price = price
+        if not sub_od.order_id:
+            await self._exec_order_enter(od)
+        else:
+            left_amount = sub_od.amount - sub_od.filled
+            try:
+                res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
+                                                           left_amount, price)
+                await self._update_subod_by_ccxtres(od, is_enter, res)
+            except ccxt.InvalidOrder as e:
+                logger.error('edit invalid order: %s', e)
 
     @loop_forever
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
-        if btime.prod_mode():
+        if btime.prod_mode() and self.market_type == 'spot':
+            '币安只有现货市场支持订单编辑'
             try:
                 with db():
                     await self._trail_open_orders(timeouts)
@@ -786,19 +828,8 @@ class LiveOrderManager(OrderManager):
                     continue
                 sub_od.create_at = btime.time()
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
-                sub_od.price = new_price
-                if not sub_od.order_id:
-                    await self._exec_order_enter(od)
-                    sess.commit()
-                else:
-                    left_amount = sub_od.amount - sub_od.filled
-                    try:
-                        res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
-                                                                   left_amount, new_price)
-                        await self._update_subod_by_ccxtres(od, is_enter, res)
-                        sess.commit()
-                    except ccxt.InvalidOrder as e:
-                        logger.error('edit invalid order: %s', e)
+                await self.edit_pending_order(od, is_enter, new_price)
+                sess.commit()
 
     async def cleanup(self):
         with db():

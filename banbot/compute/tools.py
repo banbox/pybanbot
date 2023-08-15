@@ -40,7 +40,8 @@ def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
         sub_diff = round((result[-1][0] - result[-2][0]) / tf_secs / 1000)
         if sub_diff > 1:
             stf, bar_date = symbol_tf.get(), btime.to_datestr(result[-2][0])
-            logger.error(f'{stf} {sub_diff - 1} bar lost after {bar_date}')
+            cur_date = btime.to_datestr(result[-1][0])
+            logger.error(f'{stf} {sub_diff - 1} bar lost after {bar_date}, get: {cur_date}')
     bar_arr.set(result)
     LongVar.update(result)
     return result
