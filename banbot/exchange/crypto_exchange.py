@@ -40,7 +40,9 @@ def loop_forever(func):
         fname = func.__qualname__
         while True:
             try:
-                await run_async(func, *args, **kwargs)
+                result = await run_async(func, *args, **kwargs)
+                if result == 'exit':
+                    break
                 continue
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
@@ -486,6 +488,8 @@ class CryptoExchange:
         :param params:
         :return:
         '''
+        if self.market_type != 'spot':
+            raise ValueError('watch_balance support spot only')
         return await self.api_ws.watch_balance(params)
 
     async def watch_orders(self, symbol=None, since=None, limit=None, params={}):
@@ -510,6 +514,8 @@ class CryptoExchange:
         :param params:
         :return:
         '''
+        if self.market_type != 'spot':
+            raise ValueError('watch_my_trades support spot only')
         return await self.api_ws.watch_my_trades(symbol, since, limit, params)
 
     async def fetch_ohlcv_plus(self, pair: str, timeframe: str, since=None, limit=None,
@@ -565,14 +571,12 @@ class CryptoExchange:
     async def cancel_order(self, id: str, symbol: str, params={}):
         return await self.api_async.cancel_order(id, symbol, params)
 
-    async def create_limit_order(self, symbol, side, amount, price, params={}):
+    async def create_order(self, symbol, od_type, side, amount, price, params={}):
         if btime.run_mode != btime.RunMode.PROD:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         if self.name == 'binance':
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
-            if self.market_type == 'future':
-                params['positionSide'] = 'LONG' if side == 'buy' else 'SHORT'
-        return await self.api_async.create_limit_order(symbol, side, amount, price, params)
+        return await self.api_async.create_order(symbol, od_type, side, amount, price, params)
 
     async def set_leverage(self, leverage: int, symbol: str, params={}):
         if self.leverages.get(symbol) == leverage:

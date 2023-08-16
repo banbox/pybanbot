@@ -152,6 +152,9 @@ class WalletsLocal:
         wallet.available += src_amount
 
     def enter_od(self, exs: ExSymbol, sigin: dict, od_key: str, after_ts=0):
+        '''
+        实盘和模拟都执行，实盘时可防止过度消费
+        '''
         is_short = sigin.get('short')
         legal_cost = sigin.pop('legal_cost')
         is_future = exs.market == 'future'
@@ -176,6 +179,8 @@ class WalletsLocal:
         return legal_cost
 
     def confirm_od_enter(self, od: InOutOrder, enter_price: float):
+        if btime.prod_mode():
+            return
         exs = ExSymbol.get_by_id(od.sid)
         sub_od = od.enter
         quote_amount = enter_price * sub_od.amount
@@ -191,6 +196,8 @@ class WalletsLocal:
             self.confirm_pending(od.key, exs.quote_code, quote_amount, exs.base_code, base_amt)
 
     def exit_od(self, od: InOutOrder, base_amount: float, after_ts=0):
+        if btime.prod_mode():
+            return
         exs = ExSymbol.get_by_id(od.sid)
         if exs.market == 'future':
             # 期货合约，不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
@@ -210,6 +217,8 @@ class WalletsLocal:
                 self.cost_ava(od.key, exs.base_code, base_amount, after_ts=after_ts, min_rate=0.01)
 
     def confirm_od_exit(self, od: InOutOrder, exit_price: float):
+        if btime.prod_mode():
+            return
         exs = ExSymbol.get_by_id(od.sid)
         sub_od = od.exit
         if exs.market == 'future':
@@ -242,6 +251,8 @@ class WalletsLocal:
         保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
         钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
         '''
+        if btime.prod_mode():
+            return
         from banbot.exchange.crypto_exchange import get_exchange
         bomb_ods = []
         for od in od_list:
@@ -354,9 +365,13 @@ class CryptoWallet(WalletsLocal):
     def _update_local(self, balances: dict):
         message = []
         for symbol in self._symbols:
-            state = balances[symbol]
+            state = balances.get(symbol)
+            if not state or not state.get('total'):
+                continue
             free, used = state['free'], state['used']
-            self.data[symbol] = ItemWallet(available=free, pendings={'*': used})
+            key = 'pendings' if self.exchange.market_type == 'future' else 'frozens'
+            args = {'available': free, key: {'*': used}}
+            self.data[symbol] = ItemWallet(**args)
             if free + used < 0.00001:
                 continue
             message.append(f'{symbol}: {free}/{used}')
@@ -365,12 +380,18 @@ class CryptoWallet(WalletsLocal):
     async def init(self, pairs: List[str]):
         for p in pairs:
             self._symbols.update(split_symbol(p))
+        await self.update_balance()
+
+    async def update_balance(self):
         balances = await self.exchange.fetch_balance()
         self.update_at = btime.time()
-        logger.info('load balances: %s', self._update_local(balances))
+        logger.info('update balances: %s', self._update_local(balances))
 
     @loop_forever
     async def update_forever(self):
+        if BotGlobal.market_type != 'spot':
+            # ccxt币安仅spot支持余额推送
+            return 'exit'
         try:
             balances = await self.exchange.watch_balance()
         except ccxt.NetworkError as e:

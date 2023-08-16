@@ -200,7 +200,7 @@ class OrderManager(metaclass=SingletonArg):
         od.update_exit(**sigout, price=price, amount=get_amount)
         od.save()
         if btime.run_mode in LIVE_MODES:
-            logger.info('exit order {0} {1}', od.symbol, od.exit_tag)
+            logger.info('exit order {0} {1}', od, od.exit_tag)
         self._put_order(od, False)
         return od
 
@@ -223,7 +223,7 @@ class OrderManager(metaclass=SingletonArg):
         close_price = float(row[ccol])
         for od in op_orders:
             od.update_by_price(close_price)
-        if self.market_type == 'future':
+        if self.market_type == 'future' and not btime.prod_mode():
             # 期货合约需要计算更新保证金
             bomb_ods = self.wallets.update_ods(op_orders)
             for od in bomb_ods:
@@ -454,9 +454,11 @@ class LiveOrderManager(OrderManager):
         super(LiveOrderManager, self).__init__(config, wallets, data_hd, callback)
         LiveOrderManager.obj = self
         self.exchange = exchange
+        self.wallets: CryptoWallet = self.wallets
         self.exg_orders: Dict[Tuple[str, str], int] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
         self.handled_trades: Dict[str, int] = OrderedDict()
+        self.od_type = config.get('order_type', 'limit')
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
@@ -465,6 +467,10 @@ class LiveOrderManager(OrderManager):
         self.limit_vol_secs = config.get('limit_vol_secs', 10)
         # 交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s
         self._pair_prices: Dict[str, Tuple[float, float, float]] = dict()
+        if self.od_type not in {'limit', 'market'}:
+            raise ValueError(f'invalid order type: {self.od_type}, `limit` or `market` is accepted')
+        if self.market_type == 'future' and self.od_type == 'limit':
+            raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
 
     async def _get_odbook_price(self, pair: str, side: str, depth: float):
         '''
@@ -545,9 +551,14 @@ class LiveOrderManager(OrderManager):
 
     def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
         sub_od = od.enter if is_enter else od.exit
+        data_info = data.get('info') or dict()
         cur_ts = data['timestamp']
+        if not cur_ts and self.name == 'binance':
+            # 币安期货返回时间戳需要从info.updateTime取
+            cur_ts = int(data_info.get('updateTime', '0'))
         if cur_ts < sub_od.update_at:
-            return
+            logger.info(f'trade is out of date, skip: {data} {od} {is_enter}')
+            return False
         sub_od.update_at = cur_ts
         sub_od.order_id = data['id']
         sub_od.amount = data.get('amount')
@@ -573,11 +584,12 @@ class LiveOrderManager(OrderManager):
                 else:
                     # 出场订单，0成交，被关闭，整体状态为：已入场
                     od.status = InOutStatus.FullEnter
-                logger.warning('%s is %s by %s, no filled', od, order_status, self.name)
+                logger.warning('%s[%s] is %s by %s, no filled', od, is_enter, order_status, self.name)
             else:
                 od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
         if od.status == InOutStatus.FullExit:
             self._finish_order(od)
+        return True
 
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
@@ -590,8 +602,11 @@ class LiveOrderManager(OrderManager):
             self.exg_orders[exg_key] = sub_od.id
             logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
             new_num, old_num = self._check_new_trades(order['trades'])
-            if new_num:
-                self._update_order_res(od, is_enter, order)
+            if new_num or self.market_type != 'spot':
+                # 期货市场未返回trades
+                new_change = self._update_order_res(od, is_enter, order)
+                if new_change and self.market_type != 'spot':
+                    await self.wallets.update_balance()
         await self._consume_unmatchs(sub_od)
         db.session.commit()
 
@@ -610,8 +625,12 @@ class LiveOrderManager(OrderManager):
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         if od.leverage and self.exchange.leverages.get(od.symbol) != od.leverage:
             await self.exchange.set_leverage(od.leverage, od.symbol)
-        logger.info(f'create limit order: {[od.symbol, side, amount, price]}')
-        order = await self.exchange.create_limit_order(od.symbol, side, amount, price)
+        params = dict()
+        if self.market_type == 'future':
+            params['positionSide'] = 'LONG' if od.enter.side == 'buy' else 'SHORT'
+            # params.update(closePosition=True, triggerPrice=price)  # 止损单
+            # params.update(closePosition=True, takeProfitPrice=price)  # 止盈单
+        order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, price, params)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)
@@ -682,12 +701,15 @@ class LiveOrderManager(OrderManager):
 
     @loop_forever
     async def listen_orders_forever(self):
+        if self.market_type != 'spot':
+            # 币安只有现货市场支持订单更新
+            return 'exit'
         try:
             trades = await self.exchange.watch_my_trades()
         except ccxt.NetworkError as e:
             logger.error(f'watch_my_trades net error: {e}')
             return
-        logger.info('get my trades: %s', trades)
+        logger.debug('get my trades: %s', trades)
         with db():
             sess = db.session
             related_ods = set()
@@ -778,8 +800,12 @@ class LiveOrderManager(OrderManager):
         else:
             left_amount = sub_od.amount - sub_od.filled
             try:
-                res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
-                                                           left_amount, price)
+                if self.market_type == 'future':
+                    await self.exchange.cancel_order(sub_od.order_id, od.symbol)
+                    res = await self.exchange.create_order(od.symbol, self.od_type, sub_od.side, left_amount, price)
+                else:
+                    res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
+                                                               left_amount, price)
                 await self._update_subod_by_ccxtres(od, is_enter, res)
             except ccxt.InvalidOrder as e:
                 logger.error('edit invalid order: %s', e)
@@ -787,8 +813,7 @@ class LiveOrderManager(OrderManager):
     @loop_forever
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
-        if btime.prod_mode() and self.market_type == 'spot':
-            '币安只有现货市场支持订单编辑'
+        if btime.prod_mode():
             try:
                 with db():
                     await self._trail_open_orders(timeouts)
@@ -807,7 +832,7 @@ class LiveOrderManager(OrderManager):
         exp_orders = [od for od in op_orders if od.pending_type(timeouts)]
         if not exp_orders:
             return
-        logger.info(f'pending open orders: {exp_orders}')
+        # logger.info(f'pending open orders: {exp_orders}')
         sess = db.session
         from itertools import groupby
         exp_orders = sorted(exp_orders, key=lambda x: x.symbol)

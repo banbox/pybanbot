@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 import json
-import random
 
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
@@ -65,7 +64,8 @@ class Order(BaseDbModel):
     status = Column(sa.SMALLINT, default=OrderStatus.Init)
     fee = Column(sa.Float)
     fee_type = Column(sa.String(10))
-    update_at = Column(sa.BIGINT)  # 上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新
+    update_at = Column(sa.BIGINT)
+    '13位，上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新'
 
     @orm.reconstructor
     def __init__(self, **kwargs):
