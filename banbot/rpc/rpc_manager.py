@@ -54,7 +54,7 @@ class RPCManager(metaclass=Singleton):
             except NotImplementedError:
                 logger.error("Message type '%s' not implemented by handler %s.", msg['type'], mod.name)
             except Exception:
-                logger.exception('Exception occurred within RPC module %s', mod.name)
+                logger.exception('Exception occurred within RPC module %s: %s', mod.name, msg)
 
     async def process_msg_queue(self, queue: deque) -> None:
         """

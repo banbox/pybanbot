@@ -382,6 +382,11 @@ class AsyncRedis:
         key = _get_key(key)
         return await self.redis.scard(key)
 
+    async def sismember(self, key: str, field: str):
+        key = _get_key(key)
+        field = self.serializer(field)
+        return await self.redis.sismember(key, field)
+
     async def smembers(self, key: str):
         key = _get_key(key)
         items = await self.redis.smembers(key)

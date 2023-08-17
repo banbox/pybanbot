@@ -105,6 +105,7 @@ volume = EXCLUDED.volume'''
   sum(volume) AS volume'''
 
     _listeners: Dict[str, Deque[Future]] = dict()
+    '监听蜡烛插入数据库的消费者队列'
 
     @classmethod
     def _agg_sql(cls, intv: str, base_tbl: str, where_str: str = ''):

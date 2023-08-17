@@ -22,7 +22,7 @@ def load_config_file(path: str) -> Dict[str, Any]:
     """
     try:
         # Read config from stdin if requested in the options
-        with Path(path).open() if path != '-' else sys.stdin as file:
+        with open(path, 'rb') if path != '-' else sys.stdin as file:
             fdata = file.read()
             if isinstance(fdata, (bytes, bytearray)):
                 fdata = fdata.decode('utf-8')
