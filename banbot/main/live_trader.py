@@ -31,18 +31,27 @@ class LiveTrader(Trader):
         sub_od = od.enter if is_enter else od.exit
         if sub_od.status != OrderStatus.Close:
             return
+        if is_enter:
+            action = '开空' if od.short else '开多'
+        else:
+            action = '平空' if od.short else '平多'
         msg = dict(
             type=msg_type,
+            action=action,
             enter_tag=od.enter_tag,
             exit_tag=od.exit_tag,
             side=sub_od.side,
+            short=od.short,
+            leverage=od.leverage,
             amount=sub_od.amount,
             price=sub_od.price,
             value=sub_od.amount * sub_od.price,
             strategy=od.strategy,
             pair=od.symbol,
+            timeframe=od.timeframe,
             profit=od.profit,
-            profit_rate=od.profit_rate
+            profit_rate=od.profit_rate,
+            **(od.infos or dict())
         )
         asyncio.create_task(self.rpc.send_msg(msg))
 

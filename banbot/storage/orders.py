@@ -140,18 +140,18 @@ class InOutOrder(BaseDbModel):
         self.margin_ratio = 0  # 合约的保证金比率
         db_keys = set(self.__table__.columns.keys())
         tmp_keys = {k for k in kwargs if k not in db_keys and not k.startswith('enter_') and not k.startswith('exit_')}
-        self._info = {k: kwargs.pop(k) for k in tmp_keys}
+        self.infos = {k: kwargs.pop(k) for k in tmp_keys}
         if self.id:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
             super(InOutOrder, self).__init__(**kwargs)
             if self.info:
                 # 数据库初始化的必然只包含列名，这里可以直接覆盖
-                self._info = json.loads(self.info)
+                self.infos = json.loads(self.info)
             return
         # 仅针对新创建的订单执行下面初始化
-        if self._info:
+        if self.infos:
             # 自行实例化的对象，忽略info参数
-            kwargs['info'] = json.dumps(self._info)
+            kwargs['info'] = json.dumps(self.infos)
         from banbot.storage import BotTask
         from banbot.strategy.resolver import get_strategy
         data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id, leverage=1)
@@ -283,13 +283,13 @@ class InOutOrder(BaseDbModel):
             self._save_to_db()
 
     def get_info(self, key: str, def_val=None):
-        if not self._info:
+        if not self.infos:
             return def_val
-        return self._info.get(key, def_val)
+        return self.infos.get(key, def_val)
 
     def set_info(self, key: str, val):
-        self._info[key] = val
-        self.info = json.dumps(self._info)
+        self.infos[key] = val
+        self.info = json.dumps(self.infos)
 
     async def force_exit(self):
         '''

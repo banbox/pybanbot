@@ -123,7 +123,7 @@ class OrderManager(metaclass=SingletonArg):
         策略产生入场信号，执行入场订单。（目前仅支持做多）
         :param ctx:
         :param strategy:
-        :param sigin:
+        :param sigin: tag,short,legal_cost,cost_rate, stoploss_price, takeprofit_price
         :param price:
         :param do_check: 是否执行入场检查
         :return:
@@ -627,9 +627,13 @@ class LiveOrderManager(OrderManager):
             await self.exchange.set_leverage(od.leverage, od.symbol)
         params = dict()
         if self.market_type == 'future':
-            params['positionSide'] = 'LONG' if od.enter.side == 'buy' else 'SHORT'
-            # params.update(closePosition=True, triggerPrice=price)  # 止损单
-            # params.update(closePosition=True, takeProfitPrice=price)  # 止盈单
+            params['positionSide'] = 'SHORT' if od.short else 'LONG'
+            stoploss_price = od.get_info('stoploss_price')
+            takeprofit_price = od.get_info('takeprofit_price')
+            if stoploss_price:
+                params.update(closePosition=True, triggerPrice=price)  # 止损单
+            if takeprofit_price:
+                params.update(closePosition=True, takeProfitPrice=price)  # 止盈单
         order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, price, params)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:

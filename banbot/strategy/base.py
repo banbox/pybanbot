@@ -110,7 +110,7 @@ class BaseStrategy:
         '''
         时间升序，最近的是最后一个
         :param arr:
-        :return: InOutOrder的属性。额外：tag,short,legal_cost,cost_rate
+        :return: InOutOrder的属性。额外：tag,short,legal_cost,cost_rate, stoploss_price, takeprofit_price
         '''
         pass
 
