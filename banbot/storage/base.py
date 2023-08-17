@@ -3,6 +3,7 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/4/24
+import os
 import time
 import threading
 from contextvars import ContextVar
@@ -45,12 +46,15 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     global _db_engine, _DbSession, _db_engine_asy, _DbSessionAsync
     if _db_engine is not None:
         return _db_engine
+    if not db_url:
+        db_url = os.environ.get('ban_db_url')
     try:
         db_cfg = AppConfig.get()['database']
     except Exception:
         assert db_url, '`db_url` is required if config not avaiable'
         db_cfg = dict(url=db_url)
-    db_url = db_cfg['url']
+    if not db_url:
+        db_url = db_cfg['url']
     pool_size = db_cfg.get('pool_size', 30)
     max_psize = pool_size * 2
     logger.info(f'db url:{db_url}')

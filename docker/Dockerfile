@@ -1,4 +1,4 @@
-FROM python:3.9.16-buster
+FROM anyongjin/banbot
 #RUN apt-get update
 #RUN apt-get upgrade -qy
 #RUN apt-get install iptables redsocks curl wget lynx -qy
@@ -7,7 +7,6 @@ FROM python:3.9.16-buster
 #COPY redsocks.conf /etc/redsocks.conf
 #COPY run.sh /tmp/proxy_all.sh
 
-RUN pip install orjson numpy
 
-WORKDIR /app
-# ENTRYPOINT /bin/bash /tmp/proxy_all.sh
+WORKDIR /root
+ENTRYPOINT ["python", "-m", "banbot", "trade"]

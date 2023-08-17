@@ -19,7 +19,13 @@ for tbl in all_tables:
     tbl_map[tbl.__class__.__name__.lower()] = tbl
 
 
-def rebuild_db(tables: list = None, skip_exist=True):
+def get_fail_tables():
+    bandb = init_db()
+    exist_tbls = [tbl for tbl in all_tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
+    return list(set(all_tables) - set(exist_tbls))
+
+
+def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True):
     logger.info('start rebuild tables...')
     if not tables:
         tables = all_tables
@@ -39,9 +45,10 @@ def rebuild_db(tables: list = None, skip_exist=True):
     if not skip_exist and exist_tbls:
         del_names = ','.join(tbl.__tablename__ for tbl in exist_tbls)
         print(f'*******  Tables Would Be Deleted: {del_names} ********')
-    flag = input('input `yes` to continue:\n')
-    if not flag or flag.strip() != 'yes':
-        raise Exception('user cancled')
+    if require_confirm:
+        flag = input('input `yes` to continue:\n')
+        if not flag or flag.strip() != 'yes':
+            raise Exception('user cancled')
     if not skip_exist and exist_tbls:
         left_tbls = []
         for t in exist_tbls:

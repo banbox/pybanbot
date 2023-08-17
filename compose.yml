@@ -1,0 +1,27 @@
+services:
+  banbot:
+    build: ./docker
+    volumes:
+      - /root:/root
+    environment:
+      ban_run_env: prod
+      ban_data_dir: /root/ban_data
+      ban_stgy_dir: /root/ban-strategies
+      ban_db_url: postgresql://postgres:123@[db]:5432/bantd
+      ban_redis_url: redis://redis:6379/0
+    depends_on:
+      - redis
+      - db
+  redis:
+    image: redis:7
+    volumes:
+      - /root/ban_data/redis.conf:/redis.conf
+    ports:
+      - "6379:6379"
+  db:
+    image: timescale/timescaledb:latest-pg15
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: '123'
+      POSTGRES_DB: 'bantd'

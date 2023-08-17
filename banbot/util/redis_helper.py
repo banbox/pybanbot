@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/25
 import asyncio
+import os
 import re
 import time
 
@@ -26,6 +27,13 @@ Expire_time_hour = 3600
 Expire_time_minute = 60
 
 
+def _get_redis_url():
+    redis_url = os.environ.get('ban_redis_url')
+    if not redis_url:
+        redis_url = AppConfig.get()['redis_url']
+    return redis_url
+
+
 def get_conn_args(connect_timeout=10, decode_rsp=False):
     from redis.connection import parse_url
     conn_args = dict(
@@ -36,7 +44,7 @@ def get_conn_args(connect_timeout=10, decode_rsp=False):
         decode_responses=decode_rsp,
         socket_timeout=15
     )
-    conn_args.update(parse_url(AppConfig.get()['redis_url']))
+    conn_args.update(parse_url(_get_redis_url()))
     return conn_args
 
 
@@ -44,7 +52,7 @@ def _get_redis_pool(is_async: bool, **kwargs):
 
     def create_redis():
         from banbot.util.common import logger
-        redis_url = AppConfig.get()['redis_url']
+        redis_url = _get_redis_url()
         module = aioredis if is_async else redis
         fin_args = dict(
             health_check_interval=10,
