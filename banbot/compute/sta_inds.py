@@ -3,6 +3,22 @@
 # File  : sta_inds.py
 # Author: anyongjin
 # Date  : 2023/5/4
+'''
+带状态的常见指标实现。每个bar计算一次，实盘时速度更快。
+缺点：
+需要预先在策略的__init__中定义所有用到的状态指标实例。
+由于按cache_key缓存，如果同一个指标对于不同的值忘记设置cache_key会导致重用错误。
+修改方向：
+命名去掉Sta前缀，和vec_inds保持一致。
+取消cache_key对象缓存
+像通达信、Tbquant等编辑器一样：函数式调用指标
+方案一：
+    预编译策略，所有外部输入以固定占位符替换，指标之间加减乘除生成新的指标对象。每个bar传入context执行得到结果。
+方案二：
+    函数形式定义指标，输入和输出都为对象，带历史值，bar结束后保存到varcontext中。
+可参考：
+   指标解析器：https://github.com/dsxkline/dsxindexer
+'''
 from banbot.compute.ctx import *
 from banbot.util.num_utils import *
 

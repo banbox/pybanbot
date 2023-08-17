@@ -8,6 +8,8 @@ from setuptools import setup, find_packages
 暂不需要
 binance-connector需要3.0.0rc1版本，请勿通过pip install安装。可Git clone然后python setup.py install 安装
 '''
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
 
 setup(
     name='banbot',
@@ -16,20 +18,7 @@ setup(
     author_email='anyongjin163@163.com',
     description='high freq trade',
     packages=find_packages(),
-    install_requires=[
-        'ccxt',
-        'orjson',
-        'aiodns',
-        'arrow',
-        'sqlalchemy',
-        'psycopg2-binary',
-        'redis',
-        'hiredis',
-        'cachetools',
-        'corpwechatbot',
-        'numpy',
-        'asyncpg'
-    ],
+    install_requires=requirements,
     extras_require={
         "develop": [
             'TA-Lib',

@@ -1,0 +1,12 @@
+ccxt
+orjson
+aiodns
+arrow
+sqlalchemy
+psycopg2-binary
+redis
+hiredis
+cachetools
+corpwechatbot
+numpy
+asyncpg
