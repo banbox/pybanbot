@@ -29,7 +29,10 @@ vim config.local.json
 mkdir /root/ban-strategies
 # 通过WinScp将策略文件上传到/root/ban-strategies
 ```
-## 3. 启动机器人
+## 3. 安装Docker
+[CentOS安装Docker](https://docs.docker.com/engine/install/centos/#install-using-the-repository)
+> 如果遇到错误“Failed to synchronize cache for repo 'AppStream', ignoring this repo.”，需要把`/etc/yum.repo.d`下，对应的baseurl取消注释，域名改为vault.centos.org [参考](https://forums.centos.org/viewtopic.php?t=78708)
+## 4. 启动机器人
 ```shell
 cd /root/banbot
 # 停止并删除旧的容器
@@ -42,3 +45,4 @@ docker compose up -d
 # 启动后可通过下面命令查看机器人日志：
 docker compose logs --tail 30 bot
 ```
+> 如果执行`docker compose build`时出现错误：symbol lookup error: runc: undefined symbol: seccomp_api_get，则需要执行`yum install libseccomp-devel`

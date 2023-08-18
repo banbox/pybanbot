@@ -83,7 +83,7 @@ def _reg_down_data(subparsers, **kwargs):
 
 def _reg_dbcmd(subparsers, **kwargs):
     from banbot.storage.scripts import exec_dbcmd
-    opts = ["action", "tables", "force"]
+    opts = ["action", "tables", "force", "yes"]
     _reg_sub(subparsers, 'dbcmd', opts, exec_dbcmd, help='database cmd', **kwargs)
 
 
