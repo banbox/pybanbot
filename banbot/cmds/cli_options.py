@@ -57,6 +57,7 @@ AVAILABLE_CLI_OPTIONS = {
     "tables": Arg('--tables', help='db tables, comma-separated.', nargs='+'),
     "stg_dir": Arg('--stg_dir', '--stg_path', help='dir path for strategies.', nargs='+'),
     "force": Arg('--force', help='force action', action='store_true', default=False),
+    "yes": Arg('--yes', help='skip confirm', action='store_true', default=False),
     "cluster": Arg('--cluster', help='run in cluster mode', action='store_true', default=False),
     "medium": Arg('--medium', help='data medium:db,file', default='db'),
     "no_db": Arg('--no_db', help='not save orders to db', action='store_true', default=False),

@@ -1,6 +1,6 @@
 # 技术选型
 ## VPS要求
-1核1GB内存即可，要求CentOS 7系统，安装Miniconda 3.10版本
+1核1GB内存即可，要求CentOS 8系统，安装Miniconda 3.10版本
 ## 关系数据存储
 使用postgresql。读写时底层细节分离。
 ## K线数据存储

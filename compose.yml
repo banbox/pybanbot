@@ -1,5 +1,6 @@
 services:
-  banbot:
+  bot:
+    container_name: ban-bot
     build:
       context: ./
       dockerfile: ./docker/Dockerfile
@@ -19,6 +20,7 @@ services:
         condition: service_healthy
         restart: true
   redis:
+    container_name: ban-redis
     image: redis:7
     volumes:
       - /root/ban_data/redis.conf:/redis.conf
@@ -30,6 +32,7 @@ services:
       timeout: 2s
       retries: 5
   db:
+    container_name: ban-db
     image: timescale/timescaledb:latest-pg15
     ports:
       - "127.0.0.1:5632:5432"
