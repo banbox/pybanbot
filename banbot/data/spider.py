@@ -473,13 +473,11 @@ class LiveSpider(RedisChannel):
         prefetch = 1000
         exchange = get_exchange(exg_name, market_type)
         min_save_tf, min_tf_secs = '1m', 60
-        save_tf, save_tfsec = min_save_tf, min_tf_secs
+        save_tf = min_save_tf
         tf_secs = tf_to_secs(timeframe)
         if tf_secs > min_tf_secs:
-            if timeframe not in KLine.down_tfs:
-                raise ValueError(f'{timeframe} not allowed : {symbol}, {exg_name} {market_type}')
-            save_tf, save_tfsec = timeframe, tf_secs
-        tf_msecs = tf_secs * 1000
+            save_tf = KLine.get_down_tf(timeframe)
+        tf_msecs = tf_to_secs(save_tf) * 1000
         cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
         start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
         exs = ExSymbol.get(exg_name, market_type, symbol)
