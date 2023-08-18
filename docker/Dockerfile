@@ -12,4 +12,4 @@ COPY . /banbot
 WORKDIR /banbot
 RUN python setup.py install
 
-ENTRYPOINT ["python", "-m", "banbot", "trade"]
+ENTRYPOINT ["/bin/bash", "scripts/run_docker.sh"]

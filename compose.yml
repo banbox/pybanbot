@@ -23,7 +23,7 @@ services:
     volumes:
       - /root/ban_data/redis.conf:/redis.conf
     ports:
-      - "6679:6379"
+      - "127.0.0.1:6679:6379"
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/6379; exit $?;'"]
       interval: 2s
@@ -32,7 +32,7 @@ services:
   db:
     image: timescale/timescaledb:latest-pg15
     ports:
-      - "5632:5432"
+      - "127.0.0.1:5632:5432"
     environment:
       POSTGRES_PASSWORD: '123'
       POSTGRES_DB: 'bantd'

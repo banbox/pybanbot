@@ -30,7 +30,6 @@ def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True):
     if not tables:
         tables = all_tables
     bandb = init_db()
-    bandb.echo = True
     conn = db.session.connection()
     conn.commit()
     conn.execution_options(isolation_level='AUTOCOMMIT')
@@ -40,6 +39,7 @@ def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True):
     if not tables:
         print('No Tables need to create, all exists!')
         return
+    bandb.echo = True
     print('=======  Tables to Create:', [t.__name__ for t in tables])
     print('=======  Database:', bandb.url)
     if not skip_exist and exist_tbls:
@@ -63,6 +63,7 @@ def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True):
     for t in tables:
         if hasattr(t, 'init_tbl'):
             t.init_tbl(conn)
+    bandb.echo = False
     logger.info('rebuild db complete')
 
 
