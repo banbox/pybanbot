@@ -8,5 +8,8 @@ FROM anyongjin/banbot
 #COPY run.sh /tmp/proxy_all.sh
 
 
-WORKDIR /root
+COPY . /banbot
+WORKDIR /banbot
+RUN python setup.py install
+
 ENTRYPOINT ["python", "-m", "banbot", "trade"]

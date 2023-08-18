@@ -10,3 +10,7 @@ cachetools
 corpwechatbot
 numpy
 asyncpg
+APScheduler
+six
+tqdm
+tzlocal

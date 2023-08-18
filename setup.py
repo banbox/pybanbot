@@ -28,7 +28,9 @@ setup(
             'jupyter-dash',
             'tabulate',
             'aiofiles',
-            'pandas'
+            'pandas',
+            'plotly',
+            'scikit_learn'
         ]
     }
 )
