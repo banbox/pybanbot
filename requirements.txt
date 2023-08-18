@@ -14,3 +14,4 @@ APScheduler
 six
 tqdm
 tzlocal
+tabulate
