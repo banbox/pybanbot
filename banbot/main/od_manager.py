@@ -104,7 +104,6 @@ class OrderManager(metaclass=SingletonArg):
             if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
                 for stg_name, sigin in enters:
                     enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
-                enter_ods = [od for od in enter_ods if od]
             else:
                 logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
         if exits:
@@ -114,7 +113,9 @@ class OrderManager(metaclass=SingletonArg):
             for od_id, sigout in exit_keys.items():
                 od = InOutOrder.get(od_id)
                 exit_ods.append(self.exit_order(od, sigout))
-        exit_ods = [od for od in exit_ods if od]
+        sess = db.session
+        enter_ods = [detach_obj(sess, od) for od in enter_ods if od]
+        exit_ods = [detach_obj(sess, od) for od in exit_ods if od]
         return enter_ods, exit_ods
 
     def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None,
