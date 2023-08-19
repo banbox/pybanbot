@@ -114,8 +114,8 @@ class OrderManager(metaclass=SingletonArg):
                 od = InOutOrder.get(od_id)
                 exit_ods.append(self.exit_order(od, sigout))
         sess = db.session
-        enter_ods = [detach_obj(sess, od) for od in enter_ods if od]
-        exit_ods = [detach_obj(sess, od) for od in exit_ods if od]
+        enter_ods = [od for od in enter_ods if od]
+        exit_ods = [od for od in exit_ods if od]
         return enter_ods, exit_ods
 
     def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None,
