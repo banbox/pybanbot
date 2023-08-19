@@ -208,7 +208,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         await self.unwatch_klines(*jobs)
 
     @classmethod
-    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
+    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],
                       fetch_tfsecs: int, update_tfsecs: float):
         if exg_name != cls._obj.exg_name or cls._obj.market != market:
             logger.warning(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
@@ -217,12 +217,25 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         if not hold:
             logger.error(f'receive pair ohlcv not found: {pair}')
             return
-        if not hold.last_ts:
-            hold.last_ts = ohlc_arr[-1][0] // 1000
+        # 这里可能传入多个，但只需判断最后一个，因为hold里面会从数据库中取，不会丢失
+        last_bar = ohlc_arr[-1]
+        if not hold.wait_bar:
+            hold.wait_bar = last_bar
+        elif last_bar[0] > hold.wait_bar[0]:
+            # 新bar出现，认为wait_bar完成
+            hold.on_new_data([last_bar], fetch_tfsecs)
+            hold.wait_bar = last_bar
             return
-        bar_end_ts = hold.last_ts + fetch_tfsecs
-        if btime.utctime() + update_tfsecs - 2 < bar_end_ts:
-            # 过滤掉未完成的bar，等待2s确保完成
+        if update_tfsecs <= 5 and hold.states[0].tf_secs >= 60:
+            # 更新很快，需要的周期相对较长，则要求出现下一个bar时认为完成（走上面逻辑）
             return
-        hold.last_ts = bar_end_ts
-        hold.on_new_data(ohlc_arr, fetch_tfsecs)
+        # 更新频率相对不高，或占需要的周期比率较大，近似完成认为完成
+        # 这里来的蜡烛和缓存的属于统一周期
+        bar_end_ts = hold.wait_bar[0] // 1000 + fetch_tfsecs
+        end_lack = bar_end_ts - btime.utctime()
+        if end_lack < update_tfsecs * 0.5:
+            # 缺少的时间不足更新间隔的一半，认为完成。
+            hold.on_new_data([last_bar], fetch_tfsecs)
+            hold.wait_bar = None
+            return
+        hold.wait_bar = last_bar

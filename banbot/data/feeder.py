@@ -6,7 +6,7 @@
 
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import *
-from banbot.storage import BotGlobal
+from banbot.storage import BotGlobal, KLine
 from banbot.data.tools import *
 
 
@@ -22,10 +22,11 @@ class DataFeeder(Watcher):
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False):
         super(DataFeeder, self).__init__(callback)
         self.pair = pair
+        self.exs = ExSymbol.get(BotGlobal.exg_name, BotGlobal.market_type, pair)
         self.states: List[PairTFCache] = []
         self.auto_prefire = auto_prefire
         self.sub_tflist(*tf_warms.keys())
-        self.last_ts: int = 0  # 外部provider用作缓存
+        self.wait_bar = None  # 外部用作缓存，记录未完成的bar
 
     def sub_tflist(self, *timeframes):
         '''
@@ -71,25 +72,36 @@ class DataFeeder(Watcher):
                 self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
             finally:
                 BotGlobal.is_wramup = False
-            max_end_ms = max(max_end_ms, ohlcv_arr[-1][0] + tf_secs * 1000)
+            tf_next_ms = ohlcv_arr[-1][0] + tf_secs * 1000
+            state = next((s for s in self.states if s.timeframe == tf), None)
+            if state:
+                state.next_ms = tf_next_ms
+            max_end_ms = max(max_end_ms, tf_next_ms)
         return max_end_ms
 
-    def on_new_data(self, details: List, fetch_intv: int) -> bool:
-        '''
-        有新完成的子周期蜡烛数据，尝试更新
-        :param details: 蜡烛数据，必须是已完成的
-        :param fetch_intv: 蜡烛数据的间隔
-        '''
-        # 获取从上次间隔至今期间，更新的子序列
-        state = self.states[0]
-        prefire = 0.1 if self.auto_prefire else 0
+    def _get_finish_bars(self, state: PairTFCache, details: List[Tuple], fetch_intv: int) -> Tuple[List[tuple], bool]:
         if fetch_intv < state.tf_secs:
+            prefire = 0.1 if self.auto_prefire else 0
             ohlcvs = [state.wait_bar] if state.wait_bar else []
             ohlcvs, last_finish = build_ohlcvc(details, state.tf_secs, prefire, ohlcvs=ohlcvs)
         elif fetch_intv == state.tf_secs:
             ohlcvs, last_finish = details, True
         else:
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
+        return ohlcvs, last_finish
+
+    def on_new_data(self, details: List[Tuple], fetch_intv: int) -> bool:
+        '''
+        有新完成的子周期蜡烛数据，尝试更新
+        :param details: 蜡烛数据，必须是已完成的，二维列表
+        :param fetch_intv: 蜡烛数据的间隔
+        '''
+        # 获取从上次间隔至今期间，更新的子序列
+        state = self.states[0]
+        prefire = 0.1 if self.auto_prefire else 0
+        ohlcvs, last_finish = self._get_finish_bars(state, details, fetch_intv)
+        if not ohlcvs:
+            return False
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
         min_finished = self._on_state_ohlcv(self.pair, state, ohlcvs, last_finish)
         if len(self.states) > 1:
@@ -193,6 +205,19 @@ class DBDataFeeder(HistDataFeeder):
         self._row_id = 0
         self._cache_arr = []
         self._calc_total()
+
+    def _get_finish_bars(self, state: PairTFCache, details: List[Tuple], fetch_intv: int) -> Tuple[List[Tuple], bool]:
+        if fetch_intv < state.tf_secs:
+            # 获取的小间隔数据，仅当达到完成时间时，才查询数据库
+            if details[-1][0] + fetch_intv * 1000 < state.next_ms:
+                return [], False
+        elif fetch_intv > state.tf_secs:
+            raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
+        ohlcvs = KLine.query(self.exs, state.timeframe, state.next_ms, btime.utcstamp())
+        if not ohlcvs:
+            return [], False
+        state.next_ms = ohlcvs[-1][0] + state.tf_secs * 1000
+        return ohlcvs, True
 
     async def down_if_need(self):
         from banbot.storage import KLine

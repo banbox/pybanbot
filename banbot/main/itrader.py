@@ -50,7 +50,7 @@ class Trader:
     def on_data_feed(self, pair: str, timeframe: str, row: list):
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_wramup:
-            logger.debug('data_feed %s %s %s', pair, timeframe, row)
+            logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 class PairTFCache:
     timeframe: str
     tf_secs: int
+    next_ms: int = 0  # 下一个需要的13位时间戳。一半和wait_bar不应该同时使用
     wait_bar: tuple = None  # 记录尚未完成的bar。已完成时应置为None
     latest: tuple = None  # 记录最新bar数据，可能未完成，可能已完成
 
