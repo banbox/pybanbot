@@ -6,7 +6,7 @@
 
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import *
-from banbot.storage import BotGlobal, KLine
+from banbot.storage import BotGlobal, KLine, db
 from banbot.data.tools import *
 
 
@@ -99,7 +99,8 @@ class DataFeeder(Watcher):
         # 获取从上次间隔至今期间，更新的子序列
         state = self.states[0]
         prefire = 0.1 if self.auto_prefire else 0
-        ohlcvs, last_finish = self._get_finish_bars(state, details, fetch_intv)
+        with db():
+            ohlcvs, last_finish = self._get_finish_bars(state, details, fetch_intv)
         if not ohlcvs:
             return False
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
