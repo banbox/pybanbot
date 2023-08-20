@@ -661,7 +661,10 @@ class LiveOrderManager(OrderManager):
             return
         od.set_info(f'{prefix}oid', order['id'])
         if trigger_oid and order['status'] == 'open':
-            await self.exchange.cancel_order(trigger_oid, od.symbol)
+            try:
+                await self.exchange.cancel_order(trigger_oid, od.symbol)
+            except ccxt.OrderNotFound:
+                logger.error(f'cancel stop order fail, not exist: {od.symbol}, {trigger_oid}')
 
     async def _cancel_trigger_ods(self, od: InOutOrder):
         '''
