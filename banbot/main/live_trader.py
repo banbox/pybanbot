@@ -46,6 +46,7 @@ class LiveTrader(Trader):
             amount=sub_od.amount,
             price=sub_od.price,
             value=sub_od.amount * sub_od.price,
+            cost=sub_od.amount * sub_od.price / od.leverage,
             strategy=od.strategy,
             pair=od.symbol,
             timeframe=od.timeframe,

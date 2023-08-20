@@ -49,12 +49,13 @@ async def test_ccxt_future():
     params = dict(positionSide=pos_side)
     order = await create_order(symbol, side, quantity, 30000, params)
     print('enter:', order)
+    enter_price = order['average']
 
     await asyncio.sleep(5)
     # 平仓
-    price = 29000
-    # params = dict(closePosition=True, takeProfitPrice=price, positionSide=pos_side)
-    params = dict(positionSide=pos_side)
+    price = enter_price * 0.95
+    params = dict(closePosition=True, triggerPrice=price, positionSide=pos_side)
+    # params = dict(positionSide=pos_side)
     side = 'sell'
     od_res = await create_order(symbol, side, quantity, price, params)
     print('exit:', od_res)

@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 import json
-
+from dataclasses import dataclass
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
@@ -302,7 +302,10 @@ class InOutOrder(BaseDbModel):
 
     def get_info(self, key: str, def_val=None):
         if not self.infos:
-            return def_val
+            if self.info:
+                self.infos = json.loads(self.info)
+            else:
+                return def_val
         return self.infos.get(key, def_val)
 
     def set_info(self, key: str, val):
@@ -330,6 +333,14 @@ class InOutOrder(BaseDbModel):
             else:
                 LocalOrderManager.obj.exit_order(self, dict(tag='force_exit'))
         db.session.commit()
+
+    def detach(self, sess: SqlSession):
+        detach_obj(sess, self)
+        if self.enter:
+            detach_obj(sess, self.enter)
+        if self.exit:
+            detach_obj(sess, self.exit)
+        return self
 
     @classmethod
     def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\
@@ -365,9 +376,8 @@ class InOutOrder(BaseDbModel):
         return cls.get_orders(status='his')
 
     @classmethod
-    def get(cls, od_id: int):
+    def get(cls, sess: SqlSession, od_id: int):
         if btime.run_mode in btime.LIVE_MODES:
-            sess = db.session
             op_od = sess.query(InOutOrder).get(od_id)
             if not op_od:
                 return op_od
@@ -393,10 +403,14 @@ class InOutOrder(BaseDbModel):
         return self.__str__()
 
 
+@dataclass
 class OrderJob:
-    def __init__(self, od_id: int, is_enter: bool):
-        self.od_id = od_id
-        self.is_enter = is_enter
+    ACT_ENTER: ClassVar[str] = 'enter'
+    ACT_EXIT: ClassVar[str] = 'exit'
+    ACT_EDITTG: ClassVar[str] = 'edit_trigger'
+    od_id: int
+    action: str
+    data: str = None
 
 
 def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None,

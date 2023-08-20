@@ -83,7 +83,8 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     def process_orders(self, pair_tf: str, enters: List[Tuple[str, dict]],
-                       exits: List[Tuple[str, dict]], exit_keys: Dict[int, dict])\
+                       exits: List[Tuple[str, dict]], exit_keys: Dict[int, dict],
+                       edit_triggers: List[Tuple[InOutOrder, str]])\
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -91,31 +92,39 @@ class OrderManager(metaclass=SingletonArg):
         :param enters: [(strategy, enter_tag, cost), ...]
         :param exits: [(strategy, exit_tag), ...]
         :param exit_keys: Dict(order_key, exit_tag)
+        :param edit_triggers: 编辑止损止盈订单
         :return:
         '''
+        sess = db.session
         if enters or exits or exit_keys:
             logger.debug('bar signals: %s %s %s', enters, exits, exit_keys)
+            ctx = get_context(pair_tf)
+            exs, _ = get_cur_symbol(ctx)
+            enter_ods, exit_ods = [], []
+            if enters:
+                if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
+                    for stg_name, sigin in enters:
+                        enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                else:
+                    logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
+            if exits:
+                for stg_name, sigout in exits:
+                    exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, exs.symbol))
+            if exit_keys:
+                for od_id, sigout in exit_keys.items():
+                    od = InOutOrder.get(sess, od_id)
+                    exit_ods.append(self.exit_order(od, sigout))
+            enter_ods = [od.detach(sess) for od in enter_ods if od]
+            exit_ods = [od.detach(sess) for od in exit_ods if od]
         else:
-            return [], []
-        ctx = get_context(pair_tf)
-        exs, _ = get_cur_symbol(ctx)
-        enter_ods, exit_ods = [], []
-        if enters:
-            if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
-                for stg_name, sigin in enters:
-                    enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
-            else:
-                logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
-        if exits:
-            for stg_name, sigout in exits:
-                exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, exs.symbol))
-        if exit_keys:
-            for od_id, sigout in exit_keys.items():
-                od = InOutOrder.get(od_id)
-                exit_ods.append(self.exit_order(od, sigout))
-        sess = db.session
-        enter_ods = [od for od in enter_ods if od]
-        exit_ods = [od for od in exit_ods if od]
+            enter_ods, exit_ods = [], []
+        sess.commit()  # 保存到db，确保order_q取到的是最新的
+        for od, prefix in edit_triggers:
+            if od in exit_ods:
+                continue
+            tg_price = od.get_info(prefix + 'price')
+            logger.info(f'edit push: {od} {tg_price}')
+            self._put_order(od, OrderJob.ACT_EDITTG, prefix)
         return enter_ods, exit_ods
 
     def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None,
@@ -163,10 +172,10 @@ class OrderManager(metaclass=SingletonArg):
         )
         if btime.run_mode in LIVE_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
-        self._put_order(od, True)
+        self._put_order(od, 'enter')
         return od
 
-    def _put_order(self, od: InOutOrder, is_enter: bool):
+    def _put_order(self, od: InOutOrder, action: str, data: str = None):
         pass
 
     def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
@@ -202,7 +211,7 @@ class OrderManager(metaclass=SingletonArg):
         od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od, od.exit_tag)
-        self._put_order(od, False)
+        self._put_order(od, 'exit')
         return od
 
     def _finish_order(self, od: InOutOrder):
@@ -230,20 +239,33 @@ class OrderManager(metaclass=SingletonArg):
             for od in bomb_ods:
                 self.exit_order(od, dict(tag='bomb'), price=close_price)
 
-    def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Dict[int, dict]:
+    def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Tuple[Dict[int, dict], list]:
         result = dict()
         exs, _ = get_cur_symbol()
         op_orders = InOutOrder.open_orders(strategy.name, exs.symbol)
         if not op_orders:
-            return result
+            return result, []
         # 调用策略的自定义退出判断
+        edit_ods = []
         for od in op_orders:
-            if not od.can_close():
-                continue
+            sl_price = od.get_info('stoploss_price')
+            tp_price = od.get_info('takeprofit_price')
             sigout = strategy.custom_exit(pair_arr, od)
             if sigout:
+                if not od.can_close():
+                    continue
                 result[od.id] = sigout
-        return result
+            else:
+                # 检查是否需要修改条件单
+                new_sl_price = od.get_info('stoploss_price')
+                new_tp_price = od.get_info('takeprofit_price')
+                if new_sl_price != sl_price:
+                    edit_ods.append((od, 'stoploss_'))
+                else:
+                    logger.info('stop loss price change!!!!')
+                if new_tp_price != tp_price:
+                    edit_ods.append((od, 'takeprofit_'))
+        return result, edit_ods
 
     def check_fatal_stop(self):
         with db():
@@ -621,6 +643,33 @@ class LiveOrderManager(OrderManager):
             if exg_outkey in self.exg_orders:
                 self.exg_orders.pop(exg_outkey)
 
+    async def _edit_trigger_od(self, od: InOutOrder, prefix: str):
+        trigger_oid = od.get_info(f'{prefix}oid')
+        params = dict()
+        params['positionSide'] = 'SHORT' if od.short else 'LONG'
+        trig_price = od.get_info(f'{prefix}price')
+        if trig_price:
+            params.update(closePosition=True, triggerPrice=trig_price)  # 止损单
+        side = 'buy' if od.short else 'sell'
+        amount = od.enter_amount
+        order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
+        od.set_info(f'{prefix}oid', order['id'])
+        if trigger_oid and order['status'] == 'open':
+            await self.exchange.cancel_order(trigger_oid, od.symbol)
+
+    async def _cancel_trigger_ods(self, od: InOutOrder):
+        '''
+        取消订单的关联订单。订单在平仓时，关联的止损单止盈单不会自动退出，需要调用此方法退出
+        '''
+        prefixs = ['stoploss_', 'takeprofit_']
+        cancel_res = []
+        for prefix in prefixs:
+            trigger_oid = od.get_info(f'{prefix}oid')
+            if not trigger_oid:
+                continue
+            res = await self.exchange.cancel_order(trigger_oid, od.symbol)
+            cancel_res.append(res)
+
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
@@ -629,27 +678,29 @@ class LiveOrderManager(OrderManager):
         params = dict()
         if self.market_type == 'future':
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
-            stoploss_price = od.get_info('stoploss_price')
-            takeprofit_price = od.get_info('takeprofit_price')
-            if stoploss_price:
-                params.update(closePosition=True, triggerPrice=price)  # 止损单
-            if takeprofit_price:
-                params.update(closePosition=True, takeProfitPrice=price)  # 止盈单
         order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, price, params)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)
+            if is_enter:
+                if od.get_info('stoploss_price'):
+                    await self._edit_trigger_od(od, 'stoploss_')
+                if od.get_info('takeprofit_price'):
+                    await self._edit_trigger_od(od, 'takeprofit_')
+            else:
+                # 平仓，取消关联订单
+                await self._cancel_trigger_ods(od)
             self._fire(od, is_enter)
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
 
-    def _put_order(self, od: InOutOrder, is_enter: bool):
+    def _put_order(self, od: InOutOrder, action: str, data: str = None):
         if not btime.prod_mode():
             return
-        if is_enter:
+        if action == 'enter':
             od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
             od.save()
-        self.order_q.put_nowait(OrderJob(od.id, is_enter))
+        self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     async def _update_bnb_order(self, od: Order, data: dict):
         info = data['info']
@@ -689,8 +740,9 @@ class LiveOrderManager(OrderManager):
             logger.error('unknown bnb order status: %s, %s', state, data)
             return
         # 将sub_od的修改保存
-        db.session.commit()
-        inout_od: InOutOrder = InOutOrder.get(od.inout_id)
+        sess = db.session
+        sess.commit()
+        inout_od: InOutOrder = InOutOrder.get(sess, od.inout_id)
         if inout_status:
             inout_od.status = inout_status
         if inout_status == InOutStatus.FullExit:
@@ -769,6 +821,7 @@ class LiveOrderManager(OrderManager):
             if not od.enter.filled:
                 od.update_exit(price=od.enter.price)
                 self._finish_order(od)
+                await self._cancel_trigger_ods(od)
                 # 这里未入场直接退出的，不应该fire
                 return
             self._fire(od, True)
@@ -779,16 +832,21 @@ class LiveOrderManager(OrderManager):
 
     async def consume_queue(self):
         while True:
-            job = await self.order_q.get()
+            job: OrderJob = await self.order_q.get()
             od: Optional[InOutOrder] = None
             try:
                 with db():
-                    od = InOutOrder.get(job.od_id)
-                    if job.is_enter:
+                    sess = db.session
+                    od = InOutOrder.get(sess, job.od_id)
+                    if job.action == 'enter':
                         await self._exec_order_enter(od)
-                    else:
+                    elif job.action == 'exit':
                         await self._exec_order_exit(od)
-                    db.session.commit()
+                    elif job.action == 'edit_trigger':
+                        await self._edit_trigger_od(od, job.data)
+                    else:
+                        logger.error(f'unsupport order job type: {job.action}')
+                    sess.commit()
             except Exception:
                 if od:
                     await od.force_exit()

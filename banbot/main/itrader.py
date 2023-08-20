@@ -60,6 +60,7 @@ class Trader:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         # 更新最新价格
         MarketPrice.set_bar_price(pair, float(row[ccol]))
+        edit_triggers = []
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
             strategy_list = self.symbol_stgs[pair_tf]
@@ -87,16 +88,16 @@ class Trader:
                     if sigout:
                         exit_list.append((stg_name, sigout))
                     if not BotGlobal.is_wramup:
-                        ext_tags.update(self.order_mgr.calc_custom_exits(pair_arr, strategy))
+                        exts, cur_edits = self.order_mgr.calc_custom_exits(pair_arr, strategy)
+                        edit_triggers.extend(cur_edits)
+                        ext_tags.update(exts)
             calc_cost = (time.monotonic() - start_time) * 1000
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         if not BotGlobal.is_wramup:
-            ent_ods, ext_ods = self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags)
-            if ent_ods or ext_ods:
-                for stgy in strategy_list:
-                    stgy.update_orders(ent_ods, ext_ods)
+            edit_tgs = list(set(edit_triggers))
+            self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags, edit_tgs)
         return enter_list, exit_list, ext_tags
 
     async def run(self):

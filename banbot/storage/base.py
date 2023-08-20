@@ -64,11 +64,11 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
         create_args['echo'] = debug
     create_args['isolation_level'] = iso_level
     _db_engine = create_engine(db_url, **create_args)
-    _DbSession = sessionmaker(bind=_db_engine, expire_on_commit=False)
+    _DbSession = sessionmaker(bind=_db_engine)
     # 实例化异步engine
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
     _db_engine_asy = create_async_engine(db_url, **create_args)
-    _DbSessionAsync = sessionmaker(_db_engine_asy, expire_on_commit=False, class_=AsyncSession)
+    _DbSessionAsync = sessionmaker(_db_engine_asy, class_=AsyncSession)
     return _db_engine
 
 
