@@ -7,6 +7,8 @@ import copy
 from asyncio import Queue
 from collections import OrderedDict
 
+import ccxt
+
 from banbot.data.provider import *
 from banbot.main.wallets import CryptoWallet, WalletsLocal
 from banbot.storage.orders import *
@@ -652,7 +654,11 @@ class LiveOrderManager(OrderManager):
             params.update(closePosition=True, triggerPrice=trig_price)  # 止损单
         side = 'buy' if od.short else 'sell'
         amount = od.enter_amount
-        order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
+        try:
+            order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
+        except ccxt.OrderImmediatelyFillable:
+            logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
+            return
         od.set_info(f'{prefix}oid', order['id'])
         if trigger_oid and order['status'] == 'open':
             await self.exchange.cancel_order(trigger_oid, od.symbol)
