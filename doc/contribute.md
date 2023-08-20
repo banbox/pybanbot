@@ -36,7 +36,7 @@ cProfile.runctx('asyncio.run(backtesting.run())', globals(), locals(), sort='tot
 # 部署
 ```shell
 # 启动机器人
-nohup python -m banbot trade -c /root/ban_data/config.json > /root/trade.out 2>&1 &
+nohup python -m banbot trade > /root/trade.out 2>&1 &
 
 # 查看日志
 tail -30 /root/trade.out

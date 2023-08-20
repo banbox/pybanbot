@@ -575,10 +575,10 @@ async def run_spider_forever(args: dict):
     '''
     from banbot.worker.top_change import TopChange
     from banbot.worker.sig_sync import run_tdsig_updater
-    from banbot.worker.market_monitor import run_market_monitor
+    # from banbot.worker.market_monitor import run_market_monitor
     logger.info('start top change update timer...')
     await TopChange.start()
     asyncio.create_task(run_tdsig_updater())
-    asyncio.create_task(run_market_monitor())
+    # asyncio.create_task(run_market_monitor())
     await LiveSpider.run_spider()
     # await TopChange.clear()

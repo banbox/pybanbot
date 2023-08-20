@@ -22,7 +22,7 @@ cd /root/ban_data && git pull origin master
 ## 2. 修改配置&上传策略
 ```shell
 cd /root/ban_data
-cp config.json config.local.json
+cp config.yml config.local.yml
 # config.local.json和config.json的结构相同，会覆盖config.json的同名配置。
 # config.local.json不会被git追踪，适合存放敏感信息，如：交易所秘钥、微信通知token、策略名、时间周期、杠杆等
 vim config.local.json

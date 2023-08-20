@@ -1,0 +1,113 @@
+name: ayj  # 机器人名称，用于在消息通知中区分不同机器人
+env: prod  # 运行环境，prod表示生产网络，test表示测试网络（币安测试网）
+run_mode: prod  # 运行模式：prod实盘，dry_run模拟，backtest回测
+leverage: 2  # 杠杆倍数，仅期货合约市场有效
+limit_vol_secs: 5  # 按成交量取订单簿价格的过期时间，单位：秒
+market_type: future  # 市场：future期货合约，spot现货
+max_market_rate: 0.0001  # 手续费率超过此值，使用限价单
+odbook_ttl: 1000  # 订单簿过期时间
+order_type: market  # 下单类型：market市价单  limit限价单
+prefire: false  # 是否在bar即将完成时，提前10%时间触发
+refill_margin: true  # 交易合约时，如保证金不足是否自动从余额扣除填补
+signal_strategy: DigoChain  # 指定运算交易信号的策略，爬虫端运行，用于网站端显示
+stake_amount: 15  # 单笔订单默认本金
+wallet_amounts:  # 钱包余额，用于回测
+  USDT: 10000
+stake_currency: [USDT, TUSD]  # 限定只交易定价币为这些的交易对
+fatal_stop:  # 全局止损，当全局损失达到限制时，禁止下单
+  '1440': 0.1  # 一天损失10%
+  '180': 0.2  # 3小时损失20%
+  '30': 0.3  # 半小时损失30%
+timerange: "20230701-20230808"  # 使用的K线范围，用于回测
+run_timeframes: [5m]
+run_policy:  # 运行的策略，可以多个策略同时运行
+- name: Demo  # 策略名称
+  run_timeframes: [5m]  # 此策略支持的时间周期，提供时覆盖根层级的run_timeframes
+  max_fee: 0.01  # 此策略允许的最大交易费率
+  max_pair: 999  # 此策略允许的最大标的数量
+pairs:  # 给定交易币种，如不为空，pairlists和paircfg会被忽略
+- SOL/USDT:USDT
+- UNFI/USDT:USDT
+- SFP/USDT:USDT
+paircfg:  # 交易对管理的一些配置
+  refresh_mins: 720  # 默认过期时间
+pairlists:  # 交易对过滤器，按从上到下的顺序逐个过滤应用。
+- name: StaticPairList  # 静态交易对，使用exchange.pair_whitelist，不可和VolumePairList同时使用，二选一。
+- name: VolumePairList  # 按成交量价值倒序排序所有交易对
+  limit: 100  # 取前100个
+  min_value: 100000  # 最低成交量价值
+  refresh_secs: 7200  # 缓存时间
+  back_timeframe: 1d  # 计算成交量时间周期，默认：天
+  back_period: 1  # 计算成交量的乘数，和back_timeframe相乘得到时间范围
+- name: PriceFilter  # 价格过滤器
+  max_unit_value: 100  # 最大允许的单位价格变动对应的价值(针对定价货币，一般是USDT)。
+  precision: 0.0015  # 按价格精度过滤交易对，默认要求价格变动最小单位是0.1%
+  min_price: 0.001  # 最低价格
+  max_price: 100000  # 最高价格
+- name: RangeStabilityFilter  # 波动性过滤器
+  back_days: 5  # 回顾的K线天数
+  min_chg_rate: 0.03  # 最小价格变动比率
+  max_chg_rate: 10  # 最大价格变动比率
+  refresh_period: 1440  # 缓存时间，秒
+- name: SpreadFilter  # 流动性过滤器
+  max_ratio: 0.005  # 公式：1-bid/ask，买卖价差占价格的最大比率
+- name: VolatilityFilter  # 波动性过滤器，公式：std(log(c/c1)) * sqrt(back_days)
+  back_days: 10  # 回顾的K线天数
+  max: 1  # 波动分数最大值，此值越大，允许一些在1d级别上变化非常剧烈的标的
+  min: 0.05  # 波动分数最小值，此值越小，允许一些在1d级别上变化非常小的标的
+  refresh_period: 1440  # 缓存时间
+- name: AgeFilter  # 按标的的上市天数过滤
+  min: 5
+  max: 10000000
+- name: OffsetFilter  # 偏移限定数量选择。一般用在最后
+  offset: 10  # 从第10个开始取
+  limit: 30  # 最多取30个
+- name: ShuffleFilter  # 随机打乱
+  seed: 42  # 随机数种子，可选
+exchange:  # 交易所配置
+  name: binance  # 当前使用的交易所
+  binance:
+    credit_prod:  # 生产网络的key和secret，指定env: prod时此项必填
+      api_key: xxx
+      api_secret: bbb
+      timeout: 3
+    credit_test:  # 测试网络的key和secret，指定env: test时此项必填
+      api_key: xxx
+      api_secret: bbb
+      base_url: https://testnet.binance.vision
+      stream_url: wss://testnet.binance.vision
+      timeout: 3
+    options:
+      adjustForTimeDifference: true
+    pair_fee_limits:
+      BTC/TUSD: 0.0  # 限制标的的最大交易费率，超过则不允许交易
+    proxies:  # 是否使用代理访问交易所
+      http: http://127.0.0.1:10808
+      https: http://127.0.0.1:10808
+data_dir: E:\trade\ban_data  # 保存和读取数据的目录
+database:  # 数据库配置
+  retention: all
+  url: postgresql://postgres:123@[127.0.0.1]:5432/bantd
+redis_url: redis://127.0.0.1:6379/0
+rpc_channels:  # 支持的全部rpc渠道
+  wx_bot:  # rpc的渠道名
+    agentid: '1000004'
+    corpid: ww0f524655066bfb7f
+    corpsecret: hbXBhPn5Kgv_bjg01RIA2ufFHryQ_hONzPiJZ-gmouA
+    enabled: true  # 是否启动此RPC
+    msg_types: [entry, exit, status]  # 允许发送的消息类型
+    type: wework  # rpc类型
+  wx_notify:
+    agentid: '1000005'
+    corpid: ww0f524655066bfb7f
+    corpsecret: b4LSTYRiMkfT_1Cxx4xc1JFYB9K-Mu3rGI8MbJ4iBiw
+    enabled: true
+    msg_types: [exception]
+    type: wework
+webhook:  # 发送消息的配置
+  entry:  # 入场消息
+    content: "{name} {action}\n标的：{pair} {timeframe}\n信号：{enter_tag}\n价格：{price:.5f}\n花费：{value:.2f}"
+  exit:  # 出场消息
+    content: "{name} {action}\n标的：{pair} {timeframe}\n信号：{exit_tag}\n价格：{price:.5f}\n得到：{value:.2f}\n利润：{profit:.2f}"
+  status:  # 机器人状态消息：启动，停止等
+    content: '{name}: {status}'

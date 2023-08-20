@@ -3,11 +3,13 @@
 # File  : configuration.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import os.path
 import sys
 from pathlib import Path
 from typing import *
 
 import orjson
+import yaml
 
 from banbot.config.consts import *
 from banbot.util.common import logger, Singleton
@@ -21,12 +23,15 @@ def load_config_file(path: str) -> Dict[str, Any]:
     :return: configuration as dictionary
     """
     try:
-        # Read config from stdin if requested in the options
+        is_yml = os.path.splitext(path)[1].lower() in {'.yml', '.yaml'}
         with open(path, 'rb') if path != '-' else sys.stdin as file:
             fdata = file.read()
             if isinstance(fdata, (bytes, bytearray)):
                 fdata = fdata.decode('utf-8')
-            config = orjson.loads(fdata)
+            if is_yml:
+                config = yaml.safe_load(fdata)
+            else:
+                config = orjson.loads(fdata)
     except FileNotFoundError:
         raise RuntimeError(
             f'Config file "{path}" not found!'
@@ -187,7 +192,7 @@ class AppConfig(metaclass=Singleton):
         if not os.path.isdir(data_dir):
             raise ValueError(f'`ban_data_dir`:{data_dir} not exits, config load fail')
         result = []
-        try_names = ['config.json', 'config.local.json']
+        try_names = ['config.json', 'config.yml', 'config.local.json', 'config.local.yml']
         for name in try_names:
             full_path = os.path.join(data_dir, name)
             if os.path.isfile(full_path):

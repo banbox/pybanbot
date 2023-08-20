@@ -19,12 +19,17 @@ class RPCManager(metaclass=Singleton):
         self._rpc = RPC(config)
         self.channels: List[RPCHandler] = []
         self.name = config.get('name', '')
-
-        if config.get('wework', {}).get('enabled', False):
-            logger.info('start rpc.wework ...')
+        chl_items = config.get('rpc_channels') or dict()
+        for key, item in chl_items.items():
+            if not item.get('enabled', False):
+                continue
+            chl_type = item.get('type')
             try:
-                from banbot.rpc.wework import WeWork
-                self.channels.append(WeWork(self._rpc, config))
+                if chl_type == 'wework':
+                    from banbot.rpc.wework import WeWork
+                    self.channels.append(WeWork(self._rpc, config, item))
+                else:
+                    logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
             except Exception:
                 logger.exception('init wechat corp fail')
 
@@ -47,8 +52,10 @@ class RPCManager(metaclass=Singleton):
         }
         """
         msg['name'] = self.name
+        msg_type = msg['type'].value
         for mod in self.channels:
-            logger.debug('Forwarding message to rpc.%s', mod.name)
+            if msg_type not in mod.msg_types:
+                continue
             try:
                 await mod.send_msg(msg)
             except NotImplementedError:
@@ -62,12 +69,10 @@ class RPCManager(metaclass=Singleton):
         """
         while queue:
             msg = queue.popleft()
-            logger.info('Sending rpc strategy_msg: %s', msg)
-            for mod in self.channels:
-                await mod.send_msg({
-                    'type': RPCMessageType.STRATEGY_MSG,
-                    'msg': msg,
-                })
+            await self.send_msg({
+                'type': RPCMessageType.STRATEGY_MSG,
+                'msg': msg,
+            })
 
     async def startup_messages(self):
         exg_name = self.config['exchange']['name']

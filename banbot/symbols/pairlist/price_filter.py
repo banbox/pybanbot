@@ -11,7 +11,6 @@ class PriceFilter(PairList):
     '''
     价格过滤器。
     precision: 0.001，按价格精度过滤交易对，默认要求价格变动最小单位是0.1%
-    unit_ratio：0 价格变动单位比率。作用跟precision类似
     min_price: 最低价格
     max_price: 最高价格
     max_unit_value: 最大允许的单位价格变动对应的价值(针对定价货币，一般是USDT)。

@@ -29,7 +29,7 @@ class RPCException(Exception):
 
 class RPCHandler:
 
-    def __init__(self, rpc: 'RPC', config: Config) -> None:
+    def __init__(self, rpc: 'RPC', config: Config, item: dict) -> None:
         """
         Initializes RPCHandlers
         :param rpc: instance of RPC Helper class
@@ -38,6 +38,10 @@ class RPCHandler:
         """
         self._rpc = rpc
         self._config: Config = config
+        self._params = item
+        self.msg_types = set(item.get('msg_types') or [])
+        if not self.msg_types:
+            logger.error(f'no msg type configured for {item}')
 
     @property
     def name(self) -> str:
@@ -95,7 +99,6 @@ class RPCMessageType(str, Enum):
     STRATEGY_MSG = 'strategy_msg'
 
     WHITELIST = 'whitelist'
-    ANALYZED_DF = 'analyzed_df'
     NEW_CANDLE = 'new_candle'
 
     MARKET_TIP = 'market_tip'
@@ -110,14 +113,14 @@ class RPCMessageType(str, Enum):
 class Webhook(RPCHandler):
     """  This class handles all webhook communication """
 
-    def __init__(self, rpc: RPC, config: Config) -> None:
+    def __init__(self, rpc: RPC, config: Config, item: dict) -> None:
         """
         Init the Webhook class, and init the super class RPCHandler
         :param rpc: instance of RPC Helper class
         :param config: Configuration object
         :return: None
         """
-        super().__init__(rpc, config)
+        super().__init__(rpc, config, item)
 
         self._url = self._config['webhook'].get('url')
         self._retries = self._config['webhook'].get('retries', 0)
@@ -132,36 +135,16 @@ class Webhook(RPCHandler):
 
     def _get_value_dict(self, msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         whconfig = self._config['webhook']
-        # Deprecated 2022.10 - only keep generic method.
-        if msg['type'] in [RPCMessageType.ENTRY]:
-            valuedict = whconfig.get('entry')
-        elif msg['type'] in [RPCMessageType.ENTRY_CANCEL]:
-            valuedict = whconfig.get('entrycancel')
-        elif msg['type'] in [RPCMessageType.ENTRY_FILL]:
-            valuedict = whconfig.get('entryfill')
-        elif msg['type'] == RPCMessageType.EXIT:
-            valuedict = whconfig.get('exit')
-        elif msg['type'] == RPCMessageType.EXIT_FILL:
-            valuedict = whconfig.get('exitfill')
-        elif msg['type'] == RPCMessageType.EXIT_CANCEL:
-            valuedict = whconfig.get('exitcancel')
-        elif msg['type'] in (RPCMessageType.STATUS,
-                             RPCMessageType.STARTUP,
-                             RPCMessageType.EXCEPTION,
-                             RPCMessageType.WARNING):
+        msg_type = msg['type']
+        type_val = msg_type.value
+        if not msg_type:
+            return
+        dct_config = whconfig.get(type_val)
+        if dct_config:
+            return dct_config
+        if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP,
+                        RPCMessageType.EXCEPTION, RPCMessageType.WARNING):
             valuedict = whconfig.get('status')
-        elif msg['type'].value in whconfig:
-            # Allow all types ...
-            valuedict = whconfig.get(msg['type'].value)
-        elif msg['type'] in (
-                RPCMessageType.PROTECTION_TRIGGER,
-                RPCMessageType.PROTECTION_TRIGGER_GLOBAL,
-                RPCMessageType.WHITELIST,
-                RPCMessageType.ANALYZED_DF,
-                RPCMessageType.NEW_CANDLE,
-                RPCMessageType.STRATEGY_MSG):
-            # Don't fail for non-implemented types
-            return None
         else:
             return None
         return valuedict

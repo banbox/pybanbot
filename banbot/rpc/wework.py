@@ -11,12 +11,12 @@ from banbot.rpc.rpc import *
 
 
 class WeWork(Webhook):
-    def __init__(self, rpc: RPC, config: Config):
-        super(WeWork, self).__init__(rpc, config)
+    def __init__(self, rpc: RPC, config: Config, item: dict):
+        super(WeWork, self).__init__(rpc, config, item)
         import logging
-        self._config = config
-        self.rpc = rpc
-        self.api = AppMsgSender(**config['wework'], log_level=logging.WARNING)
+        arg_keys = ['corpid', 'agentid', 'corpsecret']
+        arg_dic = {k: v for k, v in item.items() if k in arg_keys}
+        self.api = AppMsgSender(**arg_dic, log_level=logging.WARNING)
 
     async def _do_send_msg(self, payload: dict):
         loop = asyncio.get_running_loop()

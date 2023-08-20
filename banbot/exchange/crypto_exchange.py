@@ -222,7 +222,6 @@ class CryptoExchange:
         self.bot_name = config.get('name', 'noname')
         self.market_type = market_type or config.get('market_type')
         self.mtype = exg_mtype_map.get(self.market_type) or self.market_type
-        self.quote_base = config.get('quote_base', 'USDT')
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
         self.leverages = dict()  # 记录每个币种的杠杆
