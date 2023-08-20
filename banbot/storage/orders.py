@@ -198,6 +198,24 @@ class InOutOrder(BaseDbModel):
             return -1
         return self._elp_num_offset(self.exit_at)
 
+    @property
+    def enter_cost(self):
+        '''
+        获取订单花费的金额（名义价值）
+        '''
+        if self.quote_cost:
+            return self.quote_cost
+        return self.enter.amount * (self.enter.price or self.init_price)
+
+    @property
+    def enter_amount(self):
+        '''
+        获取入场标的的数量
+        '''
+        if self.enter.amount:
+            return self.enter.amount
+        return self.quote_cost / (self.enter.price or self.init_price)
+
     def can_close(self):
         if self.exit_tag:
             return False
