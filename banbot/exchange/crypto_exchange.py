@@ -107,6 +107,8 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
     if not with_ws:
         return exchange, exchange_async, None
     run_env = cfg["env"]
+    if market_type == 'future':
+        exg_name = exg_fut_map.get(exg_name) or exg_name
     exg_class = getattr(ccxtpro, exg_name)
     exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
     cred_args = _get_credits(exg_cfg, run_env)
@@ -487,8 +489,6 @@ class CryptoExchange:
         :param params:
         :return:
         '''
-        if self.market_type != 'spot':
-            raise ValueError('watch_balance support spot only')
         return await self.api_ws.watch_balance(params)
 
     async def watch_orders(self, symbol=None, since=None, limit=None, params={}):
@@ -513,8 +513,6 @@ class CryptoExchange:
         :param params:
         :return:
         '''
-        if self.market_type != 'spot':
-            raise ValueError('watch_my_trades support spot only')
         return await self.api_ws.watch_my_trades(symbol, since, limit, params)
 
     async def fetch_ohlcv_plus(self, pair: str, timeframe: str, since=None, limit=None,

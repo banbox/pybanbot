@@ -629,9 +629,7 @@ class LiveOrderManager(OrderManager):
             new_num, old_num = self._check_new_trades(order['trades'])
             if new_num or self.market_type != 'spot':
                 # 期货市场未返回trades
-                new_change = self._update_order_res(od, is_enter, order)
-                if new_change and self.market_type != 'spot':
-                    await self.wallets.update_balance()
+                self._update_order_res(od, is_enter, order)
         await self._consume_unmatchs(sub_od)
         db.session.commit()
 
@@ -664,7 +662,7 @@ class LiveOrderManager(OrderManager):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
             except ccxt.OrderNotFound:
-                logger.error(f'cancel stop order fail, not exist: {od.symbol}, {trigger_oid}')
+                logger.error(f'cancel stop order fail, not found: {od.symbol}, {trigger_oid}')
 
     async def _cancel_trigger_ods(self, od: InOutOrder):
         '''
@@ -676,8 +674,11 @@ class LiveOrderManager(OrderManager):
             trigger_oid = od.get_info(f'{prefix}oid')
             if not trigger_oid:
                 continue
-            res = await self.exchange.cancel_order(trigger_oid, od.symbol)
-            cancel_res.append(res)
+            try:
+                res = await self.exchange.cancel_order(trigger_oid, od.symbol)
+                cancel_res.append(res)
+            except ccxt.OrderNotFound:
+                logger.error(f'cancel stop order fail, not found: {od.symbol}, {trigger_oid}')
 
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
@@ -712,11 +713,11 @@ class LiveOrderManager(OrderManager):
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     async def _update_bnb_order(self, od: Order, data: dict):
-        info = data['info']
+        info: dict = data['info']
         state = info['X']
         if state == 'NEW':
             return
-        cur_ts = info['E']
+        cur_ts = info.get('E') or info.get('T')  # 合约订单没有E
         if cur_ts < od.update_at:
             # 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
             return
@@ -727,14 +728,21 @@ class LiveOrderManager(OrderManager):
         inout_status = None
         if state in {'FILLED', 'PARTIALLY_FILLED'}:
             od_status = OrderStatus.Close if state == 'FILLED' else OrderStatus.PartOk
-            filled, total_cost = float(info['z']), float(info['Z'])
-            fee_val, last_amt = float(info['n']), float(info['l'])
-            kwargs = dict(status=od_status, order_type=info['o'], filled=filled, average=total_cost/filled)
+            filled, fee_val = float(info['z']), float(info['n'])
+            if self.market_type == 'future':
+                average = float(info['ap'])
+            else:
+                average = float(info['Z']) / filled
+            kwargs = dict(status=od_status, order_type=info['o'], filled=filled, average=average)
             if od_status == OrderStatus.Close:
                 kwargs['price'] = kwargs['average']
             if fee_val:
-                kwargs['fee_type'] = info['N']
-                kwargs['fee'] = fee_val / last_amt
+                fee_name = info['N'] or ''
+                kwargs['fee_type'] = fee_name
+                if od.symbol.endswith(fee_name):
+                    # 期货市场手续费以USD计算
+                    fee_val /= average
+                kwargs['fee'] = fee_val / filled
             od.update_props(**kwargs)
             mtaker = 'maker' if info['m'] else 'taker'
             fee_key = f'{od.symbol}_{mtaker}'
@@ -767,9 +775,6 @@ class LiveOrderManager(OrderManager):
 
     @loop_forever
     async def listen_orders_forever(self):
-        if self.market_type != 'spot':
-            # 币安只有现货市场支持订单更新
-            return 'exit'
         try:
             trades = await self.exchange.watch_my_trades()
         except ccxt.NetworkError as e:

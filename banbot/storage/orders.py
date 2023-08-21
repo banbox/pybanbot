@@ -11,6 +11,7 @@ from banbot.storage.base import *
 from banbot.util.misc import del_dict_prefix
 from banbot.util.redis_helper import AsyncRedis
 from banbot.util import btime
+from banbot.storage.common import BotGlobal
 
 
 class OrderStatus:
@@ -256,14 +257,22 @@ class InOutOrder(BaseDbModel):
         '''
         if not self.status or not self.enter.price or not self.enter.filled:
             return
-        fee_rate = self.enter.fee
-        get_amount = self.enter.filled * (1 - fee_rate)  # 入场后的数量
-        if self.status == InOutStatus.FullExit:
-            # 已完全退出
-            get_amount *= (1 - self.exit.fee)  # 出场后的数量
-        # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
+        ent_fee_rate = self.enter.fee
         ent_quote_amount = self.enter.price * self.enter.amount
-        self.profit = get_amount * price - ent_quote_amount
+        if BotGlobal.market_type == 'future':
+            # 期货市场，手续费以定价币计算
+            get_amount = self.enter.filled
+            fee_cost = ent_quote_amount * ent_fee_rate
+            if self.status == InOutStatus.FullExit:
+                fee_cost += get_amount * price * self.exit.fee
+        else:
+            get_amount = self.enter.filled * (1 - ent_fee_rate)  # 入场后的数量
+            if self.status == InOutStatus.FullExit:
+                # 已完全退出
+                get_amount *= (1 - self.exit.fee)  # 出场后的数量
+            fee_cost = 0
+        # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
+        self.profit = get_amount * price - ent_quote_amount - fee_cost
         if self.short:
             self.profit = 0 - self.profit
         if self.leverage:

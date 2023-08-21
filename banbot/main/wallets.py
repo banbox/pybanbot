@@ -365,10 +365,10 @@ class CryptoWallet(WalletsLocal):
     def _update_local(self, balances: dict):
         message = []
         for symbol in self._symbols:
-            state = balances.get(symbol)
+            state: dict = balances.get(symbol)
             if not state or not state.get('total'):
                 continue
-            free, used = state['free'], state['used']
+            free, used = state.get('free') or 0, state.get('used') or 0
             key = 'pendings' if self.exchange.market_type == 'future' else 'frozens'
             args = {'available': free, key: {'*': used}}
             self.data[symbol] = ItemWallet(**args)
@@ -389,9 +389,6 @@ class CryptoWallet(WalletsLocal):
 
     @loop_forever
     async def update_forever(self):
-        if BotGlobal.market_type != 'spot':
-            # ccxt币安仅spot支持余额推送
-            return 'exit'
         try:
             balances = await self.exchange.watch_balance()
         except ccxt.NetworkError as e:
