@@ -21,7 +21,7 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
     res_list = []
 
     def ohlcv_cb(candles, exs: ExSymbol, timeframe: str, **kwargs):
-        kscore = calc_candles_score(exs, candles, pip_prices.get(exs))
+        kscore = calc_candles_score(exs, candles, pip_prices.get(exs.symbol))
         tf_secs = tf_to_secs(timeframe)
         res_list.append((exs.symbol, timeframe, tf_secs, kscore))
 

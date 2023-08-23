@@ -32,8 +32,8 @@ class RangeStabilityFilter(PairList):
             return pairlist
 
         def kline_cb(candles, exs: ExSymbol, timeframe, **kwargs):
-            if not self._validate_pair_loc(exs, candles):
-                pairlist.remove(exs)
+            if not self._validate_pair_loc(exs.symbol, candles):
+                pairlist.remove(exs.symbol)
 
         new_pairs = [pair for pair in pairlist if pair not in self.pair_cache]
         down_args = dict(limit=self.backdays)

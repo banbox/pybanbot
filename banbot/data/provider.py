@@ -180,7 +180,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
 
             def ohlcv_cb(data, exs: ExSymbol, timeframe: str, **kwargs):
                 since_ms = hold_map[exs.symbol].warm_tfs({timeframe: data})
-                since_map[f'{exs}/{timeframe}'] = since_ms
+                since_map[f'{exs.symbol}/{timeframe}'] = since_ms
 
             exg = get_exchange(self.exg_name)
             for tf, pairs in tf_symbols.items():

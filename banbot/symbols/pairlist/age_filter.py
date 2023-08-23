@@ -41,10 +41,10 @@ class AgeFilter(PairList):
             knum = len(candles)
             cur_ms = int(btime.time() * 1000)
             if knum >= self.min_days and (not self.max_days or knum <= self.max_days):
-                self._checked[exs] = cur_ms
+                self._checked[exs.symbol] = cur_ms
             else:
-                self._failed[exs] = cur_ms
-                nofails.remove(exs)
+                self._failed[exs.symbol] = cur_ms
+                nofails.remove(exs.symbol)
 
         down_args = dict(limit=since_days)
         await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)

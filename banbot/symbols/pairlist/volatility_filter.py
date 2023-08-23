@@ -50,8 +50,8 @@ max: 1.050  min: 0.941  avg: 1.000  avg_log: 0.004 std_log: 0.027 score: 0.086
         new_pairs = [p for p in pairlist if p not in self.pair_cache]
 
         def kline_cb(candles, exs: ExSymbol, timeframe, **kwargs):
-            if not self._validate_pair_loc(exs, candles):
-                pairlist.remove(exs)
+            if not self._validate_pair_loc(exs.symbol, candles):
+                pairlist.remove(exs.symbol)
 
         down_args = dict(limit=self.backdays)
         await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)

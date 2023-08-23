@@ -69,7 +69,7 @@ class VolumePairList(PairList):
             res_list = []
 
             def kline_cb(data, exs: ExSymbol, timeframe, **kwargs):
-                item = dict(symbol=exs)
+                item = dict(symbol=exs.symbol)
                 contract_size = self.exchange.markets[exs.symbol].get('contractSize', 1.0) or 1.0
                 if not data:
                     item['quoteVolume'] = 0
