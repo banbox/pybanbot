@@ -659,7 +659,8 @@ class LiveOrderManager(OrderManager):
                 logger.info(f'{tag_}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
                 iod = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
                                             od_time, OrderStatus.Close, od['id'])
-                od_list.append(iod)
+                if iod:
+                    od_list.append(iod)
 
         if is_short == is_sell:
             # 开多，或开空
@@ -667,7 +668,8 @@ class LiveOrderManager(OrderManager):
             logger.info(f'{tag}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
             od = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
                                        od_time, OrderStatus.Close, od['id'])
-            od_list.append(od)
+            if od:
+                od_list.append(od)
         else:
             # 平多，或平空
             _apply_close_od()
@@ -1032,8 +1034,9 @@ class LiveOrderManager(OrderManager):
         fee_rate = fee_val / filled
         is_short = position == 'SHORT'
         od = self._create_inout_od(exs, is_short, average, filled, info['o'], fee_rate, fee_name,
-                                   btime.time_ms(), od_status, trade['id']).save()
+                                   btime.time_ms(), od_status, trade['id'])
         if od:
+            od.save()
             stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')
             stg = next((stg for stg in stg_list if stg.name == self.take_over_stgy), None)
             if stg:
