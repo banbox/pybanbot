@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/1
 import sys
+import random
 from banbot.storage import Overlay
 from banbot.strategy.common import *
 from banbot.main.wallets import WalletsLocal
@@ -142,6 +143,9 @@ class BaseStrategy:
         symbol = symbol_tf.get().split('_')[2]
         legal_cost = WalletsLocal.obj.position(symbol, self.name, side, enter_tag)
         return legal_cost / self.base_cost
+
+    def init_third_od(self, od: InOutOrder):
+        pass
 
     @property
     def name(self):

@@ -1033,7 +1033,11 @@ class LiveOrderManager(OrderManager):
         is_short = position == 'SHORT'
         od = self._create_inout_od(exs, is_short, average, filled, info['o'], fee_rate, fee_name,
                                    btime.time_ms(), od_status, trade['id']).save()
-        # TODO: 调用策略方法初始化订单
+        if od:
+            stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')
+            stg = next((stg for stg in stg_list if stg.name == self.take_over_stgy), None)
+            if stg:
+                stg.init_third_od(od)
         return od
 
     async def _exec_order_enter(self, od: InOutOrder):

@@ -6,6 +6,7 @@
 from typing import *
 
 from banbot.config.consts import BotState
+from banbot.strategy.base import BaseStrategy
 
 
 class _BotStateMeta(type):
@@ -49,3 +50,5 @@ class BotGlobal(metaclass=_BotStateMeta):
 
     pairs: Set[str] = set()
     '当前交易的标的'
+
+    pairtf_stgs: Dict[str, List[BaseStrategy]] = dict()

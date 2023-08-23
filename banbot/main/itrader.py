@@ -20,7 +20,6 @@ class Trader:
         self.wallets: WalletsLocal = None
         self.order_mgr: OrderManager = None
         self.data_mgr: DataProvider = None
-        self.symbol_stgs: Dict[str, List[BaseStrategy]] = dict()
         self._job: Tuple[str, float, float] = None
         self._run_tasks: List[asyncio.Task] = []
 
@@ -37,7 +36,7 @@ class Trader:
             pair_tfs[pair][timeframe] = warm_num
             symbol = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
             with TempContext(symbol):
-                self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
+                BotGlobal.pairtf_stgs[f'{pair}_{timeframe}'] = [cls(self.config) for cls in stg_set]
                 stg_pairs.extend([(cls.__name__, pair, timeframe) for cls in stg_set])
             for stg in stg_set:
                 BotGlobal.stg_symbol_tfs.append((stg.__name__, pair, timeframe))
@@ -65,7 +64,7 @@ class Trader:
         edit_triggers = []
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量
-            strategy_list = self.symbol_stgs[pair_tf]
+            strategy_list = BotGlobal.pairtf_stgs[f'{pair}_{timeframe}']
             try:
                 pair_arr = append_new_bar(row, tf_secs)
             except ValueError as e:

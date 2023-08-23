@@ -29,7 +29,6 @@ class InOutStatus:
 
 
 class EnterTags:
-    user_open = 'user_open'
     third = 'third'
 
 
