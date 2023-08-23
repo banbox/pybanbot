@@ -5,7 +5,6 @@
 # Date  : 2023/3/1
 import sys
 import random
-from banbot.storage import Overlay
 from banbot.strategy.common import *
 from banbot.main.wallets import WalletsLocal
 from banbot.config.consts import MIN_STAKE_AMOUNT
@@ -181,6 +180,7 @@ class BaseStrategy:
         :param zLevel: 显示层级，越大显示越上面
         :param extendData: 扩展数据
         '''
+        from banbot.storage import Overlay
         exs, timeframe = get_cur_symbol()
         if styles:
             styles = dict(name=styles)

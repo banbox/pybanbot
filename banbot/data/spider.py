@@ -311,9 +311,11 @@ class LiveMiner:
             # 1m及以下周期的ohlcv，通过websoc获取
             if pair in self.socks:
                 return
+            logger.info(f'start ws for {pair}/{timeframe}')
             self.socks[pair] = OhlcvWatcher(self.exchange.name, self.exchange.market_type, pair)
             asyncio.create_task(self.socks[pair].run())
             return
+        logger.info(f'loop fetch for {pair}/{timeframe}')
         save_tf, check_intv = MinerJob.get_tf_intv(timeframe)
         if self.exchange.market_type == 'future':
             # 期货市场最低维度是1m
@@ -359,7 +361,7 @@ class LiveMiner:
         import ccxt
         from banbot.storage import db
         measure = MeasureTime()
-        do_print = True
+        do_print = False
         try:
             job.next_run += job.check_intv
             # 这里不设置limit，如果外部修改了更新间隔，这里能及时输出期间所有的数据，避免出现delay
@@ -451,7 +453,7 @@ class LiveSpider(RedisChannel):
             self.miners[cache_key] = miner
             asyncio.create_task(miner.run())
             logger.info(f'start miner for {exg_name}.{market}')
-        if pair not in miner.jobs and not since:
+        if pair not in miner.jobs and pair not in miner.socks and not since:
             # 新监听的币，且未指定开始时间戳，则初始化获取时间戳
             since = await self._init_symbol(exg_name, market, pair, timeframe)
         miner.sub_pair(pair, timeframe, since)
