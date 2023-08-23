@@ -18,6 +18,8 @@ from banbot.util.misc import *
 from banbot.data.tools import auto_fetch_ohlcv
 from banbot.util.num_utils import to_pytypes
 
+min_dust = 0.00000001
+
 
 class OrderBook():
     def __init__(self, **kwargs):
@@ -171,7 +173,7 @@ class OrderManager(metaclass=SingletonArg):
             enter_at=btime.time_ms(),
             init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
             strategy=strategy
-        )
+        ).save()
         if btime.run_mode in LIVE_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
         self._put_order(od, 'enter')
@@ -488,6 +490,7 @@ class LiveOrderManager(OrderManager):
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
         self.order_q = Queue(1000)  # 最多1000个待执行订单
+        self.take_over_stgy: str = config.get('take_over_stgy')
         # 限价单的深度对应的秒级成交量
         self.limit_vol_secs = config.get('limit_vol_secs', 10)
         # 交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s
@@ -496,6 +499,178 @@ class LiveOrderManager(OrderManager):
             raise ValueError(f'invalid order type: {self.od_type}, `limit` or `market` is accepted')
         if self.market_type == 'future' and self.od_type == 'limit':
             raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
+
+    async def init_pairs(self, symbols: List[str]):
+        '''
+        先通过fetch_account_positions抓取交易所所有币的仓位情况。
+        如果本地没有未平仓订单：
+            如果交易所没有持仓：忽略
+            如果交易所有持仓：视为用户开的新订单，创建新订单跟踪
+        如果本地有未平仓订单：
+             获取本地订单的最后时间作为起始时间，通过fetch_orders接口查询此后所有订单。
+             从交易所订单记录来确定未平仓订单的当前状态：已平仓、部分平仓、未平仓
+             对于冗余的仓位，视为用户开的新订单，创建新订单跟踪。
+        '''
+        positions = await self.exchange.fetch_account_positions(symbols)
+        positions = [p for p in positions if p['notional']]
+        op_ods = InOutOrder.open_orders()
+        if not op_ods:
+            since_ms = 0
+        else:
+            since_ms = max([od.enter_at for od in op_ods])
+        for pair in symbols:
+            cur_ods = [od for od in op_ods if od.symbol == pair]
+            cur_pos = [p for p in positions if p['symbol'] == pair]
+            if not cur_pos and not cur_ods:
+                continue
+            long_pos = next((p for p in cur_pos if p['side'] == 'long'), None)
+            short_pos = next((p for p in cur_pos if p['side'] == 'short'), None)
+            await self._sync_pair_orders(pair, long_pos, short_pos, cur_ods, since_ms)
+
+    async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict,
+                                op_ods: List[InOutOrder], since_ms: int):
+        '''
+        对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
+        '''
+        if not op_ods:
+            # 本地没有未平仓订单，直接从仓位创建跟踪
+            if not self.take_over_stgy:
+                return
+            if long_pos:
+                long_od = self._create_order_from_position(long_pos)
+                if long_od:
+                    long_od.save()
+            if short_pos:
+                short_od = self._create_order_from_position(short_pos)
+                if short_od:
+                    short_od.save()
+        else:
+            # 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
+            ex_orders = await self.exchange.fetch_orders(pair, since_ms)
+            for exod in ex_orders:
+                client_id: str = exod['clientOrderId']
+                if client_id.startswith(BotGlobal.bot_name) or exod['status'] != 'closed':
+                    # 跳过当前机器人的订单，跳过未完成的订单
+                    continue
+                self._apply_history_order(op_ods, exod)
+            # 当前op_ods剩余的必定是开仓的，保存状态并跟踪
+            for iod in op_ods:
+                iod.save()
+            logger.info(f'{len(op_ods)} open orders: {op_ods}')
+
+    def _create_order_from_position(self, pos: dict):
+        '''
+        从ccxt返回的持仓情况创建跟踪订单。
+        '''
+        exs = ExSymbol.get(self.name, self.market_type, pos['symbol'])
+        average = pos['entryPrice']
+        filled = pos['contracts']
+        ent_od_type = self.od_type
+        market = self.exchange.markets[exs.symbol]
+        is_short = pos['side'] == 'short'
+        # 持仓信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
+        fee_rate = market['taker'] if ent_od_type == 'market' else market['maker']
+        fee_name = exs.quote_code if self.market_type == 'future' else exs.base_code
+        tag_ = '开空' if is_short else '开多'
+        logger.info(f'[仓]{tag_}：price:{average}, amount: {filled}, fee: {fee_rate}')
+        return self._create_inout_od(exs, is_short, average, filled, ent_od_type, fee_rate,
+                                     fee_name, btime.time_ms(), OrderStatus.Close)
+
+    def _create_inout_od(self, exs: ExSymbol, short: bool, average: float, filled: float,
+                         ent_od_type: str, fee_rate: float, fee_name: str, enter_at: int,
+                         ent_status: int, ent_odid: str = None):
+        job = next((p for p in BotGlobal.stg_symbol_tfs if p[0] == self.take_over_stgy and p[1] == exs.symbol), None)
+        if not job:
+            logger.warning(f'take over job not found: {exs.symbol} {self.take_over_stgy}')
+            return
+        leverage = self.exchange.leverages[exs.symbol]
+        quote_cost = filled * average / leverage
+        io_status = InOutStatus.FullEnter if ent_status == OrderStatus.Close else InOutStatus.PartEnter
+        return InOutOrder(
+            sid=exs.id,
+            symbol=exs.symbol,
+            timeframe=job[2],
+            short=short,
+            status=io_status,
+            enter_price=average,
+            enter_average=average,
+            enter_amount=filled,
+            enter_filled=filled,
+            enter_status=ent_status,
+            enter_order_type=ent_od_type,
+            enter_tag=EnterTags.third,
+            enter_at=enter_at,
+            enter_update_at=enter_at,
+            enter_fee=fee_rate,
+            enter_fee_type=fee_name,
+            init_price=average,
+            strategy=self.take_over_stgy,
+            enter_order_id=ent_odid,
+            leverage=leverage,
+            quote_cost=quote_cost,
+        )
+
+    def _apply_history_order(self, od_list: List[InOutOrder], od: dict):
+        info: dict = od['info']
+        is_short = info['positionSide'] == 'SHORT'
+        is_sell = od['side'] == 'sell'
+        is_reduce_only = od['reduceOnly']
+        exs = ExSymbol.get(self.name, self.market_type, od['symbol'])
+        market = self.exchange.markets[exs.symbol]
+        # 订单信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
+        fee_rate = market['taker'] if od['type'] == 'market' else market['maker']
+        fee_name = exs.quote_code if self.market_type == 'future' else exs.base_code
+        od_price, od_amount, od_time = od['average'], od['filled'], od['timestamp']
+
+        def _apply_close_od():
+            nonlocal od_amount
+            for iod in list(od_list):
+                if iod.short != is_short:
+                    continue
+                # 尝试平仓
+                ava_amount = iod.enter_amount if not iod.exit else iod.exit.amount - iod.exit.filled
+                if od_amount >= ava_amount:
+                    fill_amt = ava_amount
+                    exit_status = OrderStatus.Close
+                    od_amount -= ava_amount
+                else:
+                    fill_amt = od_amount
+                    exit_status = OrderStatus.PartOk
+                    od_amount = 0
+                iod.update_exit(amount=iod.enter.amount, filled=fill_amt, order_type=od['type'],
+                                order_id=od['id'], price=od_price, average=od_price,
+                                status=exit_status, fee=fee_rate, fee_type=fee_name,
+                                create_at=od_time, update_at=od_time)
+                iod.exit_tag = ExitTags.user_exit
+                iod.exit_at = od_time
+                tag_ = '平空' if is_short else '平多'
+                logger.info(
+                    f'{tag_}：price:{od_price}, amount: {fill_amt}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
+                if exit_status == OrderStatus.Close:
+                    iod.status = InOutStatus.FullExit
+                    if iod.id:
+                        iod.save()
+                    od_list.remove(iod)
+                if od_amount <= min_dust:
+                    break
+            if not is_reduce_only and od_amount > min_dust:
+                # 剩余数量，创建相反订单
+                tag_ = '开空' if is_short else '开多'
+                logger.info(f'{tag_}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
+                iod = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
+                                            od_time, OrderStatus.Close, od['id'])
+                od_list.append(iod)
+
+        if is_short == is_sell:
+            # 开多，或开空
+            tag = '开空' if is_short else '开多'
+            logger.info(f'{tag}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
+            od = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
+                                       od_time, OrderStatus.Close, od['id'])
+            od_list.append(od)
+        else:
+            # 平多，或平空
+            _apply_close_od()
 
     async def _get_odbook_price(self, pair: str, side: str, depth: float):
         '''
@@ -519,7 +694,7 @@ class LiveOrderManager(OrderManager):
             high_price, low_price, close_price, vol_amount = 99999, 0.0000001, 1, 10
         else:
             high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
-        od = Order(symbol=pair, order_type='limit', side='buy', amount=vol_amount, price=close_price)
+        od = Order(symbol=pair, order_type=self.od_type, side='buy', amount=vol_amount, price=close_price)
         fees = self.exchange.calc_fee(od.symbol, od.order_type, od.side, od.amount, od.price)
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
@@ -805,10 +980,61 @@ class LiveOrderManager(OrderManager):
             exp_unmatchs = []
             for trade_key, trade in list(self.unmatch_trades.items()):
                 if btime.time() - trade['timestamp'] / 1000 >= 10:
+                    # 未匹配订单10s过期
                     exp_unmatchs.append(trade)
                     del self.unmatch_trades[trade_key]
             if exp_unmatchs:
-                logger.warning('expired unmatch orders: %s', exp_unmatchs)
+                left_unmats = self.try_manage_orders(exp_unmatchs)
+                logger.warning('expired unmatch orders: %s', left_unmats)
+
+    def try_manage_orders(self, trades: List[dict]) -> List[dict]:
+        if not self.take_over_stgy:
+            return trades
+        if self.name.find('binance') < 0:
+            logger.error(f'try_manage_orders for {self.name} not support, {len(trades)} trades skipped')
+            return trades
+        if self.market_type != 'future':
+            logger.error(f'try_manage_orders for {self.market_type} not support, {len(trades)} trades skipped')
+            return trades
+        left_trades = []
+        for trade in trades:
+            if not self._create_order_from_bnb(trade):
+                left_trades.append(trade)
+        return left_trades
+
+    def _create_order_from_bnb(self, trade: dict):
+        info: dict = trade['info']
+        state: str = info['X']
+        if state != 'FILLED':
+            # 只对完全入场的尝试跟踪
+            return
+        side: str = info['S']
+        position: str = info.get('ps')
+        if self.market_type == 'future':
+            if position == 'LONG' and side == 'SELL' or position == 'SHORT' and side == 'BUY':
+                # 忽略平仓的订单
+                return
+        else:
+            if side == 'SELL':
+                # 现货市场卖出即平仓，忽略平仓
+                return
+        exs = ExSymbol.get(self.name, self.market_type, trade['symbol'])
+        od_status = OrderStatus.Close if state == 'FILLED' else OrderStatus.PartOk
+        filled, fee_val = float(info['z']), float(info['n'])
+        if self.market_type == 'future':
+            average = float(info['ap'])
+        else:
+            average = float(info['Z']) / filled
+        fee_name = info['N'] or ''
+        if fee_name and exs.symbol.endswith(fee_name):
+            # 期货市场手续费以USD计算
+            fee_val /= average
+        fee_rate = fee_val / filled
+        is_short = position == 'SHORT'
+        od = self._create_inout_od(exs, is_short, average, filled, info['o'], fee_rate, fee_name,
+                                   btime.time_ms(), od_status, trade['id']).save()
+        # TODO: 调用策略方法初始化订单
+        return od
 
     async def _exec_order_enter(self, od: InOutOrder):
         if od.exit_tag:
@@ -932,6 +1158,22 @@ class LiveOrderManager(OrderManager):
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
                 sess.commit()
+
+    @loop_forever
+    async def watch_leverage_forever(self):
+        if self.market_type != 'future':
+            return 'exit'
+        try:
+            msg = await self.exchange.watch_account_update()
+        except ccxt.NetworkError as e:
+            logger.error(f'watch_account_update net error: {e}')
+            return
+        leverage = msg.get('leverage')
+        if not leverage:
+            # 忽略保证金状态更新
+            return
+        symbol = msg['symbol']
+        self.exchange.leverages[symbol] = leverage
 
     async def cleanup(self):
         with db():

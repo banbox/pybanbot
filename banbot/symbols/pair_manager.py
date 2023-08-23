@@ -65,6 +65,7 @@ class PairManager:
         self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist, back_num)
 
         self._whitelist = pairlist
+        BotGlobal.pairs = set(pairlist)
 
     @property
     def avaiable_symbols(self) -> Set[str]:

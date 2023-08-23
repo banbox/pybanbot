@@ -181,6 +181,7 @@ class AppConfig(metaclass=Singleton):
         from banbot.storage import BotGlobal
         BotGlobal.exg_name = config['exchange']['name']
         BotGlobal.market_type = config['market_type']
+        BotGlobal.bot_name = config['name']
         return config
 
     @classmethod

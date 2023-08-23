@@ -26,6 +26,9 @@ class BotGlobal(metaclass=_BotStateMeta):
     '''
     state = BotState.STOPPED
 
+    bot_name: str = 'noname'
+    '当前机器人的名称'
+
     stg_hash: Optional[str] = None
     '''策略+版本号的哈希值；如果和上次相同说明策略没有变化，可使用一个任务'''
 
@@ -40,3 +43,9 @@ class BotGlobal(metaclass=_BotStateMeta):
 
     market_type: str = 'spot'
     '当前运行的市场:spot/future'
+
+    stg_symbol_tfs: List[Tuple[str, str, str]] = []
+    '策略、标的、周期'
+
+    pairs: Set[str] = set()
+    '当前交易的标的'

@@ -388,12 +388,13 @@ class CryptoWallet(WalletsLocal):
         logger.info('update balances: %s', self._update_local(balances))
 
     @loop_forever
-    async def update_forever(self):
+    async def watch_balance_forever(self):
         try:
             balances = await self.exchange.watch_balance()
         except ccxt.NetworkError as e:
             logger.error(f'watch balance net error: {e}')
             return
         self.update_at = btime.time()
-        logger.info('update balances: %s', self._update_local(balances))
-
+        result = self._update_local(balances)
+        if result:
+            logger.info('update balances: %s', result)

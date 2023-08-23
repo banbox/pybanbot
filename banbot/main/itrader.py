@@ -39,6 +39,8 @@ class Trader:
             with TempContext(symbol):
                 self.symbol_stgs[symbol] = [cls(self.config) for cls in stg_set]
                 stg_pairs.extend([(cls.__name__, pair, timeframe) for cls in stg_set])
+            for stg in stg_set:
+                BotGlobal.stg_symbol_tfs.append((stg.__name__, pair, timeframe))
         from itertools import groupby
         stg_pairs = sorted(stg_pairs, key=lambda x: x[:2])
         sp_groups = groupby(stg_pairs, key=lambda x: x[0])

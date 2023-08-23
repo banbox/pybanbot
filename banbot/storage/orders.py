@@ -28,6 +28,17 @@ class InOutStatus:
     FullExit = 4
 
 
+class EnterTags:
+    user_open = 'user_open'
+    third = 'third'
+
+
+class ExitTags:
+    bot_stop = 'bot_stop'
+    force_exit = 'force_exit'
+    user_exit = 'user_exit'
+
+
 class Order(BaseDbModel):
     '''
     交易所订单；一次买入（卖出）就会产生一个订单
@@ -173,7 +184,6 @@ class InOutOrder(BaseDbModel):
             exit_kwargs = del_dict_prefix(kwargs, 'exit_')
             exit_kwargs['inout_id'] = self.id
             self.exit = Order(**exit_kwargs)
-        self.save()
 
     @property
     def key(self):
@@ -247,6 +257,17 @@ class InOutOrder(BaseDbModel):
                 kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)
             self.exit = Order(**kwargs)
         else:
+            if self.exit.filled and kwargs.get('filled'):
+                # 已有部分退出，传入新的退出成交时，重新计算average
+                cur_filled = kwargs.get('filled')
+                cur_price = kwargs.get('average') or kwargs.get('price')
+                if not cur_price:
+                    raise ValueError('price is require to update exit')
+                total_fill = cur_filled + self.exit.filled
+                if total_fill > self.exit.amount:
+                    raise ValueError(f'exit filled fail: {self.exit.filled:.5f}/{self.exit.amount:.5f} cur: {cur_filled:.5f}')
+                kwargs['average'] = (cur_price * cur_filled + self.exit.filled * self.exit.average) / total_fill
+                kwargs['filled'] = total_fill
             self.exit.update_props(**kwargs)
 
     def update_by_price(self, price: float):
@@ -308,6 +329,7 @@ class InOutOrder(BaseDbModel):
             self._save_to_mem()
         else:
             self._save_to_db()
+        return self
 
     def get_info(self, key: str, def_val=None):
         if not self.infos:
@@ -378,7 +400,8 @@ class InOutOrder(BaseDbModel):
 
     @classmethod
     def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
-        return cls.get_orders(strategy, pairs, 'open')
+        iorders = cls.get_orders(strategy, pairs, 'open')
+        return [od for od in iorders if od.symbol in BotGlobal.pairs]
 
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:

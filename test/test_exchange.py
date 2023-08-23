@@ -20,7 +20,7 @@ async def test_watch_trades():
     wallet = CryptoWallet(config, exchange)
     # data_hd = LiveDataProvider(config, lambda x: x)
     # od_manager = LiveOrderManager(config, exchange, wallet, data_hd, lambda x: x)
-    await wallet.update_forever()
+    await wallet.watch_balance_forever()
 
 
 async def test_ccxt_future():

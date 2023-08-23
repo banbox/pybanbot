@@ -19,6 +19,7 @@ from banbot.config.consts import *
 from banbot.exchange.exchange_utils import *
 from banbot.storage import BotGlobal
 from banbot.main.addons import MarketPrice
+from banbot.exchange.ccxt_exts import get_pro_overrides, get_asy_overrides
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
@@ -32,6 +33,9 @@ exg_fut_map: Dict[str, str] = dict(
 exg_mtype_map = dict(
     future='contract'
 )
+pro_overrides = get_pro_overrides()
+asy_overrides = get_asy_overrides()
+api_overrides = dict()
 
 
 def loop_forever(func):
@@ -65,14 +69,17 @@ def _get_credits(exg_cfg: dict, run_env: str) -> dict:
     return ret_data
 
 
-def _create_exchange(module, cfg: dict, exg_name: str = None, market_type: str = None):
+def _create_exchange(module, override_map: dict, cfg: dict, exg_name: str = None, market_type: str = None):
     exg_cfg = AppConfig.get_exchange(cfg, exg_name)
     exg_name = exg_cfg['name']
     if not market_type:
         market_type = cfg['market_type']
     if market_type == 'future':
         exg_name = exg_fut_map.get(exg_name) or exg_name
-    exg_class = getattr(module, exg_name)
+    if exg_name in override_map:
+        exg_class = override_map[exg_name]
+    else:
+        exg_class = getattr(module, exg_name)
     run_env = cfg["env"]
     has_proxy = bool(exg_cfg.get('proxies'))
     exg_args = dict(trust_env=has_proxy)
@@ -102,14 +109,17 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
         os.environ['WS_PROXY'] = exg_cfg['proxies']['http']
         os.environ['WSS_PROXY'] = exg_cfg['proxies']['http']
         logger.warning("[PROXY] %s", exg_cfg['proxies'])
-    exchange = _create_exchange(ccxt, cfg, exg_name, market_type)
-    exchange_async = _create_exchange(ccxt_async, cfg, exg_name, market_type)
+    exchange = _create_exchange(ccxt, api_overrides, cfg, exg_name, market_type)
+    exchange_async = _create_exchange(ccxt_async, asy_overrides, cfg, exg_name, market_type)
     if not with_ws:
         return exchange, exchange_async, None
     run_env = cfg["env"]
     if market_type == 'future':
         exg_name = exg_fut_map.get(exg_name) or exg_name
-    exg_class = getattr(ccxtpro, exg_name)
+    if exg_name in pro_overrides:
+        exg_class = pro_overrides[exg_name]
+    else:
+        exg_class = getattr(ccxtpro, exg_name)
     exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
     cred_args = _get_credits(exg_cfg, run_env)
     exchange_ws = exg_class(dict(**exg_args, **cred_args))
@@ -240,6 +250,7 @@ class CryptoExchange:
         await self.update_symbol_prices()
         await self._check_fee_limits()
         await self.cancel_open_orders(pairs)
+        await self.update_symbol_leverages(pairs)
 
     @net_retry
     async def load_markets(self):
@@ -515,6 +526,20 @@ class CryptoExchange:
         '''
         return await self.api_ws.watch_my_trades(symbol, since, limit, params)
 
+    async def watch_account_update(self, params={}):
+        if not hasattr(self.api_ws, 'watch_account_config'):
+            raise ValueError(f'watch_account_config not found in {self.api_ws.name}')
+        return await self.api_ws.watch_account_config(params)
+
+    async def fetch_orders(self, symbol: Optional[str] = None, since: Optional[int] = None,
+                           limit: Optional[int] = None, params={}) -> List[dict]:
+        return await self.api_async.fetch_orders(symbol, since, limit, params)
+
+    async def fetch_account_positions(self, symbols=None, params={}):
+        if not hasattr(self.api_async, 'fetch_account_positions'):
+            raise ValueError(f'fetch_account_positions not support in {self.api_async.name}')
+        return await self.api_async.fetch_account_positions(symbols, params)
+
     async def fetch_ohlcv_plus(self, pair: str, timeframe: str, since=None, limit=None,
                                force_sub=False):
         '''
@@ -575,6 +600,12 @@ class CryptoExchange:
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
         return await self.api_async.create_order(symbol, od_type, side, amount, price, params)
 
+    async def fetch_positions_risk(self, symbols=None, params={}):
+        '''
+        获取持仓风险。future市场可用。包含当前币种的杠杆倍数
+        '''
+        return await self.api_async.fetch_positions_risk(symbols, params)
+
     async def set_leverage(self, leverage: int, symbol: str, params={}):
         if self.leverages.get(symbol) == leverage:
             return
@@ -583,6 +614,11 @@ class CryptoExchange:
         res = await self.api_async.set_leverage(leverage, symbol, params)
         self.leverages[symbol] = leverage
         return res
+
+    async def update_symbol_leverages(self, symbols=None):
+        risks = await self.api_async.fetch_positions_risk(symbols, {})
+        for risk in risks:
+            self.leverages[risk['symbol']] = risk['leverage']
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单

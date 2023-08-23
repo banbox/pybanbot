@@ -67,6 +67,7 @@ class LiveTrader(Trader):
             await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
+            await self.order_mgr.init_pairs(self.pair_mgr.symbols)
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         await self.rpc.startup_messages()
 
@@ -95,11 +96,13 @@ class LiveTrader(Trader):
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
                 # 监听钱包更新
-                asyncio.create_task(self.wallets.update_forever()),
+                asyncio.create_task(self.wallets.watch_balance_forever()),
                 # 监听订单更新
                 asyncio.create_task(self.order_mgr.listen_orders_forever()),
                 # 跟踪监听未成交订单，及时更新价格确保成交
                 asyncio.create_task(self.order_mgr.trail_open_orders_forever()),
+                # 跟踪账户杠杆倍数和保证金配置
+                asyncio.create_task(self.order_mgr.watch_leverage_forever()),
                 # 订单异步消费队列
                 asyncio.create_task(self.order_mgr.consume_queue())
             ])
