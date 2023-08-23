@@ -55,8 +55,10 @@ class PairManager:
                 self.ticker_cache['tickers'] = tickers
 
             pairlist = await self.handlers[0].gen_pairlist(tickers)
+            logger.info(f'get {len(pairlist)} symbols from {self.handlers[0].name}')
             for handler in self.handlers[1:]:
                 pairlist = await handler.filter_pairlist(pairlist, tickers)
+                logger.info(f'left {len(pairlist)} symbols after {handler.name}')
 
         # 计算交易对各维度K线质量分数
         back_num = 300
