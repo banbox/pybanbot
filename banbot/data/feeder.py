@@ -99,8 +99,7 @@ class DataFeeder(Watcher):
         # 获取从上次间隔至今期间，更新的子序列
         state = self.states[0]
         prefire = 0.1 if self.auto_prefire else 0
-        with db():
-            ohlcvs, last_finish = self._get_finish_bars(state, details, fetch_intv)
+        ohlcvs, last_finish = self._get_finish_bars(state, details, fetch_intv)
         if not ohlcvs:
             return False
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
@@ -207,19 +206,6 @@ class DBDataFeeder(HistDataFeeder):
         self._cache_arr = []
         self._calc_total()
 
-    def _get_finish_bars(self, state: PairTFCache, details: List[Tuple], fetch_intv: int) -> Tuple[List[Tuple], bool]:
-        if fetch_intv < state.tf_secs:
-            # 获取的小间隔数据，仅当达到完成时间时，才查询数据库
-            if details[-1][0] + fetch_intv * 1000 < state.next_ms:
-                return [], False
-        elif fetch_intv > state.tf_secs:
-            raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
-        ohlcvs = KLine.query(self.exs, state.timeframe, state.next_ms, btime.utcstamp())
-        if not ohlcvs:
-            return [], False
-        state.next_ms = ohlcvs[-1][0] + state.tf_secs * 1000
-        return ohlcvs, True
-
     async def down_if_need(self):
         from banbot.storage import KLine
         exg = get_exchange(self.exs.exchange, self.exs.market)
@@ -277,6 +263,20 @@ class LiveDataFeader(DBDataFeeder):
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, market: str = None):
         # 实盘数据的auto_prefire在爬虫端进行。
         super(LiveDataFeader, self).__init__(pair, tf_warms, callback, market=market)
+
+    def _get_finish_bars(self, state: PairTFCache, details: List[Tuple], fetch_intv: int) -> Tuple[List[Tuple], bool]:
+        if fetch_intv < state.tf_secs:
+            # 获取的小间隔数据，仅当达到完成时间时，才查询数据库
+            if details[-1][0] + fetch_intv * 1000 < state.next_ms:
+                return [], False
+        elif fetch_intv > state.tf_secs:
+            raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
+        with db():
+            ohlcvs = KLine.query(self.exs, state.timeframe, state.next_ms, btime.utcstamp())
+        if not ohlcvs:
+            return [], False
+        state.next_ms = ohlcvs[-1][0] + state.tf_secs * 1000
+        return ohlcvs, True
 
 
 

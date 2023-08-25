@@ -53,7 +53,7 @@ def _test_strategy():
     exs: ExSymbol = sess.query(ExSymbol).filter(*fts).first()
     start_ms, end_ms = 1690866160016, btime.utcstamp()
     logger.info(f'start test symbol: {exs}')
-    calc_strategy_sigs(exs, '5m', 'Ban1', start_ms, end_ms)
+    calc_strategy_sigs(exs, '5m', 'DigoChain', start_ms, end_ms)
 
 
 if __name__ == '__main__':

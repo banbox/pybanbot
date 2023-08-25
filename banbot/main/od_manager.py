@@ -51,7 +51,7 @@ class OrderManager(metaclass=SingletonArg):
         self.data_mgr = data_hd
         self.callback = callback
         self.fatal_stop = dict()
-        self.last_ts = btime.time()  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
+        self.last_ts = 0  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
         self._load_fatal_stop()
         self.disabled = False
         self.forbid_pairs = set()
@@ -118,16 +118,15 @@ class OrderManager(metaclass=SingletonArg):
                 for od_id, sigout in exit_keys.items():
                     od = InOutOrder.get(sess, od_id)
                     exit_ods.append(self.exit_order(od, sigout))
-            enter_ods = [od.detach(sess) for od in enter_ods if od]
-            exit_ods = [od.detach(sess) for od in exit_ods if od]
         else:
             enter_ods, exit_ods = [], []
-        sess.commit()  # 保存到db，确保order_q取到的是最新的
+        if btime.run_mode in btime.LIVE_MODES:
+            enter_ods = [od.detach(sess) for od in enter_ods if od]
+            exit_ods = [od.detach(sess) for od in exit_ods if od]
+            sess.commit()  # 保存到db，确保order_q取到的是最新的
         for od, prefix in edit_triggers:
             if od in exit_ods:
                 continue
-            tg_price = od.get_info(prefix + 'price')
-            logger.info(f'edit push: {od} {tg_price}')
             self._put_order(od, OrderJob.ACT_EDITTG, prefix)
         return enter_ods, exit_ods
 
@@ -368,7 +367,7 @@ class LocalOrderManager(OrderManager):
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         self.wallets.confirm_od_enter(od, enter_price)
-        update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
+        update_time = ctx[bar_time][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
         sub_od.update_at = update_time
@@ -386,7 +385,7 @@ class LocalOrderManager(OrderManager):
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
         ctx = self.get_context(od)
-        update_time = ctx[bar_arr][-1][0] + self.network_cost * 1000
+        update_time = ctx[bar_time][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
         sub_od.update_at = update_time
@@ -884,9 +883,12 @@ class LiveOrderManager(OrderManager):
     def _put_order(self, od: InOutOrder, action: str, data: str = None):
         if not btime.prod_mode():
             return
-        if action == 'enter':
+        if action == OrderJob.ACT_ENTER:
             od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
             od.save()
+        elif action == OrderJob.ACT_EDITTG:
+            tg_price = od.get_info(data + 'price')
+            logger.info(f'edit push: {od} {tg_price}')
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     async def _update_bnb_order(self, od: Order, data: dict):

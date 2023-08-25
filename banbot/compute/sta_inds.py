@@ -5,305 +5,233 @@
 # Date  : 2023/5/4
 '''
 带状态的常见指标实现。每个bar计算一次，实盘时速度更快。
-缺点：
-需要预先在策略的__init__中定义所有用到的状态指标实例。
-由于按cache_key缓存，如果同一个指标对于不同的值忘记设置cache_key会导致重用错误。
-修改方向：
-命名去掉Sta前缀，和vec_inds保持一致。
-取消cache_key对象缓存
-像通达信、Tbquant等编辑器一样：函数式调用指标
-方案一：
-    预编译策略，所有外部输入以固定占位符替换，指标之间加减乘除生成新的指标对象。每个bar传入context执行得到结果。
-方案二：
-    函数形式定义指标，输入和输出都为对象，带历史值，bar结束后保存到varcontext中。
-可参考：
-   指标解析器：https://github.com/dsxkline/dsxindexer
+函数式调用，传入序列变量，自动追踪历史结果。
+按序号取值，res[0]表示当前值，res[1]表示前一个。。。
 '''
 from banbot.compute.ctx import *
 from banbot.util.num_utils import *
 
 
-class StaSMA(BaseInd):
-    def __init__(self, period: int, cache_key: str = ''):
-        super(StaSMA, self).__init__(cache_key)
-        self.period = period
-        self.dep_vals: List[float] = []
-
-    def _compute_val(self, val: float):
-        self.dep_vals.append(val / self.period)
-        if len(self.dep_vals) < self.period:
-            return np.nan
-        while len(self.dep_vals) > self.period:
-            self.dep_vals.pop(0)
-        return sum(self.dep_vals)
+def SMA(obj: SeriesVar, period: int) -> SeriesVar:
+    '''
+    带状态SMA。返回序列对象，res[0]即最新结果
+    '''
+    div_obj = obj / period
+    if len(div_obj) < period:
+        res_val = np.nan
+    else:
+        res_val = sum(div_obj[:period])
+    return SeriesVar(obj.key + f'_sma{period}', res_val)
 
 
-class _StaEWMA(BaseInd):
-    def __init__(self, period: int, alpha: float, init_type: int, init_val=None, cache_key: str = ''):
-        super(_StaEWMA, self).__init__(cache_key)
-        self.period = period
-        self.mul = alpha
-        self._init_type = init_type
-        self._init_first = init_val
-        self._init_vals = []
-
-    def _compute_val(self, val: float):
-        if not np.isfinite(val):
-            return val
-        if not self.arr or not np.isfinite(self.arr[-1]):
-            if self._init_first is not None:
-                # 使用给定值作为计算第一个值的前置值
-                ind_val = val * self.mul + self._init_first * (1 - self.mul)
-            elif self._init_type == 0:
-                # SMA作为第一个EMA值
-                if len(self._init_vals) < self.period:
-                    self._init_vals.append(val)
-                    if len(self._init_vals) < self.period:
-                        return np.nan
-                ind_val = sum(self._init_vals) / self.period
-            else:
-                # 第一个有效值作为第一个EMA值
-                ind_val = val
+def _EWMA(obj: SeriesVar, res_key: str, period: int, alpha: float, init_type: int, init_val=None) -> SeriesVar:
+    in_val = obj[0]
+    res_obj = SeriesVar.get(res_key)
+    if not np.isfinite(in_val):
+        res_val = in_val
+    elif not res_obj or not np.isfinite(res_obj[0]):
+        if init_val is not None:
+            # 使用给定值作为计算第一个值的前置值
+            res_val = in_val * alpha + init_val * (1 - alpha)
+        elif init_type == 0:
+            # SMA作为第一个EMA值
+            res_val = SMA(obj, period)[0]
         else:
-            ind_val = val * self.mul + self.arr[-1] * (1 - self.mul)
-        return ind_val
+            # 第一个有效值作为第一个EMA值
+            res_val = in_val
+    else:
+        res_val = in_val * alpha + res_obj[0] * (1 - alpha)
+    if res_obj is None:
+        return SeriesVar(res_key, res_val)
+    res_obj.val.append(res_val)
+    return res_obj
 
 
-class StaEMA(_StaEWMA):
+def EMA(obj: SeriesVar, period: int, init_type=0) -> SeriesVar:
     '''
     最近一个权重：2/(n+1)
     '''
-    def __init__(self, period: int, init_type=0, cache_key: str = ''):
-        super(StaEMA, self).__init__(period, 2 / (period + 1), init_type, cache_key=cache_key)
+    res_key = obj.key + f'_ema{period}_{init_type}'
+    return _EWMA(obj, res_key, period, 2 / (period + 1), init_type)
 
 
-class StaRMA(_StaEWMA):
+def RMA(obj: SeriesVar, period: int, init_type=0, init_val=None) -> SeriesVar:
     '''
     和StaEMA区别是：分子分母都减一
     最近一个权重：1/n
     '''
-    def __init__(self, period: int, init_type=0, init_val=None, cache_key: str = ''):
-        super(StaRMA, self).__init__(period, 1 / period, init_type, init_val, cache_key=cache_key)
+    res_key = obj.key + f'_rma{period}_{init_type}_{init_val}'
+    return _EWMA(obj, res_key, period, 1 / period, init_type, init_val)
 
 
-class StaTR(BaseInd):
-    input_dim = 2
-
-    def __init__(self, cache_key: str = ''):
-        super(StaTR, self).__init__(cache_key)
-
-    def _compute_arr(self, val: np.ndarray):
-        crow = val[-1, :]
-        if val.shape[0] < 2:
-            cur_tr = np.nan  # crow[hcol] - crow[lcol]
-        else:
-            prow = val[-2, :]
-            cur_tr = max(crow[hcol] - crow[lcol], abs(crow[hcol] - prow[ccol]), abs(crow[lcol] - prow[ccol]))
-        return cur_tr
+def TR(high: SeriesVar, low: SeriesVar, close: SeriesVar) -> SeriesVar:
+    '''
+    真实振幅
+    '''
+    if len(high) < 2:
+        res_val = np.nan
+    else:
+        chigh, clow, cclose = high[0], low[0], close[0]
+        phigh, plow, pclose = high[1], low[1], close[1]
+        res_val = max(chigh - clow, abs(chigh - pclose), abs(clow - pclose))
+    return SeriesVar(high.key + '_tr', res_val)
 
 
-class StaATR(BaseInd):
-    input_dim = 2
-
-    def __init__(self, period: int = 3, cache_key: str = ''):
-        super(StaATR, self).__init__(cache_key)
-        self.tr = StaTR(cache_key)
-        self._rma = StaRMA(period, init_type=0, cache_key=cache_key + 'tr')
-
-    def _compute_arr(self, val: np.ndarray):
-        tr_val = self.tr(val)
-        return self._rma(tr_val)
+def ATR(high: SeriesVar, low: SeriesVar, close: SeriesVar, period: int) -> SeriesVar:
+    '''
+    平均真实振幅
+    '''
+    return RMA(TR(high, low, close), period)
 
 
-class StaNATR(BaseInd):
-    input_dim = 2
+def TRRoll(high: SeriesVar, low: SeriesVar, period: int) -> SeriesVar:
+    high_col, low_col = high[:period], low[:period]
+    max_id = np.argmax(high_col)
+    roll_max = high_col[max_id]
+    min_id = np.argmin(low_col)
+    roll_min = low_col[min_id]
 
-    def __init__(self, period: int = 3, cache_key: str = ''):
-        super(StaNATR, self).__init__(cache_key)
-        self.period = period
-        self.atr = StaATR(period, cache_key)
-
-    def _compute_arr(self, val: np.ndarray):
-        ind_val = self.atr(val)
-        long_price_range = LongVar.get(LongVar.price_range)
-        if val.shape[0] < long_price_range.roll_len:
-            ind_val = np.nan
-        return ind_val / long_price_range.val
-
-
-class StaTRRoll(BaseInd):
-    input_dim = 2
-
-    def __init__(self, period: int = 4, cache_key: str = ''):
-        super(StaTRRoll, self).__init__(cache_key)
-        self.period = period
-
-    def _compute_arr(self, val: np.ndarray):
-        high_col, low_col = val[-self.period:, hcol], val[-self.period:, lcol]
-        max_id = np.argmax(high_col)
-        roll_max = high_col[max_id]
-        min_id = np.argmin(low_col)
-        roll_min = low_col[min_id]
-
-        prev_tr = roll_max - roll_min
-        if self.period - min(max_id, min_id) <= 2:
-            # 如果是从最后两个蜡烛计算得到的，则是重要的波动范围。
-            ind_val = prev_tr
-        else:
-            # 从前面计算的TrueRange加权缩小，和最后两个蜡烛的TrueRange取最大值
-            prev_tr *= (min(max_id, min_id) + 1) / (self.period * 2) + 0.5
-            ind_val = max(prev_tr, np.max(high_col[-2:]) - np.min(low_col[-2:]))
-        return ind_val
+    prev_tr = roll_max - roll_min
+    if period - min(max_id, min_id) <= 2:
+        # 如果是从最后两个蜡烛计算得到的，则是重要的波动范围。
+        res_val = prev_tr
+    else:
+        # 从前面计算的TrueRange加权缩小，和最后两个蜡烛的TrueRange取最大值
+        prev_tr *= (min(max_id, min_id) + 1) / (period * 2) + 0.5
+        res_val = max(prev_tr, np.max(high_col[-2:]) - np.min(low_col[-2:]))
+    return SeriesVar(high.key + f'_troll{period}', res_val)
 
 
-class StaNTRRoll(BaseInd):
-    input_dim = 2
-
-    def __init__(self, period: int = 4, roll_len: int = 4, cache_key: str = ''):
-        super(StaNTRRoll, self).__init__(cache_key)
-        self.tr_roll = StaTRRoll(period, cache_key)
-        self.roll_len = roll_len
-
-    def _compute_arr(self, val: np.ndarray):
-        tr_val = self.tr_roll(val)
-        return tr_val / LongVar.get(LongVar.price_range).val
+def NTRRoll(high: SeriesVar, low: SeriesVar, period: int = 4) -> SeriesVar:
+    troll = TRRoll(high, low, period)
+    res_val = troll[0] / LongVar.get(LongVar.price_range).val
+    return SeriesVar(high.key + f'_ntroll{period}', res_val)
 
 
-class StaNVol(BaseInd):
-    input_dim = 2
-
-    def __init__(self, cache_key: str = ''):
-        super(StaNVol, self).__init__(cache_key)
-
-    def _compute_arr(self, val: np.ndarray):
-        return val[-1, vcol] / LongVar.get(LongVar.vol_avg).val
+def NVol(vol: SeriesVar) -> SeriesVar:
+    res_val = vol[0] / LongVar.get(LongVar.vol_avg).val
+    return SeriesVar(vol.key + f'_nvol', res_val)
 
 
-class StaMACD(BaseInd):
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, smooth_period: int = 9, init_type=0,
-                 cache_key: str = ''):
-        '''
-        带状态计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
-        '''
-        super(StaMACD, self).__init__(cache_key)
-        self.ema_short = StaEMA(fast_period, init_type=init_type, cache_key=cache_key)
-        self.ema_long = StaEMA(slow_period, init_type=init_type, cache_key=cache_key)
-        self.ema_sgl = StaEMA(smooth_period, init_type=init_type, cache_key=cache_key + 'macd')
-
-    def _compute_val(self, val: float):
-        macd = self.ema_short(val) - self.ema_long(val)
-        singal = self.ema_sgl(macd)
-        return macd, singal
+def MACD(obj: SeriesVar, fast_period: int = 12, slow_period: int = 26,
+         smooth_period: int = 9, init_type=0) -> SeriesVar:
+    '''
+    计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
+    '''
+    short = EMA(obj, fast_period, init_type=init_type)
+    long = EMA(obj, slow_period, init_type=init_type)
+    macd = short - long
+    singal = EMA(macd, smooth_period, init_type=init_type)
+    return SeriesVar(obj.key + '_macd', (macd[0], singal[0]))
 
 
-class StaRSI(BaseInd):
-    def __init__(self, period: int, cache_key: str = ''):
-        super(StaRSI, self).__init__(cache_key)
-        self.period = period
+class SeriesRSI(SeriesVar):
+    def __init__(self, key: str, data, last_val):
+        super().__init__(key, data)
         self.gain_avg = 0
         self.loss_avg = 0
-        self.last_input = np.nan
+        self.last_input = last_val
 
-    def _compute_val(self, val: float):
-        if not np.isfinite(self.last_input):
-            self.last_input = val
-            return np.nan
-        val_delta = val - self.last_input
-        self.last_input = val
-        if len(self.arr) > self.period:
-            if val_delta >= 0:
-                gain_delta, loss_delta = val_delta, 0
-            else:
-                gain_delta, loss_delta = 0, val_delta
-            self.gain_avg = (self.gain_avg * (self.period - 1) + gain_delta) / self.period
-            self.loss_avg = (self.loss_avg * (self.period - 1) + loss_delta) / self.period
-            return self.gain_avg * 100 / (self.gain_avg - self.loss_avg)
+
+def RSI(obj: SeriesVar, period: int) -> SeriesRSI:
+    '''
+    相对强度指数。0-100之间。
+    价格变化有的使用变化率，大部分使用变化值。这里使用变化值：price_chg
+    '''
+    res_key = obj.key + f'_rsi{period}'
+    res_obj: SeriesRSI = SeriesVar.get(res_key)
+    cur_val = obj[0]
+    if not res_obj:
+        return SeriesRSI(res_key, np.nan, cur_val)
+    if not np.isfinite(res_obj.last_input):
+        res_obj.last_input = cur_val
+        res_obj.append(np.nan)
+        return res_obj
+    val_delta = cur_val - res_obj.last_input
+    res_obj.last_input = cur_val
+    if len(res_obj) > period:
+        if val_delta >= 0:
+            gain_delta, loss_delta = val_delta, 0
         else:
-            if val_delta >= 0:
-                self.gain_avg += val_delta / self.period
-            else:
-                self.loss_avg += val_delta / self.period
-            if len(self.arr) == self.period:
-                return self.gain_avg * 100 / (self.gain_avg - self.loss_avg)
-            else:
-                return np.nan
+            gain_delta, loss_delta = 0, val_delta
+        res_obj.gain_avg = (res_obj.gain_avg * (period - 1) + gain_delta) / period
+        res_obj.loss_avg = (res_obj.loss_avg * (period - 1) + loss_delta) / period
+        res_val = res_obj.gain_avg * 100 / (res_obj.gain_avg - res_obj.loss_avg)
+    else:
+        if val_delta >= 0:
+            res_obj.gain_avg += val_delta / period
+        else:
+            res_obj.loss_avg += val_delta / period
+        if len(res_obj) == period:
+            res_val = res_obj.gain_avg * 100 / (res_obj.gain_avg - res_obj.loss_avg)
+        else:
+            res_val = np.nan
+    res_obj.append(res_val)
+    return res_obj
 
 
-class StaKDJ(BaseInd):
+def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
+        period: int = 9, sm1: int = 3, sm2: int = 3, smooth_type='rma') -> SeriesVar:
     '''
     KDJ指标。也称为：Stoch随机指标。
     '''
-    input_dim = 2
-
-    def __init__(self, period: int = 9, sm1: int = 3, sm2: int = 3, smooth_type='rma', cache_key: str = ''):
-        super(StaKDJ, self).__init__(cache_key)
-        self.period = period
-        if smooth_type == 'rma':
-            self._k = StaRMA(sm1, init_val=50., cache_key=cache_key+'kdj_k')
-            self._d = StaRMA(sm2, init_val=50., cache_key=cache_key+'kdj_d')
-        elif smooth_type == 'sma':
-            self._k = StaSMA(sm1, cache_key=cache_key + 'kdj_k')
-            self._d = StaSMA(sm2, cache_key=cache_key + 'kdj_d')
-        else:
-            raise ValueError(f'unsupport smooth_type: {smooth_type} for StaKDJ')
-
-    def _compute_arr(self, val: np.ndarray):
-        if len(val) < self.period:
-            return np.nan, np.nan
-        hhigh = np.max(val[-self.period:, hcol])
-        llow = np.min(val[-self.period:, lcol])
-        max_chg = hhigh - llow
-        if not max_chg:
-            # 四价相同，RSV定为50
-            rsv = 50
-        else:
-            rsv = (val[-1, ccol] - llow) / max_chg * 100
-        self._k(rsv)
-        self._d(self._k[-1])
-        return self._k[-1], self._d[-1]
+    res_key = high.key + f'_kdj{period}_{sm1}_{sm2}_{smooth_type}'
+    if len(high) < period:
+        return SeriesVar(res_key, [np.nan, np.nan])
+    hhigh = np.max(high[:period])
+    llow = np.min(low[:period])
+    max_chg = hhigh - llow
+    if not max_chg:
+        # 四价相同，RSV定为50
+        rsv = 50
+    else:
+        rsv = (close[0] - llow) / max_chg * 100
+    rsv_obj = SeriesVar(high.key + f'_rsv{period}', rsv)
+    if smooth_type == 'rma':
+        k = RMA(rsv_obj, sm1, init_val=50.)
+        d = RMA(k, sm2, init_val=50.)
+    elif smooth_type == 'sma':
+        k = SMA(rsv_obj, sm1)
+        d = SMA(k, sm2)
+    else:
+        raise ValueError(f'unsupport smooth_type: {smooth_type} for KDJ')
+    return SeriesVar(res_key, (k[0], d[0]))
 
 
-class StaStdDev(BaseInd):
-    '''
-    带状态的标准差计算
-    '''
-    def __init__(self, period: int, ddof=0, cache_key: str = ''):
-        super(StaStdDev, self).__init__(cache_key)
-        self.period = period
-        self.factor = period - ddof
-        self._mean = StaSMA(period, cache_key)
-        self._win_arr = []  # 记录输入值
+class SeriesStdDev(SeriesVar):
+    def __init__(self, key: str, data, last_val):
+        super().__init__(key, data)
+        self.win_arr = [last_val]  # 记录输入值
 
-    def _compute_val(self, val: float):
-        mean_val = self._mean(val)
-        self._win_arr.append(val)
-        if len(self._win_arr) < self.period:
-            return np.nan, np.nan
-        variance = sum((x - mean_val) ** 2 for x in self._win_arr) / self.factor
+
+def StdDev(obj: SeriesVar, period: int, ddof=0) -> SeriesStdDev:
+    mean = SMA(obj, period)
+    res_key = obj.key + f'_sdev{period}'
+    res_obj: SeriesStdDev = SeriesStdDev.get(res_key)
+    cur_val = obj[0]
+    if not res_obj:
+        return SeriesStdDev(res_key, (np.nan, np.nan), cur_val)
+    res_obj.win_arr.append(cur_val)
+    if len(res_obj.win_arr) < period:
+        res_val = np.nan, np.nan
+    else:
+        mean_val = mean[0]
+        variance = sum((x - mean_val) ** 2 for x in res_obj.win_arr) / (period - ddof)
         stddev_val = variance ** 0.5
-        self._win_arr.pop(0)
-        return stddev_val, mean_val
+        res_obj.win_arr.pop(0)
+        res_val = stddev_val, mean_val
+    res_obj.append(res_val)
+    return res_obj
 
 
-class StaBBANDS(BaseInd):
-    '''
-    带状态的布林带指标
-    '''
-
-    def __init__(self, period: int, std_up: int, std_dn: int, cache_key: str = ''):
-        super(StaBBANDS, self).__init__(cache_key)
-        self.period = period
-        self.std_up = std_up
-        self.std_dn = std_dn
-        self._std = StaStdDev(period, cache_key=cache_key)
-
-    def _compute_val(self, val: float):
-        dev_val, mean_val = self._std(val)
-        if np.isnan(dev_val):
-            return np.nan, np.nan, np.nan
-        upper = mean_val + dev_val * self.std_up
-        lower = mean_val - dev_val * self.std_dn
-        return upper, mean_val, lower
+def BBANDS(obj: SeriesVar, period: int, std_up: int, std_dn: int) -> SeriesVar:
+    dev_val, mean_val = StdDev(obj, period)[0]
+    res_key = obj.key + f'_bb{period}_{std_up}_{std_dn}'
+    if np.isnan(dev_val):
+        return SeriesVar(res_key, (np.nan, np.nan, np.nan))
+    upper = mean_val + dev_val * std_up
+    lower = mean_val - dev_val * std_dn
+    return SeriesVar(res_key, (upper, mean_val, lower))
 
 
 class CrossTrace:
@@ -346,16 +274,7 @@ def _make_sub_malong():
     return LongVar(calc, 900, 600)
 
 
-def _make_atr_low():
-    natr = StaNATR()
-
-    def calc(arr):
-        return avg_in_range(natr.arr, 0.1, 0.4)
-    return LongVar(calc, 600, 600)
-
-
 LongVar.create_fns.update({
-    LongVar.sub_malong: _make_sub_malong,
-    LongVar.atr_low: _make_atr_low
+    LongVar.sub_malong: _make_sub_malong
 })
 

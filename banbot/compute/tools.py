@@ -17,7 +17,13 @@ def append_new_bar(row: list, tf_secs: int) -> np.ndarray:
         get_date = f'{bar_start_time}({btime.to_datestr(bar_start_time)})'
         raise ValueError(f'{symbol_tf.get()}, expect: {exp_date} get invalid bar {get_date}')
     result = bar_arr.get()
-    copen, chigh, clow, close = row[ocol:vcol]
+    prefix = symbol_tf.get() + '_'
+    copen, chigh, clow, close, vol = row[ocol:vcol + 1]
+    Bar.open = SeriesVar(prefix + 'o', float(copen))
+    Bar.high = SeriesVar(prefix + 'h', float(chigh))
+    Bar.low = SeriesVar(prefix + 'l', float(clow))
+    Bar.close = SeriesVar(prefix + 'c', float(close))
+    Bar.vol = SeriesVar(prefix + 'v', float(vol))
     dust = min(0.00001, max(close, 0.001) * 0.0001)
     max_chg = dust + chigh - clow
     real = abs(close - copen)

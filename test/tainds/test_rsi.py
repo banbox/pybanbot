@@ -8,6 +8,7 @@ import pandas_ta as pta
 from test.common import *
 from banbot.compute import mytt
 from banbot.compute.vec_inds import *
+from banbot.compute import sta_inds as sta
 '''
 比较自行实现的指标和talib、pandas_ta、MyTT等结果异同
 SMA  EMA  RMA  TR  ATR  MACD  RSI  KDJ  BBANDS
@@ -41,7 +42,7 @@ def test_sma():
     mtt_res = mytt.SMA(close_arr, period)
     mtt_res = np.array(mtt_res)
     res = SMA(close_arr, period)
-    sta_res = calc_state_ind(StaSMA(period), close_arr)
+    sta_res = calc_state_func(lambda x: sta.SMA(x, period), close_arr)
     pta_res = pta.sma(close_col, period, talib=False)
     print_tares(res, sta_res, ta_res, ta2_res, mtt_res, pta_res)
     assert_arr_equal(ta_res, res)
@@ -61,7 +62,7 @@ def test_ema():
     ta2_res = ta.EMA(close_arr, timeperiod=period)
     mtt_res = mytt.EMA(close_arr, period)
     res = EMA(close_arr, period)
-    sta_res = calc_state_ind(StaEMA(period), close_arr)
+    sta_res = calc_state_func(lambda x: sta.EMA(x, period), close_arr)
     pta_res = pta.ema(close_col, period, talib=False)
     print_tares(res, sta_res, ta1_res, ta2_res, mtt_res, pta_res)
     assert_arr_equal(ta2_res, res)
@@ -75,7 +76,8 @@ def test_rma():
     '''
     period = 5
     res = RMA(close_arr, period)
-    sta_res = calc_state_ind(StaRMA(period), close_arr)
+    # sta_res = calc_state_ind(StaRMA(period), close_arr)
+    sta_res = calc_state_func(lambda x: sta.RMA(x, period), close_arr)
     pta_res = pta.rma(close_col, period, talib=False)
     print_tares(res, sta_res, pta_res=pta_res)
     assert_arr_equal(res, sta_res)
@@ -83,7 +85,8 @@ def test_rma():
 
 def test_tr():
     res = TR(ohlcv_arr)
-    sta_res = calc_state_ind(StaTR(), ohlcv_arr)
+    sta_res = calc_state_func(lambda x: sta.TR(x), ohlcv_arr)
+    # sta_res = calc_state_ind(StaTR(), ohlcv_arr)
     ta_res = ta.TRANGE(high_arr, low_arr, close_arr)
     pta_res = pta.true_range(high_col, low_col, close_col, talib=False)
     print_tares(res, sta_res, ta_res, pta_res=pta_res)
@@ -95,7 +98,8 @@ def test_tr():
 def test_atr():
     period = 14
     res = ATR(ohlcv_arr, period)
-    sta_res = calc_state_ind(StaATR(period), ohlcv_arr)
+    # sta_res = calc_state_ind(StaATR(period), ohlcv_arr)
+    sta_res = calc_state_func(lambda x: sta.ATR(x, period), ohlcv_arr)
     mtt_res = mytt.ATR(close_arr, high_arr, low_arr, period)
     ta.set_compatibility(1)
     ta2_res = ta.ATR(high_arr, low_arr, close_arr, timeperiod=period)
@@ -109,7 +113,8 @@ def test_atr():
 
 def test_macd():
     res = MACD(close_arr)[0]
-    sta_res = calc_state_ind(StaMACD(), ohlcv_arr)[0]
+    # sta_res = calc_state_ind(StaMACD(), ohlcv_arr)[0]
+    sta_res = calc_state_func(lambda x: sta.MACD(x), close_arr)[:, 0]
     ta.set_compatibility(1)
     ta_mres = ta.MACD(close_arr, fastperiod=12, slowperiod=26, signalperiod=9)[0]
     ta.set_compatibility(0)
@@ -134,7 +139,8 @@ def test_rsi():
     # MyTT的RSI因SMA影响，初始120周期不精确
     mtt_res = mytt.RSI(close_arr, period)
     self_res = RSI(close_arr, period)
-    sta_res = calc_state_ind(StaRSI(period), close_arr)
+    # sta_res = calc_state_ind(StaRSI(period), close_arr)
+    sta_res = calc_state_func(lambda x: sta.RSI(x, period), close_arr)
     pta_res = pta.rsi(pd.Series(close_arr), period, talib=False).to_numpy()
     print_tares(self_res, sta_res, ta2_res, ta_res, mtt_res, pta_res)
     assert_arr_equal(ta2_res, self_res)
@@ -156,7 +162,9 @@ def test_kdj():
     ta2_k, ta2_d = ta.STOCH(high_arr, low_arr, close_arr, **ta_kdj_args)
     # 使用mytt计算
     mk, mt, mj = mytt.KDJ(close_arr, high_arr, low_arr)
-    sta_k, sta_d = calc_state_ind(StaKDJ(), ohlcv_arr)
+    # sta_k, sta_d = calc_state_ind(StaKDJ(), ohlcv_arr)
+    sta_res = calc_state_func(lambda x: sta.KDJ(x), ohlcv_arr)
+    sta_k, sta_d = sta_res[:, 0], sta_res[:, 1]
     myk, myd = KDJ(ohlcv_arr)
     pta_df = pta.kdj(high_col, low_col, close_col, 9, 3, talib=False)
     pta_k, pta_d, pta_j = pta_df['K_9_3'], pta_df['D_9_3'], pta_df['J_9_3']
@@ -180,7 +188,9 @@ def test_bband():
     pta_df = pta.bbands(close_col, period, nbdevup, talib=False)
     pta_up, pta_md, pta_lo = pta_df['BBU_9_2.0'], pta_df['BBM_9_2.0'], pta_df['BBL_9_2.0']
     # 带状态
-    sta_up, sta_md, sta_lo = calc_state_ind(StaBBANDS(period, nbdevup, nbdevdn), close_arr)
+    # sta_up, sta_md, sta_lo = calc_state_ind(StaBBANDS(period, nbdevup, nbdevdn), close_arr)
+    sta_res = calc_state_func(lambda x: sta.BBANDS(x, period, nbdevup, nbdevdn), close_arr)
+    sta_up, sta_md, sta_lo = sta_res[:, 0], sta_res[:, 1], sta_res[:, 2]
     # 向量计算
     my_up, my_md, my_lo = BBANDS(close_arr, period, nbdevup, nbdevdn)
     # 对比

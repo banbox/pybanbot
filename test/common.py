@@ -71,32 +71,16 @@ def print_tares(vec_res, sta_res, ta_cres=None, ta_mres=None, mytt_res=None, pta
         print(pta_res)
 
 
-def calc_state_ind(ind: BaseInd, input_arr):
-    '''
-    计算有状态指标的值，并返回结果。如果是多列，则返回多列
-    '''
-    if not isinstance(input_arr, np.ndarray):
-        input_arr = np.array(input_arr)
-    dim_sub = input_arr.ndim - ind.input_dim
-    with TempContext('BTC/TUSD/1m'):
-        bar_num.set(1)
-        result = []
-        for i in range(len(input_arr)):
-            bar_num.set(bar_num.get() + 1)
-            if dim_sub == 1:
-                in_val = input_arr[i]
-            elif dim_sub == 0:
-                in_val = input_arr[:i + 1]
-            elif dim_sub == 2:
-                in_val = input_arr[i, ccol]
-            else:
-                raise ValueError(f'unsupport dim sub: {dim_sub}')
-            result.append(ind(in_val))
-    if len(result) and isinstance(result[0], (np.ndarray, List, Tuple)):
-        res_list = list(zip(*result))
-        return [np.array(res) for res in res_list]
-    else:
-        return np.array(result)
+def calc_state_func(func: Callable, close_arr: Sequence):
+    s_c = SeriesVar('c', close_arr[0])
+    row_id = 0
+    while True:
+        ret_val = func(s_c)
+        if row_id + 1 == len(close_arr):
+            break
+        s_c.append(close_arr[row_id + 1])
+        row_id += 1
+    return np.array(ret_val.val)
 
 
 def assert_arr_equal(arr_a: np.ndarray, arr_b: np.ndarray):
