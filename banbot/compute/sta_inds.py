@@ -122,7 +122,7 @@ def MACD(obj: SeriesVar, fast_period: int = 12, slow_period: int = 26,
     long = EMA(obj, slow_period, init_type=init_type)
     macd = short - long
     singal = EMA(macd, smooth_period, init_type=init_type)
-    return SeriesVar(obj.key + '_macd', (macd[0], singal[0]))
+    return SeriesVar(obj.key + '_macd', (macd, singal))
 
 
 class SeriesRSI(SeriesVar):
@@ -195,7 +195,7 @@ def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
         d = SMA(k, sm2)
     else:
         raise ValueError(f'unsupport smooth_type: {smooth_type} for KDJ')
-    return SeriesVar(res_key, (k[0], d[0]))
+    return SeriesVar(res_key, (k, d))
 
 
 class SeriesStdDev(SeriesVar):
@@ -205,6 +205,9 @@ class SeriesStdDev(SeriesVar):
 
 
 def StdDev(obj: SeriesVar, period: int, ddof=0) -> SeriesStdDev:
+    '''
+    标准差，返回：stddev，mean
+    '''
     mean = SMA(obj, period)
     res_key = obj.key + f'_sdev{period}'
     res_obj: SeriesStdDev = SeriesStdDev.get(res_key)
@@ -225,6 +228,9 @@ def StdDev(obj: SeriesVar, period: int, ddof=0) -> SeriesStdDev:
 
 
 def BBANDS(obj: SeriesVar, period: int, std_up: int, std_dn: int) -> SeriesVar:
+    '''
+    布林带指标。返回：upper, mean, lower
+    '''
     dev_val, mean_val = StdDev(obj, period)[0]
     res_key = obj.key + f'_bb{period}_{std_up}_{std_dn}'
     if np.isnan(dev_val):
@@ -234,43 +240,10 @@ def BBANDS(obj: SeriesVar, period: int, std_up: int, std_dn: int) -> SeriesVar:
     return SeriesVar(res_key, (upper, mean_val, lower))
 
 
-class CrossTrace:
-    def __init__(self):
-        self.prev_valid = None
-        self.state = 0
-        self.hist = []
-
-    def __call__(self, *args, **kwargs):
-        '''
-        0：未发生交叉
-        1：vala向上穿越valb
-        -1：vala向下穿越valb
-        '''
-        if len(args) == 2:
-            cur_diff = args[0] - args[1]
-        elif len(args) == 1:
-            cur_diff = args[0]
-        else:
-            raise ValueError(f'wrong args len: {len(args)}, expect 1 or 2')
-        self.state = 0
-        if not self.prev_valid or not np.isfinite(self.prev_valid):
-            self.prev_valid = cur_diff
-        elif not cur_diff:
-            pass
-        else:
-            factor = self.prev_valid * cur_diff
-            if factor < 0:
-                self.prev_valid = cur_diff
-                self.state = 1 if cur_diff > 0 else -1
-                self.hist.append((self.state, bar_num.get()))
-        return self.state
-
-
 def _make_sub_malong():
-    malong = StaSMA(120)
 
     def calc(arr):
-        return abs(arr[-1, ccol] - malong(arr[-1, ccol]))
+        return abs(arr[-1, ccol] - SMA(arr[-1, ccol], 120)[0])
     return LongVar(calc, 900, 600)
 
 

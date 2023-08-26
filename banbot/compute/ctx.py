@@ -239,7 +239,12 @@ class SeriesVar(metaclass=MetaSeriesVar):
         self.val: Optional[List[float]] = None
         self.cols: Optional[List[SeriesVar]] = None
         if hasattr(data, '__len__'):
-            self.cols = [SeriesVar(key + f'_{i}', v) for i, v in enumerate(data)]
+            self.cols = []
+            for i, v in enumerate(data):
+                if isinstance(v, SeriesVar):
+                    self.cols.append(v)
+                else:
+                    self.cols.append(SeriesVar(key + f'_{i}', v))
         else:
             self.val = [data]
         self.key = key
@@ -247,7 +252,13 @@ class SeriesVar(metaclass=MetaSeriesVar):
     def append(self, row, check_len=True):
         if self.cols is not None:
             for i, v in enumerate(row):
-                self.cols[i].append(v)
+                if isinstance(v, SeriesVar):
+                    if self.cols[i] == v:
+                        continue
+                    else:
+                        self.cols[i] = v
+                else:
+                    self.cols[i].append(v)
         else:
             self.val.append(row)
             if check_len:
@@ -358,6 +369,9 @@ class SeriesVar(metaclass=MetaSeriesVar):
         res_key = f'abs({self.key})'
         res_val = abs(self[-1])
         return SeriesVar(res_key, res_val)
+
+    def __eq__(self, other):
+        return isinstance(other, SeriesVar) and self.key == other.key and len(other) == len(self)
 
     @classmethod
     def key_val(cls, obj):

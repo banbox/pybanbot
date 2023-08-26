@@ -200,11 +200,3 @@ def test_bband():
     assert_arr_equal(my_up, sta_up)
     assert_arr_equal(sta_up, ta_up)
 
-
-def test_cross():
-    ct = CrossTrace()
-    sma3 = SMA(close_arr, 3)
-    diff_arr = close_arr - sma3
-    for i, v in enumerate(close_arr):
-        tag = ct.calc(v, sma3[i])
-        print(diff_arr[i], tag)
