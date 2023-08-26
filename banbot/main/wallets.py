@@ -80,8 +80,6 @@ class WalletsLocal:
             real_cost = src_amount
         else:
             return 0
-        if symbol.find('USD') >= 0 and real_cost < MIN_STAKE_AMOUNT:
-            return 0
         # logger.info(f'cost_ava wallet {key}.{symbol} {wallet.available} - {real_cost}')
         wallet.available -= real_cost
         wallet.pendings[od_key] = real_cost
@@ -160,17 +158,22 @@ class WalletsLocal:
         is_future = exs.market == 'future'
         if is_future or not is_short:
             # 期货合约，现货多单锁定quote
+            if legal_cost < MIN_STAKE_AMOUNT:
+                raise ValueError(f'margin cost must >= {MIN_STAKE_AMOUNT}, cur: {legal_cost:.2f}')
+            if is_future:
+                # 期货合约，名义价值=保证金*杠杆
+                legal_cost /= sigin['leverage']
             quote_cost = self.get_amount_by_legal(exs.quote_code, legal_cost)
             quote_cost = self.cost_ava(od_key, exs.quote_code, quote_cost, after_ts=after_ts)
             if not quote_cost:
                 logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
                 return 0
+            quote_margin = quote_cost  # 计算名义数量
             if is_future:
-                # 期货合约，名义价值=保证金*杠杆
-                quote_cost *= sigin['leverage']
+                quote_margin *= sigin['leverage']
             wallet = self.data[exs.quote_code]
             sigin['wallet_left'] = wallet.available
-            sigin['quote_cost'] = quote_cost
+            sigin['quote_cost'] = quote_margin
         else:
             # 现货空单，锁定base，允许金额为负
             base_cost = self.get_amount_by_legal(exs.base_code, legal_cost)

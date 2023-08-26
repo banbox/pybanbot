@@ -35,9 +35,6 @@ class BaseStrategy:
         self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
         self.calc_num = 0
         self.base_cost = self.config.get('stake_amount', 1000)  # 每笔下单金额基数
-        if self.base_cost < MIN_STAKE_AMOUNT * 1.2:
-            raise ValueError(f'stake_amount {self.base_cost} should > '
-                             f'MIN_STAKE_AMOUNT * 1.2: {(MIN_STAKE_AMOUNT * 1.2):.2f}')
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
