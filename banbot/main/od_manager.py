@@ -264,8 +264,6 @@ class OrderManager(metaclass=SingletonArg):
                 new_tp_price = od.get_info('takeprofit_price')
                 if new_sl_price != sl_price:
                     edit_ods.append((od, 'stoploss_'))
-                else:
-                    logger.info('stop loss price change!!!!')
                 if new_tp_price != tp_price:
                     edit_ods.append((od, 'takeprofit_'))
         return result, edit_ods
@@ -838,7 +836,7 @@ class LiveOrderManager(OrderManager):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
             except ccxt.OrderNotFound:
-                logger.error(f'cancel stop order fail, not found: {od.symbol}, {trigger_oid}')
+                logger.error(f'cancel old stop order fail, not found: {od.symbol}, {trigger_oid}')
 
     async def _cancel_trigger_ods(self, od: InOutOrder):
         '''
@@ -1081,28 +1079,31 @@ class LiveOrderManager(OrderManager):
 
     async def consume_queue(self):
         while True:
-            job: OrderJob = await self.order_q.get()
-            od: Optional[InOutOrder] = None
             try:
-                with db():
-                    sess = db.session
-                    od = InOutOrder.get(sess, job.od_id)
-                    if job.action == 'enter':
-                        await self._exec_order_enter(od)
-                    elif job.action == 'exit':
-                        await self._exec_order_exit(od)
-                    elif job.action == 'edit_trigger':
-                        await self._edit_trigger_od(od, job.data)
+                job: OrderJob = await self.order_q.get()
+                od: Optional[InOutOrder] = None
+                try:
+                    with db():
+                        sess = db.session
+                        od = InOutOrder.get(sess, job.od_id)
+                        if job.action == 'enter':
+                            await self._exec_order_enter(od)
+                        elif job.action == 'exit':
+                            await self._exec_order_exit(od)
+                        elif job.action == 'edit_trigger':
+                            await self._edit_trigger_od(od, job.data)
+                        else:
+                            logger.error(f'unsupport order job type: {job.action}')
+                        sess.commit()
+                except Exception:
+                    if od:
+                        await od.force_exit()
+                        logger.exception('consume order exception: %s, force exit', job)
                     else:
-                        logger.error(f'unsupport order job type: {job.action}')
-                    sess.commit()
+                        logger.exception('consume order exception: %s', job)
+                self.order_q.task_done()
             except Exception:
-                if od:
-                    await od.force_exit()
-                    logger.exception('consume order exception: %s, force exit', job)
-                else:
-                    logger.exception('consume order exception: %s', job)
-            self.order_q.task_done()
+                logger.exception("consume order_q error")
 
     async def edit_pending_order(self, od: InOutOrder, is_enter: bool, price: float):
         sub_od = od.enter if is_enter else od.exit
@@ -1125,12 +1126,13 @@ class LiveOrderManager(OrderManager):
     @loop_forever
     async def trail_open_orders_forever(self):
         timeouts = self.config.get('limit_vol_secs', 5) * 2
-        if btime.prod_mode():
-            try:
-                with db():
-                    await self._trail_open_orders(timeouts)
-            except Exception:
-                logger.exception('_trail_open_orders error')
+        if not btime.prod_mode():
+            return
+        try:
+            with db():
+                await self._trail_open_orders(timeouts)
+        except Exception:
+            logger.exception('_trail_open_orders error')
         await asyncio.sleep(timeouts)
 
     async def _trail_open_orders(self, timeouts: int):
@@ -1144,10 +1146,11 @@ class LiveOrderManager(OrderManager):
         exp_orders = [od for od in op_orders if od.pending_type(timeouts)]
         if not exp_orders:
             return
-        # logger.info(f'pending open orders: {exp_orders}')
+        logger.error(f'pending open orders: {exp_orders}')
         sess = db.session
         from itertools import groupby
         exp_orders = sorted(exp_orders, key=lambda x: x.symbol)
+        unsubmits = []  # 记录长期未提交到交易所的订单
         for pair, od_list in groupby(exp_orders, lambda x: x.symbol):
             buy_price, sell_price = await self._get_pair_prices(pair, round(self.limit_vol_secs * 0.5))
             od_list: List[InOutOrder] = list(od_list)
@@ -1156,6 +1159,9 @@ class LiveOrderManager(OrderManager):
                     sub_od, is_enter, new_price = od.exit, False, sell_price
                 else:
                     sub_od, is_enter, new_price = od.enter, True, buy_price
+                if not sub_od.order_id:
+                    unsubmits.append(str(od))
+                    continue
                 if not sub_od.price:
                     continue
                 price_chg = new_price - sub_od.price
@@ -1167,6 +1173,12 @@ class LiveOrderManager(OrderManager):
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
                 sess.commit()
+        from banbot.rpc import RPCManager, RPCMessageType
+        if unsubmits and RPCManager.instance:
+            await RPCManager.instance.send_msg(dict(
+                type=RPCMessageType.EXCEPTION,
+                status=f'超时未提交订单：{unsubmits}',
+            ))
 
     @loop_forever
     async def watch_leverage_forever(self):

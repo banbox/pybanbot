@@ -215,7 +215,6 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             return
         hold = next((sta for sta in cls._obj.holders if sta.pair == pair), None)
         if not hold:
-            logger.error(f'receive pair ohlcv not found: {pair}')
             return
         # 这里可能传入多个，但只需判断最后一个，因为hold里面会从数据库中取，不会丢失
         last_bar = ohlc_arr[-1]

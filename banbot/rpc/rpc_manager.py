@@ -52,7 +52,8 @@ class RPCManager(metaclass=Singleton):
         }
         """
         msg['name'] = self.name
-        msg_type = msg['type'].value
+        msg_type = map_msg_type(msg['type'])
+        msg['type'] = msg_type
         for mod in self.channels:
             if msg_type not in mod.msg_types:
                 continue
@@ -75,10 +76,22 @@ class RPCManager(metaclass=Singleton):
             })
 
     async def startup_messages(self):
+        from banbot.symbols import group_symbols
         exg_name = self.config['exchange']['name']
+        market = self.config['market_type']
         run_mode = btime.run_mode.value
         stake_amount = self.config['stake_amount']
+        leverage = ''
+        if market == 'future':
+            leverage = f'\n杠杆：{self.config["leverage"]}'
+        groups = group_symbols(BotGlobal.pairs)
+        if len(groups) == 1:
+            pairs = f"币种：{', '.join(list(groups.values())[0])}"
+        else:
+            pairs = '币种：'
+            for key, items in groups.items():
+                pairs += f"\n{key}: {', '.join(items)}"
         await self.send_msg({
             'type': RPCMessageType.STARTUP,
-            'status': f'Exg: {exg_name}\nMode: {run_mode}\nStake Amount: {stake_amount}'
+            'status': f'{exg_name}.{market}\n模式: {run_mode}\n单笔金额: {stake_amount}{leverage}\n{pairs}'
         })

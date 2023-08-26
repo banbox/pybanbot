@@ -79,7 +79,7 @@ class RPC:
         return {'status': 'already stopped'}
 
 
-class RPCMessageType(str, Enum):
+class RPCMessageType:
     STATUS = 'status'
     WARNING = 'warning'
     EXCEPTION = 'exception'
@@ -103,11 +103,12 @@ class RPCMessageType(str, Enum):
 
     MARKET_TIP = 'market_tip'
 
-    def __repr__(self):
-        return self.value
 
-    def __str__(self):
-        return self.value
+def map_msg_type(msg_type: str):
+    if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP,
+                    RPCMessageType.EXCEPTION, RPCMessageType.WARNING):
+        return 'status'
+    return msg_type
 
 
 class Webhook(RPCHandler):
@@ -133,27 +134,11 @@ class Webhook(RPCHandler):
         """
         pass
 
-    def _get_value_dict(self, msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        whconfig = self._config['webhook']
-        msg_type = msg['type']
-        type_val = msg_type.value
-        if not msg_type:
-            return
-        dct_config = whconfig.get(type_val)
-        if dct_config:
-            return dct_config
-        if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP,
-                        RPCMessageType.EXCEPTION, RPCMessageType.WARNING):
-            valuedict = whconfig.get('status')
-        else:
-            return None
-        return valuedict
-
     async def send_msg(self, msg: Dict[str, Any]) -> None:
         """ Send a message to telegram channel """
         try:
-
-            valuedict = self._get_value_dict(msg)
+            msg_type = msg['type']
+            valuedict = self._config['webhook'].get(msg_type)
 
             if not valuedict:
                 logger.info("Message type '%s' not configured for webhooks", msg['type'])

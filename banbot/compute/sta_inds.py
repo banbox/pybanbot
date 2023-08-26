@@ -173,7 +173,7 @@ def RSI(obj: SeriesVar, period: int) -> SeriesRSI:
 def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
         period: int = 9, sm1: int = 3, sm2: int = 3, smooth_type='rma') -> SeriesVar:
     '''
-    KDJ指标。也称为：Stoch随机指标。
+    KDJ指标。也称为：Stoch随机指标。返回k, d
     '''
     res_key = high.key + f'_kdj{period}_{sm1}_{sm2}_{smooth_type}'
     if len(high) < period:
@@ -238,6 +238,29 @@ def BBANDS(obj: SeriesVar, period: int, std_up: int, std_dn: int) -> SeriesVar:
     upper = mean_val + dev_val * std_up
     lower = mean_val - dev_val * std_dn
     return SeriesVar(res_key, (upper, mean_val, lower))
+
+
+def TD(obj: SeriesVar):
+    '''
+    Tom DeMark Sequence。神奇九转。狄马克序列。
+    9和13表示超买；-9和-13表示超卖
+    '''
+    sub4 = obj[0] - obj[4]
+    res_key = obj.key + '_td'
+    res_obj: SeriesVar = SeriesVar.get(res_key)
+    if not res_obj:
+        return SeriesVar(res_key, np.nan)
+    if not np.isfinite(sub4):
+        res_obj.append(np.nan)
+        return res_obj
+    pindex = res_obj[0]
+    step = 1 if sub4 > 0 else (-1 if sub4 < 0 else 0)
+    if np.isfinite(pindex) and pindex * sub4 > 0:
+        res_val = pindex + step
+    else:
+        res_val = step
+    res_obj.append(res_val)
+    return res_obj
 
 
 def _make_sub_malong():
