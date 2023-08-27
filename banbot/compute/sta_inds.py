@@ -49,6 +49,7 @@ def _EWMA(obj: SeriesVar, res_key: str, period: int, alpha: float, init_type: in
 
 def EMA(obj: SeriesVar, period: int, init_type=0) -> SeriesVar:
     '''
+    指数移动均线
     最近一个权重：2/(n+1)
     '''
     res_key = obj.key + f'_ema{period}_{init_type}'
@@ -57,7 +58,8 @@ def EMA(obj: SeriesVar, period: int, init_type=0) -> SeriesVar:
 
 def RMA(obj: SeriesVar, period: int, init_type=0, init_val=None) -> SeriesVar:
     '''
-    和StaEMA区别是：分子分母都减一
+    相对移动均线
+    和EMA区别是：分子分母都减一
     最近一个权重：1/n
     '''
     res_key = obj.key + f'_rma{period}_{init_type}_{init_val}'
@@ -104,12 +106,12 @@ def TRRoll(high: SeriesVar, low: SeriesVar, period: int) -> SeriesVar:
 
 def NTRRoll(high: SeriesVar, low: SeriesVar, period: int = 4) -> SeriesVar:
     troll = TRRoll(high, low, period)
-    res_val = troll[0] / LongVar.get(LongVar.price_range).val
+    res_val = troll[0] / LongChange.get()
     return SeriesVar(high.key + f'_ntroll{period}', res_val)
 
 
 def NVol(vol: SeriesVar) -> SeriesVar:
-    res_val = vol[0] / LongVar.get(LongVar.vol_avg).val
+    res_val = vol[0] / LongVolAvg.get()
     return SeriesVar(vol.key + f'_nvol', res_val)
 
 
@@ -261,16 +263,4 @@ def TD(obj: SeriesVar):
         res_val = step
     res_obj.append(res_val)
     return res_obj
-
-
-def _make_sub_malong():
-
-    def calc(arr):
-        return abs(arr[-1, ccol] - SMA(arr[-1, ccol], 120)[0])
-    return LongVar(calc, 900, 600)
-
-
-LongVar.create_fns.update({
-    LongVar.sub_malong: _make_sub_malong
-})
 

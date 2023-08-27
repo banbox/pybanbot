@@ -48,7 +48,7 @@ def big_vol_score(arr: np.ndarray, idx: int = -1):
     :return:
     '''
     cur_vol, prev_vol = arr[idx, vcol], arr[idx - 1, vcol]
-    vol_avg_val = LongVar.get(LongVar.vol_avg).val
+    vol_avg_val = LongVolAvg.get()
     avg_score = cur_vol / vol_avg_val / 2.5
     prev_score = cur_vol / prev_vol / 3
     if avg_score > 1 and cur_vol > prev_vol or prev_score > 1:
@@ -113,7 +113,7 @@ def detect_pattern(arr: np.ndarray) -> Dict[str, float]:
     if cur_doji and p_solid_rate >= 0.7 and min(copen, close) > pclose > phalf:
         # 前70%阳，见顶十字星
         result['doji_star'] = 1
-    bar_len_val = LongVar.get(LongVar.bar_len).val
+    bar_len_val = LongBarLen.get()
 
     def contain_score():
         '''

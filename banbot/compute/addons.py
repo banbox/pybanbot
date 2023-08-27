@@ -32,7 +32,7 @@ def log_ma_extrems(ma_list: List[Tuple[List, StaSMA, float]]):
     检查当前是否出现极值点并记录。
     :return:
     '''
-    bar_len_val = LongVar.get(LongVar.bar_len).val
+    bar_len_val = LongBarLen.get()
     if len(ma_list[-1][1]) < 3 or np.isnan(bar_len_val):
         return
     for item in ma_list:
@@ -106,7 +106,7 @@ def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
 
         ma5_val, ma20_val, ma120_val = ma5[-1], ma20[-1], ma120[-1]
         ma5_chg = ma5_val - ma5[-10] if arr.shape[0] >= 10 else np.nan
-        avg_bar_len = LongVar.get(LongVar.bar_len).val
+        avg_bar_len = LongBarLen.get()
         ma5_sub10_val = ma5_chg / avg_bar_len / 1.5  # 下跌指数，<0表示下跌，>0表示上涨，>1表示大涨
 
         result = dict()
@@ -126,7 +126,7 @@ def make_calc_shorts(ma5: StaSMA, ma20: StaSMA, ma120: StaSMA):
                 # 震荡&下跌趋势中--大阴线下跌
                 result['big_down_ensure'] = big_down_score
 
-            elif close - ma120_val > LongVar.get(LongVar.sub_malong).val:
+            elif close - ma120_val > LongBarLen.get() * 3:
                 # 高位大阴线下跌
                 result['big_down_rev'] = big_down_score
 

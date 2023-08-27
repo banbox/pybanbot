@@ -27,7 +27,6 @@ from collections.abc import Sequence
 bar_num = ContextVar('bar_num')
 symbol_tf = ContextVar('symbol_tf')
 bar_arr = ContextVar('bar_arr')
-fea_col_start = ContextVar('fea_col_start')
 bar_time = ContextVar('bar_time', default=(0, 0))
 _symbol_ctx: Dict[str, Context] = dict()
 symbol_tf.set('')
@@ -90,7 +89,7 @@ def reset_context(pair_tf: str):
     bar_arr.set([])
     bar_time.set((0, 0))
     if pair_tf:
-        LongVar.reset(pair_tf)
+        LongStat.reset(pair_tf)
         MetaSeriesVar.reset(pair_tf)
 
 
@@ -123,77 +122,96 @@ def avg_in_range(view_arr, start_rate=0.25, end_rate=0.75, is_abs=True) -> float
     return np.average(sort_arr[start: end])
 
 
-class LongVar:
+class LongStat:
     '''
-    更新频率较低的市场信息；同一指标，不同交易对不同周期，需要的参数可能不同。
-    更新方法：一定周期的K线数据更新、API接口计算更新。
-    （创建参数：更新函数、更新周期、）
-    更新间隔：60s的整数倍
+    大周期更新计算的变量。必须在上下文变量中使用。
     '''
-    _instances: Dict[str, 'LongVar'] = dict()
-    create_fns: Dict[str, Callable] = dict()
+    _instances: Dict[str, 'LongStat'] = dict()
+    reg_list = []
+    '所有大周期变量，都需要在这里注册'
 
-    price_range = 'price_range'
-    vol_avg = 'vol_avg'
-    bar_len = 'bar_len'
-    sub_malong = 'sub_malong'
+    update_step: int = 200
+    '每隔多少个bar计算一次'
 
-    def __init__(self, calc_func: Callable, roll_len: int, update_step: int, old_rate=0.7):
-        self.old_rate = old_rate
-        self.calc_func = calc_func
-        self.val = np.nan
-        self.update_step = update_step
-        self.roll_len = roll_len
-        self.update_at = 0
+    back_num: int = 600
+    '每次计算时回顾的bar数量'
 
-    def on_bar(self, arr: np.ndarray):
-        if arr.shape[0] < self.roll_len:
-            return
-        num_off = bar_num.get() - self.update_at
-        cur_val = self.val
-        if np.isnan(cur_val) or num_off == self.update_step:
-            new_val = self.calc_func(arr[-self.roll_len:, :])
-            if np.isnan(cur_val):
-                cur_val = new_val
+    alpha: float = 0.7
+    '每次计算时，新值的权重，旧值权重：1-alpha'
+
+    def __init__(self):
+        self.val: float = np.nan
+        '当前的值'
+
+        self._next_calc: int = self.update_step
+        '下次计算的bar'
+
+    @classmethod
+    def calc(cls):
+        raise NotImplementedError
+
+    @classmethod
+    def get(cls, prefix: str = None):
+        if not prefix:
+            prefix = symbol_tf.get()
+        obj = cls._instances.get(f'{prefix}_{cls.__name__}')
+        if not obj:
+            return np.nan
+        return obj.val
+
+    @classmethod
+    def init(cls):
+        '''
+        针对当前上下文变量，初始化所有长变量。仅需调用一次。
+        '''
+        prefix = symbol_tf.get()
+        for fac in cls.reg_list:
+            cls._instances[f'{prefix}_{fac.__name__}'] = fac()
+
+    @classmethod
+    def update(cls, prefix: str = None, cur_num: int = 0):
+        if not prefix:
+            prefix = symbol_tf.get()
+        if not cur_num:
+            cur_num = bar_num.get()
+        care_inds = [obj for key, obj in cls._instances.items()
+                     if key.startswith(prefix) and cur_num >= obj._next_calc]
+        for ind in care_inds:
+            new_val = ind.calc()
+            if ind.val is None or not np.isfinite(ind.val):
+                ind.val = new_val
             else:
-                cur_val = cur_val * self.old_rate + new_val * (1 - self.old_rate)
-            self.val = cur_val
-            self.update_at = bar_num.get()
-
-    @classmethod
-    def update(cls, arr: np.ndarray):
-        symbol = symbol_tf.get()
-        for key, obj in cls._instances.items():
-            if not key.startswith(symbol):
-                continue
-            obj.on_bar(arr)
-
-    @classmethod
-    def _create(cls, key: str) -> 'LongVar':
-        if key in cls.create_fns:
-            return cls.create_fns[key]()
-        elif key == cls.price_range:
-            return LongVar(lambda view_arr: np.max(view_arr[:, hcol]) - np.min(view_arr[:, lcol]), 600, 600)
-        elif key == cls.vol_avg:
-            return LongVar(lambda view_arr: np.average(view_arr[:, vcol]), 600, 600)
-        elif key == cls.bar_len:
-            return LongVar(lambda arr: avg_in_range(arr[:, ocol] - arr[:, ccol]), 600, 600)
-        else:
-            raise ValueError(f'unknown long key: {key}')
-
-    @classmethod
-    def get(cls, key: str) -> 'LongVar':
-        symbol = symbol_tf.get()
-        cache_key = f'{symbol}_{key}'
-        if cache_key not in cls._instances:
-            cls._instances[cache_key] = cls._create(key)
-        return cls._instances[cache_key]
+                ind.val = ind.val * (1 - ind.alpha) + new_val * ind.alpha
+            ind._next_calc = cur_num + ind.update_step
 
     @classmethod
     def reset(cls, ctx_key: str):
-        for key in cls._instances:
+        for key in list(cls._instances):
             if key.startswith(ctx_key):
                 del cls._instances[key]
+
+
+class LongChange(LongStat):
+    @classmethod
+    def calc(cls):
+        return max(Bar.high[:cls.back_num]) - min(Bar.low[:cls.back_num])
+
+
+class LongVolAvg(LongStat):
+    @classmethod
+    def calc(cls):
+        val_arr = Bar.vol[:cls.back_num]
+        return sum(val_arr) / len(val_arr)
+
+
+class LongBarLen(LongStat):
+    @classmethod
+    def calc(cls):
+        bar_lens = np.array(Bar.close[:cls.back_num]) - np.array(Bar.open[:cls.back_num])
+        return avg_in_range(bar_lens)
+
+
+LongStat.reg_list.extend([LongChange, LongVolAvg, LongBarLen])
 
 
 class MetaSeriesVar(type):
@@ -435,7 +453,23 @@ def CrossDist(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]):
     return 0, sys.maxsize
 
 
-class Bar:
+class MetaBar(type):
+    def __getitem__(self, item):
+        if item == ocol:
+            return self.open
+        elif item == hcol:
+            return self.high
+        elif item == lcol:
+            return self.low
+        elif item == ccol:
+            return self.close
+        elif item == vcol:
+            return self.vol
+        else:
+            return None
+
+
+class Bar(metaclass=MetaBar):
     '''
     快速访问蜡烛数据
     '''
