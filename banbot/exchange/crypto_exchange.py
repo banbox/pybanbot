@@ -373,6 +373,9 @@ class CryptoExchange:
 
         return {k: v for k, v in markets.items() if ia_valid(v)}
 
+    def get_cur_markets(self):
+        return self.get_markets(quote_currs=self.quote_symbols, trade_modes=[self.market_type])
+
     @property
     def precisionMode(self) -> int:
         """exchange ccxt precisionMode"""

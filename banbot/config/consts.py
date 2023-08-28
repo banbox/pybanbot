@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Dict, Any
 MIN_STAKE_AMOUNT = 10
 MAX_FETCH_NUM = 1000  # 单次请求最大返回数量
-MAX_CONC_OHLCV = 10  # 最大并发下载K线数量，过大会导致卡死
+MAX_CONC_OHLCV = 5  # 最大并发下载K线数量，过大会导致卡死
 
 Config = Dict[str, Any]
 NATIVE_TFS = ['1s', '1m', '3m', '5m', '15m', '30m', '1h', '4h', '8h', '1d']

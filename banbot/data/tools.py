@@ -3,9 +3,13 @@
 # File  : tools.py
 # Author: anyongjin
 # Date  : 2023/2/28
+import asyncio
 import datetime
 import math
 import os
+import six
+
+from tqdm import tqdm
 
 from banbot.config.consts import *
 from banbot.config.timerange import TimeRange
@@ -201,7 +205,7 @@ def load_data_range_from_bt(btres: dict):
 
 
 async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, start_ms: int, end_ms: int,
-                          show_info: bool = True):
+                          pbar: tqdm = None):
     '''
     按给定时间段下载交易对的K线数据。
     :param exchange:
@@ -209,10 +213,9 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
     :param timeframe:
     :param start_ms: 毫秒时间戳（含）
     :param end_ms: 毫秒时间戳（不含）
-    :param show_info: 是否显示进度信息
+    :param pbar: tqdm进度条
     :return:
     '''
-    from tqdm import tqdm
     tf_msecs = tf_to_secs(timeframe) * 1000
     assert start_ms > 1000000000000, '`start_ts` must be milli seconds'
     max_end_ts = (end_ms // tf_msecs - 1) * tf_msecs  # 最后一个bar的时间戳，达到此bar时停止，避免额外请求
@@ -220,28 +223,32 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
         return []
     fetch_num = (end_ms - start_ms) // tf_msecs
     batch_size = min(1000, fetch_num + 5)
-    req_times = fetch_num / batch_size
-    if show_info:
+    if pbar is not None:
         start_text, end_text = btime.to_datestr(start_ms), btime.to_datestr(end_ms)
         logger.info(f'fetch ohlcv {pair}/{timeframe} {start_text} - {end_text}')
-        if req_times < 3:
-            show_info = False
-    since, total_tr = round(start_ms), end_ms - start_ms
+    since = round(start_ms)
     result = []
-    pbar = tqdm(total=100, unit='%') if show_info else None
+    retry_cnt = 0
     while since + tf_msecs <= end_ms:
-        data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
+        try:
+            data = await exchange.fetch_ohlcv(pair, timeframe, since=since, limit=batch_size)
+        except ccxt.NetworkError as e:
+            retry_cnt += 1
+            if retry_cnt > 1:
+                raise e
+            logger.error(f'down ohlcv error: {e}, retry {retry_cnt}')
+            await asyncio.sleep(3)
+            continue
+        retry_cnt = 0
         if not len(data):
             break
         result.extend(data)
         cur_end = round(data[-1][0])
-        if show_info:
-            pbar.update(round((cur_end - since) * 100 / total_tr))
+        if pbar is not None:
+            pbar.update()
         if cur_end >= max_end_ts:
             break
         since = cur_end + 1
-    if show_info:
-        pbar.close()
     end_pos = len(result) - 1
     while end_pos >= 0 and result[end_pos][0] >= end_ms:
         end_pos -= 1
@@ -249,7 +256,7 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0.) -> int:
+                         allow_lack: float = 0., pbar: Union[tqdm, str] = 'auto') -> int:
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -265,6 +272,8 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     start_ms, end_ms = KHole.get_down_range(exs, timeframe, start_ms, end_ms)
     if not start_ms:
         return 0
+    if isinstance(pbar, six.string_types) and pbar == 'auto':
+        pbar = tqdm()
     down_count = 0
     if check_exist:
         measure.start_for('query_range')
@@ -274,7 +283,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                 # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
                 cur_end = round(old_start)
                 measure.start_for('fetch_start')
-                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end)
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
                 measure.start_for('insert_start')
                 down_count += KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_start')
@@ -286,7 +295,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                     return down_count
                 # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
                 measure.start_for('fetch_end')
-                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms)
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
                 measure.start_for('insert_end')
                 down_count += KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_end')
@@ -296,7 +305,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                 # 要下载的数据全部存在，直接退出
                 return down_count
     measure.start_for('fetch_all')
-    newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms)
+    newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
     measure.start_for('insert_all')
     down_count += KLine.insert(exs.id, timeframe, newdata, check_exist)
     measure.start_for('candle_conts_all')
@@ -333,7 +342,7 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
 
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
-                           allow_lack: float = 0., with_unfinish: bool = False):
+                           allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[tqdm, str] = 'auto'):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -345,6 +354,7 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     :param limit:
     :param allow_lack: 最大允许缺失的最新数据比例。设置此项避免对很小数据缺失时的不必要网络请求
     :param with_unfinish: 是否附加未完成的数据
+    :param pbar: 进度条
     :return:
     '''
     from banbot.storage import KLine
@@ -361,12 +371,12 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
         if start_ms > fix_start_ms:
             start_ms = fix_start_ms + tf_msecs
     down_tf = KLine.get_down_tf(timeframe)
-    await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack)
+    await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar)
     return KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
 
 
 async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],
-                        callback: Callable):
+                        callback: Callable = None):
     '''
     批量下载并处理K线数据。
     :param exg: 交易所对象
@@ -377,8 +387,13 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     '''
     from banbot.util.misc import parallel_jobs
     from banbot.storage import db
+    pbar = tqdm()
     if isinstance(kwargs, dict):
+        kwargs['pbar'] = pbar
         kwargs = [kwargs] * len(symbols)
+    else:
+        for kw in kwargs:
+            kw['pbar'] = pbar
     sess = db.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
     exs_list = sess.query(ExSymbol).filter(*fts).all()
@@ -389,5 +404,7 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
         task_iter = parallel_jobs(auto_fetch_ohlcv, args_list)
         for f in task_iter:
             res = await f
-            callback(res['data'], res['args'][1], res['args'][2], **res['kwargs'])
+            if callback:
+                callback(res['data'], res['args'][1], res['args'][2], **res['kwargs'])
+    pbar.close()
 

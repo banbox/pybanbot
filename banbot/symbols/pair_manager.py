@@ -73,7 +73,7 @@ class PairManager:
     def avaiable_symbols(self) -> Set[str]:
         if self._ava_symbols and btime.utctime() - self._ava_at < 300:
             return self._ava_symbols
-        ava_markets = self.exchange.get_markets(quote_currs=self.stake_currency, trade_modes=[self.market_type])
+        ava_markets = self.exchange.get_cur_markets()
         all_symbols = list(ava_markets.keys())
         self._ava_symbols = set(self.verify_blacklist(all_symbols))
         self._ava_at = btime.utctime()

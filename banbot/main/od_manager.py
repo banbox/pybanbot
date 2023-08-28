@@ -273,7 +273,7 @@ class OrderManager(metaclass=SingletonArg):
             for check_mins, bad_ratio in self.fatal_stop.items():
                 fatal_loss = self.calc_fatal_loss(check_mins)
                 if fatal_loss >= bad_ratio:
-                    logger.error('fatal loss {0:.2f}% in {1} mins, Disable!', fatal_loss * 100, check_mins)
+                    logger.error(f'fatal loss {(fatal_loss * 100):.2f}% in {check_mins} mins, Disable!')
                     self.disabled = True
                     break
 
@@ -1097,7 +1097,8 @@ class LiveOrderManager(OrderManager):
                         sess.commit()
                 except Exception:
                     if od:
-                        await od.force_exit()
+                        with db():
+                            await od.force_exit()
                         logger.exception('consume order exception: %s, force exit', job)
                     else:
                         logger.exception('consume order exception: %s', job)

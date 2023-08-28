@@ -51,7 +51,7 @@ async def down_pairs_by_config(config: Config):
     from banbot.storage.klines import KLine, db
     from banbot.data.toolbox import fill_holes
     await fill_holes()
-    pairs = config['pairs']
+    pairs = config.get('pairs')
     timerange = config['timerange']
     start_ms = round(timerange.startts * 1000)
     end_ms = round(timerange.stopts * 1000)
@@ -69,12 +69,18 @@ async def down_pairs_by_config(config: Config):
             logger.error(f'can only download kline: {KLine.down_tfs}, current: {tf}')
             return
         sess = db.session
-        fts = [ExSymbol.exchange == exchange.name, ExSymbol.symbol.in_(set(pairs)),
-               ExSymbol.market == exchange.market_type]
-        exs_list = sess.query(ExSymbol).filter(*fts).all()
-        for exs in exs_list:
-            await download_to_db(exchange, exs, tf, start_ms, end_ms)
-            logger.warning(f'{exs}/{tf} down {tr_text} complete')
+        # 加载最新币列表
+        await exchange.load_markets()
+        all_symbols = list(exchange.get_cur_markets().keys())
+        for symbol in all_symbols:
+            ExSymbol.get(exchange.name, exchange.market_type, symbol)
+        fts = [ExSymbol.exchange == exchange.name, ExSymbol.market == exchange.market_type]
+        if pairs:
+            fts.append(ExSymbol.symbol.in_(set(pairs)))
+        exs_list: Iterable[ExSymbol] = sess.query(ExSymbol).filter(*fts).all()
+        symbols = [exs.symbol for exs in exs_list]
+        logger.info(f'start download for {len(symbols)} symbols')
+        await bulk_ohlcv_do(exchange, symbols, tf, dict(start_ms=start_ms, end_ms=end_ms))
     else:
         data_dir = config['data_dir']
         if not os.path.isdir(data_dir):
