@@ -261,6 +261,34 @@ order by time'''
         return rows
 
     @classmethod
+    def query_batch(cls, exs_ids: Iterable[int], timeframe: str, start_ms: int, end_ms: int):
+        tf_secs = tf_to_secs(timeframe)
+
+        start_ts, end_ts = start_ms / 1000, end_ms / 1000
+        # 计算最新未完成bar的时间戳
+        finish_end_ts = end_ts // tf_secs * tf_secs
+        unfinish_ts = int(btime.utctime() // tf_secs * tf_secs)
+        if finish_end_ts > unfinish_ts:
+            finish_end_ts = unfinish_ts
+
+        dct_sql = f'''
+select (extract(epoch from time) * 1000)::bigint as time,open,high,low,close,volume,sid from {{tbl}}
+where time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts}) and sid in ({{sid}}) 
+order by time, sid'''
+
+        def gen_gp_sql():
+            return f'''
+                select (extract(epoch from time_bucket('{timeframe}', time, origin => '1970-01-01')) * 1000)::bigint AS gtime,
+                  {cls._candle_agg},sid from {{tbl}}
+                where time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts}) and sid in ({{sid}})
+                group by gtime, sid
+                order by gtime, sid'''
+
+        sid_text = ', '.join(map(lambda x: str(x), exs_ids))
+        rows = cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=sid_text).fetchall()
+        return [list(r) for r in rows]
+
+    @classmethod
     def _recalc_ranges(cls, *tf_list: str) -> Dict[Tuple[int, str], Tuple[int, int]]:
         dct_sql = '''
 select sid,
