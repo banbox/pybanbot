@@ -18,6 +18,7 @@ docker exec -it timescaledb psql -U postgres -h localhost [-d bantd]
 # 创建数据库
 CREATE database bantd;
 ```
+> 如果启动容器时出现错误`OCI runtime create failed: unable to retrieve OCI runtime error: runc did not terminate successfully: exit status 127: unknown.` 是因为`libseccomp`版本过低需要升级：`yum update libseccomp`
 
 # 部署初始化
 ## 修改时区为UTC

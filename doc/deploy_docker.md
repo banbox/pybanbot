@@ -31,7 +31,12 @@ mkdir /root/ban-strategies
 ```
 ## 3. 安装Docker
 [CentOS安装Docker](https://docs.docker.com/engine/install/centos/#install-using-the-repository)
-> 如果遇到错误“Failed to synchronize cache for repo 'AppStream', ignoring this repo.”，需要把`/etc/yum.repo.d`下，对应的baseurl取消注释，域名改为vault.centos.org [参考](https://forums.centos.org/viewtopic.php?t=78708)
+> 如果遇到错误“Failed to synchronize cache for repo 'AppStream', ignoring this repo.”，需要修改CentOS 8的源：[参考](https://forums.centos.org/viewtopic.php?t=78708)  
+```shell
+sed -i 's/#baseurl=http:\/\/mirror.centos.org/baseurl=http:\/\/vault.centos.org/g' /etc/yum.repos.d/CentOS-*
+sed -i 's/mirrorlist=/#mirrorlist=/g' /etc/yum.repos.d/CentOS-*
+dnf update # 不需要安装，提示是否安装时取消即可
+```
 ## 4. 启动机器人
 ```shell
 cd /root/banbot
