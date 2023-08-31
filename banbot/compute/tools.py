@@ -16,16 +16,16 @@ def append_new_bar(row: list, tf_secs: int, check_err=True) -> np.ndarray:
         exp_date = f'{old_rg[1]}({btime.to_datestr(old_rg[1])})'
         get_date = f'{bar_start_time}({btime.to_datestr(bar_start_time)})'
         raise ValueError(f'{symbol_tf.get()}, expect: {exp_date} get invalid bar {get_date}')
+    bar_num.set(bar_num.get() + 1)
+    bar_time.set(new_ts_range)
     result = bar_arr.get()
     prefix = symbol_tf.get() + '_'
     copen, chigh, clow, close, vol = row[ocol:vcol + 1]
-    Bar.open = SeriesVar(prefix + 'o', float(copen))
-    Bar.high = SeriesVar(prefix + 'h', float(chigh))
-    Bar.low = SeriesVar(prefix + 'l', float(clow))
-    Bar.close = SeriesVar(prefix + 'c', float(close))
-    Bar.vol = SeriesVar(prefix + 'v', float(vol))
-    bar_num.set(bar_num.get() + 1)
-    bar_time.set(new_ts_range)
+    Bar.open = SeriesVar(prefix + 'o').append(float(copen))
+    Bar.high = SeriesVar(prefix + 'h').append(float(chigh))
+    Bar.low = SeriesVar(prefix + 'l').append(float(clow))
+    Bar.close = SeriesVar(prefix + 'c').append(float(close))
+    Bar.vol = SeriesVar(prefix + 'v').append(float(vol))
     if not len(result):
         result = np.array(row).reshape((1, -1))
         LongStat.init()

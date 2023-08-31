@@ -90,7 +90,7 @@ def reset_context(pair_tf: str):
     bar_time.set((0, 0))
     if pair_tf:
         LongStat.reset(pair_tf)
-        MetaSeriesVar.reset(pair_tf)
+        MetaStateVar.reset(pair_tf)
 
 
 class TempContext:
@@ -214,28 +214,18 @@ class LongBarLen(LongStat):
 LongStat.reg_list.extend([LongChange, LongVolAvg, LongBarLen])
 
 
-class MetaSeriesVar(type):
+class MetaStateVar(type):
     _instances = {}
 
-    def __call__(cls, key: str, data, *args, **kwargs):
+    def __call__(cls, key: str, *args, **kwargs):
         if not key or not isinstance(key, six.string_types):
             raise ValueError('`key` is required for `SeriesVar`')
         if key not in cls._instances:
-            serie_obj = super(MetaSeriesVar, cls).__call__(key, data, *args, **kwargs)
+            serie_obj = super(MetaStateVar, cls).__call__(key, *args, **kwargs)
             cls._instances[key] = serie_obj
         else:
             serie_obj = cls._instances[key]
-            serie_obj.append(data)
         return serie_obj
-
-    @classmethod
-    def get(cls, key: str):
-        return cls._instances.get(key)
-
-    @classmethod
-    def set(cls, key: str, obj):
-        cls._instances[key] = obj
-        return obj
 
     @classmethod
     def reset(cls, ctx_key: str):
@@ -244,47 +234,48 @@ class MetaSeriesVar(type):
             del cls._instances[key]
 
 
-class SeriesVar(metaclass=MetaSeriesVar):
+class SeriesVar(metaclass=MetaStateVar):
     '''
     序列变量，存储任意类型的序列数据。用于带状态指标的计算和缓存
     '''
     keep_num = 1000
 
-    def __init__(self, key: str, data):
+    def __init__(self, key: str):
         '''
         序列变量的初始化，应只用于ohlcv等基础数据
         '''
-        self.val: Optional[List[float]] = None
+        self.val: Optional[List[float]] = []
         self.cols: Optional[List[SeriesVar]] = None
-        if hasattr(data, '__len__'):
-            self.cols = []
-            for i, v in enumerate(data):
-                if isinstance(v, SeriesVar):
-                    self.cols.append(v)
-                else:
-                    self.cols.append(SeriesVar(key + f'_{i}', v))
-        else:
-            self.val = [data]
         self.key = key
+        self.time = 0
 
     def append(self, row, check_len=True):
-        if self.cols is not None:
+        in_time = bar_time.get()[1]
+        if in_time <= self.time:
+            raise ValueError(f'repeat update on {self.key}')
+        self.time = in_time
+        if hasattr(row, '__len__'):
+            if not self.cols:
+                self.cols = []
+                for i, v in enumerate(row):
+                    self.cols.append(SeriesVar(self.key + f'_{i}'))
             for i, v in enumerate(row):
-                if isinstance(v, SeriesVar):
-                    if self.cols[i] == v:
-                        continue
-                    else:
-                        self.cols[i] = v
-                else:
-                    self.cols[i].append(v)
+                col = self.cols[i]
+                if col.cached():
+                    continue
+                col.append(v[0] if isinstance(v, SeriesVar) else v)
         else:
             self.val.append(row)
             if check_len:
                 if len(self.val) > self.keep_num * 2:
                     self.val = self.val[-self.keep_num:]
+        return self
+
+    def cached(self):
+        return bar_time.get()[1] <= self.time
 
     def __getitem__(self, item):
-        if self.val is None:
+        if self.cols is not None:
             raise ValueError('merge cols SeriesVar cannot be accessed by index')
         arr_len = len(self.val)
         if isinstance(item, slice):
@@ -317,7 +308,11 @@ class SeriesVar(metaclass=MetaSeriesVar):
             return self.val[item]
 
     def __len__(self):
-        return len(self.val) if self.val else len(self.cols[0])
+        if self.cols is None:
+            return len(self.val)
+        elif self.cols:
+            return len(self.cols[0])
+        return 0
 
     def __str__(self):
         if self.val:
@@ -331,7 +326,7 @@ class SeriesVar(metaclass=MetaSeriesVar):
         cur_vals = [c[-1] for c in self.cols]
         return f'{self.key}: {cur_vals}, len: {len(self.cols[0])}'
 
-    def _apply(self, other, opt_func, fmt: str, is_rev=False):
+    def _apply(self, other, opt_func, fmt: str, is_rev=False) -> 'SeriesVar':
         other_key, other_val = self.key_val(other)
         if is_rev:
             res_key = fmt.format(other_key, self.key)
@@ -339,7 +334,7 @@ class SeriesVar(metaclass=MetaSeriesVar):
         else:
             res_key = fmt.format(self.key, other_key)
             res_val = opt_func(self[-1], other_val)
-        return SeriesVar(res_key, res_val)
+        return SeriesVar(res_key).append(res_val)
 
     def __add__(self, other):
         return self._apply(other, operator.add, '({0}+{1})')
@@ -383,10 +378,8 @@ class SeriesVar(metaclass=MetaSeriesVar):
     def __rpow__(self, other):
         return self._apply(other, operator.pow, 'pow({0},{1})', is_rev=True)
 
-    def __abs__(self):
-        res_key = f'abs({self.key})'
-        res_val = abs(self[-1])
-        return SeriesVar(res_key, res_val)
+    def __abs__(self) -> 'SeriesVar':
+        return SeriesVar(f'abs({self.key})').append(abs(self[-1]))
 
     def __eq__(self, other):
         return isinstance(other, SeriesVar) and self.key == other.key and len(other) == len(self)
@@ -404,7 +397,7 @@ class SeriesVar(metaclass=MetaSeriesVar):
         return key, val
 
 
-class CrossLog:
+class CrossLog(metaclass=MetaStateVar):
     def __init__(self):
         self.prev_valid = None
         self.state = 0
@@ -440,11 +433,7 @@ def CrossDist(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]):
         raise ValueError('one of obj1 or obj2 should be SeriesVar')
     key1, val1 = SeriesVar.key_val(obj1)
     key2, val2 = SeriesVar.key_val(obj2)
-    res_key = f'{key1}_xup_{key2}'
-    obj = MetaSeriesVar.get(res_key)
-    if not obj:
-        obj = CrossLog()
-        MetaSeriesVar.set(res_key, obj)
+    obj: CrossLog = CrossLog(f'{key1}_xup_{key2}')
     cur_num = bar_num.get()
     obj.log(val1 - val2, cur_num)
     if obj.hist:

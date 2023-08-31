@@ -16,20 +16,25 @@ def SMA(obj: SeriesVar, period: int) -> SeriesVar:
     '''
     带状态SMA。返回序列对象，res[0]即最新结果
     '''
+    res_obj = SeriesVar(obj.key + f'_sma{period}')
+    if res_obj.cached():
+        return res_obj
     div_obj = obj / period
     if len(div_obj) < period:
         res_val = np.nan
     else:
         res_val = sum(div_obj[:period])
-    return SeriesVar(obj.key + f'_sma{period}', res_val)
+    return res_obj.append(res_val)
 
 
 def _EWMA(obj: SeriesVar, res_key: str, period: int, alpha: float, init_type: int, init_val=None) -> SeriesVar:
     in_val = obj[0]
-    res_obj = SeriesVar.get(res_key)
+    res_obj = SeriesVar(res_key)
+    if res_obj.cached():
+        return res_obj
     if not np.isfinite(in_val):
         res_val = in_val
-    elif not res_obj or not np.isfinite(res_obj[0]):
+    elif not len(res_obj) or not np.isfinite(res_obj[0]):
         if init_val is not None:
             # 使用给定值作为计算第一个值的前置值
             res_val = in_val * alpha + init_val * (1 - alpha)
@@ -41,10 +46,7 @@ def _EWMA(obj: SeriesVar, res_key: str, period: int, alpha: float, init_type: in
             res_val = in_val
     else:
         res_val = in_val * alpha + res_obj[0] * (1 - alpha)
-    if res_obj is None:
-        return SeriesVar(res_key, res_val)
-    res_obj.val.append(res_val)
-    return res_obj
+    return res_obj.append(res_val)
 
 
 def EMA(obj: SeriesVar, period: int, init_type=0) -> SeriesVar:
@@ -70,13 +72,16 @@ def TR(high: SeriesVar, low: SeriesVar, close: SeriesVar) -> SeriesVar:
     '''
     真实振幅
     '''
+    res_obj = SeriesVar(high.key + '_tr')
+    if res_obj.cached():
+        return res_obj
     if len(high) < 2:
         res_val = np.nan
     else:
         chigh, clow, cclose = high[0], low[0], close[0]
         phigh, plow, pclose = high[1], low[1], close[1]
         res_val = max(chigh - clow, abs(chigh - pclose), abs(clow - pclose))
-    return SeriesVar(high.key + '_tr', res_val)
+    return res_obj.append(res_val)
 
 
 def ATR(high: SeriesVar, low: SeriesVar, close: SeriesVar, period: int) -> SeriesVar:
@@ -87,6 +92,9 @@ def ATR(high: SeriesVar, low: SeriesVar, close: SeriesVar, period: int) -> Serie
 
 
 def TRRoll(high: SeriesVar, low: SeriesVar, period: int) -> SeriesVar:
+    res_obj = SeriesVar(high.key + f'_troll{period}')
+    if res_obj.cached():
+        return res_obj
     high_col, low_col = high[:period], low[:period]
     max_id = np.argmax(high_col)
     roll_max = high_col[max_id]
@@ -101,18 +109,24 @@ def TRRoll(high: SeriesVar, low: SeriesVar, period: int) -> SeriesVar:
         # 从前面计算的TrueRange加权缩小，和最后两个蜡烛的TrueRange取最大值
         prev_tr *= (min(max_id, min_id) + 1) / (period * 2) + 0.5
         res_val = max(prev_tr, np.max(high_col[-2:]) - np.min(low_col[-2:]))
-    return SeriesVar(high.key + f'_troll{period}', res_val)
+    return res_obj.append(res_val)
 
 
 def NTRRoll(high: SeriesVar, low: SeriesVar, period: int = 4) -> SeriesVar:
+    res_obj = SeriesVar(high.key + f'_ntroll{period}')
+    if res_obj.cached():
+        return res_obj
     troll = TRRoll(high, low, period)
     res_val = troll[0] / LongChange.get()
-    return SeriesVar(high.key + f'_ntroll{period}', res_val)
+    return res_obj.append(res_val)
 
 
 def NVol(vol: SeriesVar) -> SeriesVar:
+    res_obj = SeriesVar(vol.key + f'_nvol')
+    if res_obj.cached():
+        return res_obj
     res_val = vol[0] / LongVolAvg.get()
-    return SeriesVar(vol.key + f'_nvol', res_val)
+    return res_obj.append(res_val)
 
 
 def MACD(obj: SeriesVar, fast_period: int = 12, slow_period: int = 26,
@@ -120,19 +134,22 @@ def MACD(obj: SeriesVar, fast_period: int = 12, slow_period: int = 26,
     '''
     计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
     '''
+    res_obj = SeriesVar(obj.key + '_macd')
+    if res_obj.cached():
+        return res_obj
     short = EMA(obj, fast_period, init_type=init_type)
     long = EMA(obj, slow_period, init_type=init_type)
     macd = short - long
     singal = EMA(macd, smooth_period, init_type=init_type)
-    return SeriesVar(obj.key + '_macd', (macd, singal))
+    return res_obj.append((macd, singal))
 
 
 class SeriesRSI(SeriesVar):
-    def __init__(self, key: str, data, last_val):
-        super().__init__(key, data)
+    def __init__(self, key: str):
+        super().__init__(key)
         self.gain_avg = 0
         self.loss_avg = 0
-        self.last_input = last_val
+        self.last_input = np.nan
 
 
 def RSI(obj: SeriesVar, period: int) -> SeriesRSI:
@@ -140,15 +157,13 @@ def RSI(obj: SeriesVar, period: int) -> SeriesRSI:
     相对强度指数。0-100之间。
     价格变化有的使用变化率，大部分使用变化值。这里使用变化值：price_chg
     '''
-    res_key = obj.key + f'_rsi{period}'
-    res_obj: SeriesRSI = SeriesVar.get(res_key)
-    cur_val = obj[0]
-    if not res_obj:
-        return SeriesRSI(res_key, np.nan, cur_val)
-    if not np.isfinite(res_obj.last_input):
-        res_obj.last_input = cur_val
-        res_obj.append(np.nan)
+    res_obj: SeriesRSI = SeriesRSI(obj.key + f'_rsi{period}')
+    if res_obj.cached():
         return res_obj
+    cur_val = obj[0]
+    if not len(res_obj) or not np.isfinite(res_obj.last_input):
+        res_obj.last_input = cur_val
+        return res_obj.append(np.nan)
     val_delta = cur_val - res_obj.last_input
     res_obj.last_input = cur_val
     if len(res_obj) > period:
@@ -168,8 +183,7 @@ def RSI(obj: SeriesVar, period: int) -> SeriesRSI:
             res_val = res_obj.gain_avg * 100 / (res_obj.gain_avg - res_obj.loss_avg)
         else:
             res_val = np.nan
-    res_obj.append(res_val)
-    return res_obj
+    return res_obj.append(res_val)
 
 
 def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
@@ -177,9 +191,11 @@ def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
     '''
     KDJ指标。也称为：Stoch随机指标。返回k, d
     '''
-    res_key = high.key + f'_kdj{period}_{sm1}_{sm2}_{smooth_type}'
+    res_obj = SeriesVar(high.key + f'_kdj{period}_{sm1}_{sm2}_{smooth_type}')
+    if res_obj.cached():
+        return res_obj
     if len(high) < period:
-        return SeriesVar(res_key, [np.nan, np.nan])
+        return res_obj.append((np.nan, np.nan))
     hhigh = np.max(high[:period])
     llow = np.min(low[:period])
     max_chg = hhigh - llow
@@ -188,7 +204,7 @@ def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
         rsv = 50
     else:
         rsv = (close[0] - llow) / max_chg * 100
-    rsv_obj = SeriesVar(high.key + f'_rsv{period}', rsv)
+    rsv_obj = SeriesVar(high.key + f'_rsv{period}').append(rsv)
     if smooth_type == 'rma':
         k = RMA(rsv_obj, sm1, init_val=50.)
         d = RMA(k, sm2, init_val=50.)
@@ -197,26 +213,27 @@ def KDJ(high: SeriesVar, low: SeriesVar, close: SeriesVar,
         d = SMA(k, sm2)
     else:
         raise ValueError(f'unsupport smooth_type: {smooth_type} for KDJ')
-    return SeriesVar(res_key, (k, d))
+    return res_obj.append((k, d))
 
 
 class SeriesStdDev(SeriesVar):
-    def __init__(self, key: str, data, last_val):
-        super().__init__(key, data)
-        self.win_arr = [last_val]  # 记录输入值
+    def __init__(self, key: str):
+        super().__init__(key)
+        self.win_arr = []  # 记录输入值
 
 
 def StdDev(obj: SeriesVar, period: int, ddof=0) -> SeriesStdDev:
     '''
     标准差，返回：stddev，mean
     '''
+    res_obj: SeriesStdDev = SeriesStdDev(obj.key + f'_sdev{period}')
+    if res_obj.cached():
+        return res_obj
     mean = SMA(obj, period)
-    res_key = obj.key + f'_sdev{period}'
-    res_obj: SeriesStdDev = SeriesStdDev.get(res_key)
     cur_val = obj[0]
-    if not res_obj:
-        return SeriesStdDev(res_key, (np.nan, np.nan), cur_val)
     res_obj.win_arr.append(cur_val)
+    if not len(res_obj):
+        return res_obj.append((np.nan, np.nan))
     if len(res_obj.win_arr) < period:
         res_val = np.nan, np.nan
     else:
@@ -225,21 +242,23 @@ def StdDev(obj: SeriesVar, period: int, ddof=0) -> SeriesStdDev:
         stddev_val = variance ** 0.5
         res_obj.win_arr.pop(0)
         res_val = stddev_val, mean_val
-    res_obj.append(res_val)
-    return res_obj
+    return res_obj.append(res_val)
 
 
 def BBANDS(obj: SeriesVar, period: int, std_up: int, std_dn: int) -> SeriesVar:
     '''
     布林带指标。返回：upper, mean, lower
     '''
-    dev_val, mean_val = StdDev(obj, period)[0]
-    res_key = obj.key + f'_bb{period}_{std_up}_{std_dn}'
-    if np.isnan(dev_val):
-        return SeriesVar(res_key, (np.nan, np.nan, np.nan))
+    res_obj = SeriesVar(obj.key + f'_bb{period}_{std_up}_{std_dn}')
+    if res_obj.cached():
+        return res_obj
+    dev, mean = StdDev(obj, period).cols
+    dev_val, mean_val = dev[0], mean[0]
+    if not np.isfinite(dev_val):
+        return res_obj.append((np.nan, np.nan, np.nan))
     upper = mean_val + dev_val * std_up
     lower = mean_val - dev_val * std_dn
-    return SeriesVar(res_key, (upper, mean_val, lower))
+    return res_obj.append((upper, mean_val, lower))
 
 
 def TD(obj: SeriesVar):
@@ -248,19 +267,16 @@ def TD(obj: SeriesVar):
     9和13表示超买；-9和-13表示超卖
     '''
     sub4 = obj[0] - obj[4]
-    res_key = obj.key + '_td'
-    res_obj: SeriesVar = SeriesVar.get(res_key)
-    if not res_obj:
-        return SeriesVar(res_key, np.nan)
-    if not np.isfinite(sub4):
-        res_obj.append(np.nan)
+    res_obj: SeriesVar = SeriesVar(obj.key + '_td')
+    if res_obj.cached():
         return res_obj
+    if not len(res_obj) or not np.isfinite(sub4):
+        return res_obj.append(np.nan)
     pindex = res_obj[0]
     step = 1 if sub4 > 0 else (-1 if sub4 < 0 else 0)
     if np.isfinite(pindex) and pindex * sub4 > 0:
         res_val = pindex + step
     else:
         res_val = step
-    res_obj.append(res_val)
-    return res_obj
+    return res_obj.append(res_val)
 
