@@ -1087,15 +1087,17 @@ class LiveOrderManager(OrderManager):
                     with db():
                         sess = db.session
                         od = InOutOrder.get(sess, job.od_id)
+                        logger.info(f'order in sess: {od in sess}')
                         if job.action == 'enter':
                             await self._exec_order_enter(od)
                         elif job.action == 'exit':
                             await self._exec_order_exit(od)
                         elif job.action == 'edit_trigger':
                             await self._edit_trigger_od(od, job.data)
-                            logger.info(f'od info after edit order: {od.info}')
+                            logger.info(f'od info after edit order: {od.info}, belong: {SqlSession.object_session(od)}, curr: {sess}')
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
+                        logger.info(f'end order in sess: {od in sess}')
                         sess.commit()
                     if job.action == 'edit_trigger':
                         with db():
