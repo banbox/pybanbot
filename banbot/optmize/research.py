@@ -49,11 +49,11 @@ def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start_ms: i
 
 def _test_strategy():
     sess = db.session
-    fts = [ExSymbol.exchange == 'binance', ExSymbol.market == 'future', ExSymbol.symbol == 'BCH/USDT:USDT']
+    fts = [ExSymbol.exchange == 'binance', ExSymbol.market == 'future', ExSymbol.symbol == 'BTC/USDT:USDT']
     exs: ExSymbol = sess.query(ExSymbol).filter(*fts).first()
     start_ms, end_ms = 1690866160016, btime.utcstamp()
     logger.info(f'start test symbol: {exs}')
-    calc_strategy_sigs(exs, '5m', 'DigoChain', start_ms, end_ms)
+    calc_strategy_sigs(exs, '15m', 'DigoChain', start_ms, end_ms)
 
 
 if __name__ == '__main__':

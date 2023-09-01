@@ -398,7 +398,8 @@ class SeriesVar(metaclass=MetaStateVar):
 
 
 class CrossLog(metaclass=MetaStateVar):
-    def __init__(self):
+    def __init__(self, key: str):
+        self.key = key
         self.prev_valid = None
         self.state = 0
         self.hist = []
@@ -443,19 +444,12 @@ def CrossDist(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]):
 
 
 class MetaBar(type):
+
     def __getitem__(self, item):
-        if item == ocol:
-            return self.open
-        elif item == hcol:
-            return self.high
-        elif item == lcol:
-            return self.low
-        elif item == ccol:
-            return self.close
-        elif item == vcol:
-            return self.vol
-        else:
-            return None
+        cols = [None, 'open', 'high', 'low', 'close', 'vol']
+        if isinstance(item, int) and 0 < item < len(cols):
+            return getattr(self, cols[item])
+        return None
 
 
 class Bar(metaclass=MetaBar):
@@ -467,3 +461,4 @@ class Bar(metaclass=MetaBar):
     low: SeriesVar
     close: SeriesVar
     vol: SeriesVar
+
