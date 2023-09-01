@@ -832,7 +832,6 @@ class LiveOrderManager(OrderManager):
             logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
             return
         od.set_info(f'{prefix}oid', order['id'])
-        logger.info(f'[{od.id}] edit {prefix}, {side} {od.symbol}, new_od: {order["id"]} info: {od.info}')
         if trigger_oid and order['status'] == 'open':
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
@@ -887,7 +886,7 @@ class LiveOrderManager(OrderManager):
             od.save()
         elif action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
-            logger.info(f'edit push: {od} {tg_price}')
+            # logger.info(f'edit push: {od} {tg_price}')
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     async def _update_bnb_order(self, od: Order, data: dict):
@@ -1087,23 +1086,15 @@ class LiveOrderManager(OrderManager):
                     with db():
                         sess = db.session
                         od = InOutOrder.get(sess, job.od_id)
-                        logger.info(f'order in sess: {od in sess}, session: {sess}')
                         if job.action == 'enter':
                             await self._exec_order_enter(od)
                         elif job.action == 'exit':
                             await self._exec_order_exit(od)
                         elif job.action == 'edit_trigger':
                             await self._edit_trigger_od(od, job.data)
-                            logger.info(f'od info after edit order: {od.info}, belong: {SqlSession.object_session(od)}, curr: {sess}')
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
-                        logger.info(f'end order in sess: {od in sess}, {sess}')
                         sess.commit()
-                    if job.action == 'edit_trigger':
-                        with db():
-                            sess = db.session
-                            od = InOutOrder.get(sess, job.od_id)
-                            logger.info(f'saved od info after edit order: {od.info}')
                 except Exception:
                     if od:
                         with db():
