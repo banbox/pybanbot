@@ -832,6 +832,7 @@ class LiveOrderManager(OrderManager):
             logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
             return
         od.set_info(f'{prefix}oid', order['id'])
+        logger.info(f'[{od.id}] edit {prefix}, {side} {od.symbol}, new_od: {order["id"]} info: {od.info}')
         if trigger_oid and order['status'] == 'open':
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
@@ -1092,9 +1093,15 @@ class LiveOrderManager(OrderManager):
                             await self._exec_order_exit(od)
                         elif job.action == 'edit_trigger':
                             await self._edit_trigger_od(od, job.data)
+                            logger.info(f'od info after edit order: {od.info}')
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
                         sess.commit()
+                    if job.action == 'edit_trigger':
+                        with db():
+                            sess = db.session
+                            od = InOutOrder.get(sess, job.od_id)
+                            logger.info(f'saved od info after edit order: {od.info}')
                 except Exception:
                     if od:
                         with db():
