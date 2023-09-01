@@ -6,7 +6,7 @@
 import os
 import time
 import threading
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from typing import Optional, List, Union, Type, Dict
 
 import six
@@ -101,7 +101,9 @@ class DBSession(metaclass=DBSessionMeta):
 
     def __enter__(self):
         if _db_sess.get() is None:
-            self.token = _db_sess.set(_DbSession(**self.session_args))
+            sess = _DbSession(**self.session_args)
+            self.token = _db_sess.set(sess)
+            logger.info(f'set new dbSession: {sess}, in ctx: {copy_context()}')
             self.fetch_tid = threading.get_ident()
         return type(self)
 
@@ -117,8 +119,10 @@ class DBSession(metaclass=DBSessionMeta):
             sess.commit()
 
         sess.close()
+        logger.info(f'close session: {sess}, {exc_type} {self.commit_on_exit}, in ctx: {copy_context()}')
 
         if self.token and self.fetch_tid == threading.get_ident():
+            logger.info(f'clear session: {sess}, in ctx: {copy_context()}')
             _db_sess.set(None)
             self.token = None
 
