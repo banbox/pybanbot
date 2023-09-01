@@ -118,11 +118,9 @@ class DBSession(metaclass=DBSessionMeta):
         if self.commit_on_exit:
             sess.commit()
 
-        sess.close()
-        logger.info(f'close session: {sess}, {exc_type} {self.commit_on_exit}, in ctx: {copy_context()}')
-
         if self.token and self.fetch_tid == threading.get_ident():
-            logger.info(f'clear session: {sess}, in ctx: {copy_context()}')
+            sess.close()
+            logger.info(f'close session: {sess}, {exc_type} {self.commit_on_exit}, in ctx: {copy_context()}')
             _db_sess.set(None)
             self.token = None
 
