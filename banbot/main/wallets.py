@@ -372,6 +372,9 @@ class CryptoWallet(WalletsLocal):
             if not state or not state.get('total'):
                 continue
             free, used = state.get('free') or 0, state.get('used') or 0
+            if not free and not used:
+                # 未开单时，free和used都是None，这时total就是free
+                free = state.get('total')
             key = 'pendings' if self.exchange.market_type == 'future' else 'frozens'
             args = {'available': free, key: {'*': used}}
             self.data[symbol] = ItemWallet(**args)
