@@ -29,6 +29,9 @@ class BotGlobal(metaclass=_BotStateMeta):
     bot_name: str = 'noname'
     '当前机器人的名称'
 
+    start_at: int = 0
+    '启动时间，13位时间戳'
+
     stg_hash: Optional[str] = None
     '''策略+版本号的哈希值；如果和上次相同说明策略没有变化，可使用一个任务'''
 

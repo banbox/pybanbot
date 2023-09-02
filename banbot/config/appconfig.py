@@ -179,9 +179,11 @@ class AppConfig(metaclass=Singleton):
             set_log_notify(logger)
         # 更新BotGlobal
         from banbot.storage import BotGlobal
+        from banbot.util import btime
         BotGlobal.exg_name = config['exchange']['name']
         BotGlobal.market_type = config['market_type']
         BotGlobal.bot_name = config['name']
+        BotGlobal.start_at = btime.time_ms()
         return config
 
     @classmethod

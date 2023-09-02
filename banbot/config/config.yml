@@ -19,6 +19,7 @@ fatal_stop:  # 全局止损，当全局损失达到限制时，禁止下单
   '1440': 0.1  # 一天损失10%
   '180': 0.2  # 3小时损失20%
   '30': 0.3  # 半小时损失30%
+fatal_stop_hours: 8  # 全局止损的禁止时间，默认8小时
 timerange: "20230701-20230808"  # 使用的K线范围，用于回测
 run_timeframes: [5m]
 run_policy:  # 运行的策略，可以多个策略同时运行
@@ -82,6 +83,8 @@ exchange:  # 交易所配置
       adjustForTimeDifference: true
     pair_fee_limits:
       BTC/TUSD: 0.0  # 限制标的的最大交易费率，超过则不允许交易
+    pair_whitelist: []  # 交易对白名单，使用StaticPairList时生效
+    pair_blacklist: []  # 交易对黑名单，列出的币种不会进行交易
     proxies:  # 是否使用代理访问交易所
       http: http://127.0.0.1:10808
       https: http://127.0.0.1:10808

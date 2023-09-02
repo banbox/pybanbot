@@ -53,7 +53,10 @@ class OrderManager(metaclass=SingletonArg):
         self.fatal_stop = dict()
         self.last_ts = 0  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
         self._load_fatal_stop()
-        self.disabled = False
+        self.disable_until = 0
+        '禁用交易，到指定时间再允许，13位毫秒时间戳'
+        self.fatal_stop_hours: float = config.get('fatal_stop_hours', 8)
+        '全局止损时禁止时间，默认8小时'
         self.forbid_pairs = set()
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
 
@@ -77,7 +80,7 @@ class OrderManager(metaclass=SingletonArg):
         return get_context(pair_tf)
 
     def allow_pair(self, pair: str) -> bool:
-        if self.disabled:
+        if self.disable_until > btime.utcstamp():
             # 触发系统交易熔断时，禁止入场，允许出场
             logger.warning('order enter forbid, fatal stop, %s', pair)
             return False
@@ -269,12 +272,14 @@ class OrderManager(metaclass=SingletonArg):
         return result, edit_ods
 
     def check_fatal_stop(self):
+        if self.disable_until >= btime.utcstamp():
+            return
         with db():
             for check_mins, bad_ratio in self.fatal_stop.items():
                 fatal_loss = self.calc_fatal_loss(check_mins)
                 if fatal_loss >= bad_ratio:
-                    logger.error(f'fatal loss {(fatal_loss * 100):.2f}% in {check_mins} mins, Disable!')
-                    self.disabled = True
+                    logger.error(f'{check_mins}分钟内损失{(fatal_loss * 100):.2f}%，禁止下单{self.fatal_stop_hours}小时!')
+                    self.disable_until = btime.utcstamp() + self.fatal_stop_hours * 60 * 60000
                     break
 
     def calc_fatal_loss(self, back_mins: int) -> float:
@@ -284,11 +289,12 @@ class OrderManager(metaclass=SingletonArg):
         :return:
         '''
         fin_loss = 0
-        min_timestamp = btime.to_utcstamp(btime.now() - btime.timedelta(minutes=back_mins))
+        min_time_ms = btime.to_utcstamp(btime.now() - btime.timedelta(minutes=back_mins), ms=True)
+        min_time_ms = max(min_time_ms, BotGlobal.start_at)
         his_orders = InOutOrder.his_orders()
         for i in range(len(his_orders) - 1, -1, -1):
             od = his_orders[i]
-            if od.enter.create_at < min_timestamp:
+            if od.enter.create_at < min_time_ms:
                 break
             fin_loss += od.profit
         if fin_loss >= 0:
