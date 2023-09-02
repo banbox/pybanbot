@@ -488,6 +488,7 @@ class LiveOrderManager(OrderManager):
         self.odbooks: Dict[str, OrderBook] = dict()
         self.order_q = Queue(1000)  # 最多1000个待执行订单
         self.take_over_stgy: str = config.get('take_over_stgy')
+        self.old_unsubmits = set()
         # 限价单的深度对应的秒级成交量
         self.limit_vol_secs = config.get('limit_vol_secs', 10)
         # 交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s
@@ -831,7 +832,7 @@ class LiveOrderManager(OrderManager):
         except ccxt.OrderImmediatelyFillable:
             logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
             return
-        od.set_info(f'{prefix}oid', order['id'])
+        od.set_info(**{f'{prefix}oid': order['id']})
         if trigger_oid and order['status'] == 'open':
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
@@ -1100,11 +1101,15 @@ class LiveOrderManager(OrderManager):
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
                         sess.commit()
-                except Exception:
-                    if od:
+                except Exception as e:
+                    if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                         with db():
-                            await od.force_exit()
-                        logger.exception('consume order exception: %s, force exit', job)
+                            if job.action == OrderJob.ACT_ENTER:
+                                await od.force_exit()
+                            else:
+                                # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
+                                od.local_exit(ExitTags.fatal_err, status_msg=str(e))
+                        logger.error('consume order exception: %s, force exit: %s', e, job)
                     else:
                         logger.exception('consume order exception: %s', job)
                 self.order_q.task_done()
@@ -1180,7 +1185,10 @@ class LiveOrderManager(OrderManager):
                 else:
                     sub_od, is_enter, new_price = od.enter, True, buy_price
                 if not sub_od.order_id:
-                    unsubmits.append(str(od))
+                    od_msg = str(od)
+                    if od_msg not in self.old_unsubmits:
+                        unsubmits.append(od_msg)
+                        self.old_unsubmits.add(od_msg)
                     continue
                 if not sub_od.price:
                     continue

@@ -36,6 +36,8 @@ class ExitTags:
     bot_stop = 'bot_stop'
     force_exit = 'force_exit'
     user_exit = 'user_exit'
+    fatal_err = 'fatal_err'
+    '退出时交易所返回错误，无法追踪订单状态'
 
 
 class Order(BaseDbModel):
@@ -151,13 +153,13 @@ class InOutOrder(BaseDbModel):
         self.margin_ratio = 0  # 合约的保证金比率
         db_keys = set(self.__table__.columns.keys())
         tmp_keys = {k for k in kwargs if k not in db_keys and not k.startswith('enter_') and not k.startswith('exit_')}
-        self.infos = {k: kwargs.pop(k) for k in tmp_keys}
+        self.infos: Dict = {k: kwargs.pop(k) for k in tmp_keys}
         if self.id:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
             super(InOutOrder, self).__init__(**kwargs)
             if self.info:
                 # 数据库初始化的必然只包含列名，这里可以直接覆盖
-                self.infos = json.loads(self.info)
+                self.infos: Dict = json.loads(self.info)
             return
         # 仅针对新创建的订单执行下面初始化
         if self.infos:
@@ -334,14 +336,38 @@ class InOutOrder(BaseDbModel):
     def get_info(self, key: str, def_val=None):
         if not self.infos:
             if self.info:
-                self.infos = json.loads(self.info)
+                self.infos: Dict = json.loads(self.info)
             else:
                 return def_val
         return self.infos.get(key, def_val)
 
-    def set_info(self, key: str, val):
-        self.infos[key] = val
+    def set_info(self, **kwargs):
+        self.infos.update(kwargs)
         self.info = json.dumps(self.infos)
+
+    def local_exit(self, tag: str, price: float = None, status_msg: str = None):
+        '''
+        在本地强制退出订单。这里不涉及钱包更新，钱包需要自行更新。
+        '''
+        amount = self.enter.filled
+        if not price:
+            price = self.enter.average or self.enter.price or self.init_price
+        if not self.exit_at:
+            self.exit_at = btime.time_ms()
+        self.update_exit(
+            tag=tag,
+            update_at=btime.time_ms(),
+            status=OrderStatus.Close,
+            amount=amount,
+            filled=amount,
+            price=price,
+            average=price,
+        )
+        self.status = InOutStatus.FullExit
+        self.update_by_price(price)
+        if status_msg:
+            self.set_info(status_msg=status_msg)
+        self.save()
 
     async def force_exit(self):
         '''
@@ -354,15 +380,15 @@ class InOutOrder(BaseDbModel):
                 price_rate = 100 if self.short else 0.01
                 new_price = (self.exit.price or self.enter.price) * price_rate
                 self.exit_tag = None
-                LiveOrderManager.obj.exit_order(self, dict(tag='force_exit'), new_price)
+                LiveOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit), new_price)
             else:
                 # 模拟模式，从订单管理器平仓
                 LocalOrderManager.obj.force_exit(self)
         else:
             if btime.prod_mode():
-                LiveOrderManager.obj.exit_order(self, dict(tag='force_exit'))
+                LiveOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit))
             else:
-                LocalOrderManager.obj.exit_order(self, dict(tag='force_exit'))
+                LocalOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit))
         db.session.commit()
 
     def detach(self, sess: SqlSession):

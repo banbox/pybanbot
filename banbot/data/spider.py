@@ -355,10 +355,10 @@ class LiveMiner:
                     continue
                 batch_jobs = sorted(batch_jobs, key=lambda j: j.next_run)[:MAX_CONC_OHLCV]
                 items = [f'{j.pair}:{j.since}' for j in batch_jobs]
-                logger.info(f'update pairs: {"  ".join(items)}')
+                logger.debug('update pairs: %s', items)
                 tasks = [self._try_update(j) for j in batch_jobs]
                 await asyncio.gather(*tasks)
-                logger.info("batch jobs complete")
+                logger.debug("batch jobs complete")
             except Exception:
                 logger.exception(f'miner error {self.exchange.name}')
 
