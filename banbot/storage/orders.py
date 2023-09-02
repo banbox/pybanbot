@@ -97,7 +97,11 @@ class Order(BaseDbModel):
         return redis.lock(f'order_{self.id}', with_conn=True)
 
     def __str__(self):
-        return f'{self.side} {(self.amount or 0):.5f} with {self.price}'
+        if not self.amount:
+            fill_pct = 0
+        else:
+            fill_pct = int((self.filled or 0) * 100 // self.amount)
+        return f'{self.side} {(self.amount or 0):.5f}[{fill_pct}%] at {self.price}'
 
 
 class InOutOrder(BaseDbModel):
@@ -192,7 +196,8 @@ class InOutOrder(BaseDbModel):
         获取一个唯一标识某个订单的字符串
         币种:策略:方向:入场tag:入场时间戳
         '''
-        return f'{self.symbol}|{self.strategy}|{self.enter.side}|{self.enter_tag}|{self.enter_at}'
+        side = 'short' if self.short else 'long'
+        return f'{self.symbol}|{self.strategy}|{side}|{self.enter_tag}|{self.enter_at}'
 
     def _elp_num_offset(self, time_ms: int):
         from banbot.storage import ExSymbol

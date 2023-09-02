@@ -1109,13 +1109,14 @@ class LiveOrderManager(OrderManager):
                         sess.commit()
                 except Exception as e:
                     if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
+                        err_msg = str(e)
                         with db():
                             if job.action == OrderJob.ACT_ENTER:
                                 await od.force_exit()
                             else:
                                 # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
-                                od.local_exit(ExitTags.fatal_err, status_msg=str(e))
-                        logger.error('consume order exception: %s, force exit: %s', e, job)
+                                od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                        logger.error('consume order %s: %s, force exit: %s', type(e), e, job)
                     else:
                         logger.exception('consume order exception: %s', job)
                 self.order_q.task_done()
@@ -1177,7 +1178,7 @@ class LiveOrderManager(OrderManager):
         exp_orders = [od for od in op_orders if od.pending_type(timeouts)]
         if not exp_orders:
             return
-        logger.error(f'pending open orders: {exp_orders}')
+        logger.debug('pending open orders: %s', exp_orders)
         sess = db.session
         from itertools import groupby
         exp_orders = sorted(exp_orders, key=lambda x: x.symbol)
