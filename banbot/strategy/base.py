@@ -3,11 +3,9 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-import sys
 import random
 from banbot.strategy.common import *
 from banbot.main.wallets import WalletsLocal
-from banbot.config.consts import MIN_STAKE_AMOUNT
 
 
 class BaseStrategy:
