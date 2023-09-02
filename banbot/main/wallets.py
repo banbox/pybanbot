@@ -400,7 +400,6 @@ class CryptoWallet(WalletsLocal):
         except ccxt.NetworkError as e:
             logger.error(f'watch balance net error: {e}')
             return
-        logger.info('watch balances: %s', balances)
         self.update_at = btime.time()
         result = self._update_local(balances)
         if result:
