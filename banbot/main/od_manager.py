@@ -481,7 +481,7 @@ class LiveOrderManager(OrderManager):
         self.wallets: CryptoWallet = self.wallets
         self.exg_orders: Dict[Tuple[str, str], int] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
-        self.handled_trades: Dict[str, int] = OrderedDict()
+        self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
         self.od_type = config.get('order_type', 'limit')
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
@@ -979,15 +979,20 @@ class LiveOrderManager(OrderManager):
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
-            exp_unmatchs = []
-            for trade_key, trade in list(self.unmatch_trades.items()):
-                if btime.time() - trade['timestamp'] / 1000 >= 10:
-                    # 未匹配订单10s过期
-                    exp_unmatchs.append(trade)
-                    del self.unmatch_trades[trade_key]
-            if exp_unmatchs:
-                left_unmats = self.try_manage_orders(exp_unmatchs)
-                logger.warning('expired unmatch orders: %s', left_unmats)
+
+    def _handle_unmatches(self):
+        '''
+        处理超时未匹配的订单，3s执行一次
+        '''
+        exp_unmatchs = []
+        for trade_key, trade in list(self.unmatch_trades.items()):
+            if btime.time() - trade['timestamp'] / 1000 >= 10:
+                # 未匹配订单10s过期
+                exp_unmatchs.append(trade)
+                del self.unmatch_trades[trade_key]
+        if exp_unmatchs:
+            left_unmats = self.try_manage_orders(exp_unmatchs)
+            logger.warning('expired unmatch orders: %s', left_unmats)
 
     def try_manage_orders(self, trades: List[dict]) -> List[dict]:
         if not self.take_over_stgy:
@@ -1123,6 +1128,20 @@ class LiveOrderManager(OrderManager):
                 await self._update_subod_by_ccxtres(od, is_enter, res)
             except ccxt.InvalidOrder as e:
                 logger.error('edit invalid order: %s', e)
+
+    @loop_forever
+    async def trail_unmatches_forever(self):
+        '''
+        2s一次轮训处理未匹配的订单。尝试跟踪用户下单。
+        '''
+        if not btime.prod_mode():
+            return
+        try:
+            with db():
+                self._handle_unmatches()
+        except Exception:
+            logger.exception('trail_unmatches_forever error')
+        await asyncio.sleep(2)
 
     @loop_forever
     async def trail_open_orders_forever(self):
