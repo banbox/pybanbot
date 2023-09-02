@@ -105,8 +105,7 @@ class RPCMessageType:
 
 
 def map_msg_type(msg_type: str):
-    if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP,
-                    RPCMessageType.EXCEPTION, RPCMessageType.WARNING):
+    if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP):
         return 'status'
     return msg_type
 
