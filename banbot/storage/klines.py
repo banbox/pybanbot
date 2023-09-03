@@ -718,10 +718,9 @@ ORDER BY sid, 2'''
         end_ms = (math.ceil(end_ms / tf_msecs) - 1) * tf_msecs
         if start_ms > end_ms:
             return
-        until_ms = end_ms + tf_msecs
         holes = []
         if not candles:
-            holes = [(start_ms, until_ms)]
+            holes = [(start_ms, end_ms)]
         else:
             if candles[0][0] > start_ms:
                 holes.append((start_ms, candles[0][0]))
@@ -733,15 +732,16 @@ ORDER BY sid, 2'''
                 elif cur_intv < tf_msecs:
                     logger.warning(f'invalid kline interval: {cur_intv:.3f}, {exs}/{timeframe}')
                 prev_date = row[0]
-            if prev_date != end_ms:
-                holes.append((prev_date + tf_msecs, until_ms))
+            if end_ms - prev_date > tf_msecs:
+                holes.append((prev_date + tf_msecs, end_ms))
         if not holes:
             return
         sid = exs.id
         holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
         holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
         sess = db.session
-        old_holes: List[KHole] = sess.query(KHole).filter(KHole.sid == sid, KHole.timeframe == timeframe).all()
+        fts = [KHole.sid == sid, KHole.timeframe == timeframe]
+        old_holes: List[KHole] = sess.query(KHole).filter(*fts).all()
         holes.extend(old_holes)
         holes.sort(key=lambda x: x.start)
         merged: List[KHole] = []
