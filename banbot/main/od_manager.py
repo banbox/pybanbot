@@ -644,29 +644,14 @@ class LiveOrderManager(OrderManager):
             for iod in list(od_list):
                 if iod.short != is_short:
                     continue
-                # 尝试平仓
-                ava_amount = iod.enter_amount if not iod.exit else iod.exit.amount - iod.exit.filled
-                if od_amount >= ava_amount:
-                    fill_amt = ava_amount
-                    exit_status = OrderStatus.Close
-                    od_amount -= ava_amount
-                else:
-                    fill_amt = od_amount
-                    exit_status = OrderStatus.PartOk
-                    od_amount = 0
-                iod.update_exit(amount=iod.enter.amount, filled=fill_amt, order_type=od['type'],
-                                order_id=od['id'], price=od_price, average=od_price,
-                                status=exit_status, fee=fee_rate, fee_type=fee_name,
-                                create_at=od_time, update_at=od_time)
-                iod.exit_tag = ExitTags.user_exit
-                iod.exit_at = od_time
+                before_amt = od_amount
+                od_amount = self._try_fill_exit(iod, od_amount, od_price, od_time, od['id'], od['type'],
+                                                fee_name, fee_rate)
+                fill_amt = before_amt - od_amount
                 tag_ = '平空' if is_short else '平多'
                 logger.info(
                     f'{tag_}：price:{od_price}, amount: {fill_amt}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
-                if exit_status == OrderStatus.Close:
-                    iod.status = InOutStatus.FullExit
-                    if iod.id:
-                        iod.save()
+                if iod.status == InOutStatus.FullExit:
                     od_list.remove(iod)
                 if od_amount <= min_dust:
                     break
@@ -1099,8 +1084,7 @@ class LiveOrderManager(OrderManager):
                 matched = True
             if not matched:
                 left_unmats.append(trade)
-            else:
-                del self.unmatch_trades[trade_key]
+            del self.unmatch_trades[trade_key]
         if left_unmats:
             logger.warning('expired unmatch orders: %s', left_unmats)
 

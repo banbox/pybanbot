@@ -425,10 +425,10 @@ class CrossLog(metaclass=MetaStateVar):
         return self.state
 
 
-def CrossDist(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]):
+def Cross(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]) -> int:
     '''
     计算最近一次交叉的距离。
-    返回值：[交叉状态1上穿，0未穿，-1下穿，交叉距离]
+    返回值：正数上穿，负数下穿，0表示未知或重合；abs(ret) - 1表示交叉点与当前bar的距离
     '''
     if not isinstance(obj1, SeriesVar) and not isinstance(obj2, SeriesVar):
         raise ValueError('one of obj1 or obj2 should be SeriesVar')
@@ -439,8 +439,8 @@ def CrossDist(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]):
     obj.log(val1 - val2, cur_num)
     if obj.hist:
         item = obj.hist[-1]
-        return item[0], cur_num - item[1]
-    return 0, sys.maxsize
+        return item[0] * (cur_num - item[1] + 1)
+    return 0
 
 
 class MetaBar(type):
