@@ -128,7 +128,8 @@ class OrderManager(metaclass=SingletonArg):
             exit_ods = [od.detach(sess) for od in exit_ods if od]
             sess.commit()  # 保存到db，确保order_q取到的是最新的
         for od, prefix in edit_triggers:
-            if od in exit_ods:
+            if od in exit_ods or od.enter.status < OrderStatus.PartOk:
+                # 订单未成交时，不应该挂止损
                 continue
             self._put_order(od, OrderJob.ACT_EDITTG, prefix)
         return enter_ods, exit_ods
@@ -178,7 +179,7 @@ class OrderManager(metaclass=SingletonArg):
         ).save()
         if btime.run_mode in LIVE_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
-        self._put_order(od, 'enter')
+        self._put_order(od, OrderJob.ACT_ENTER)
         return od
 
     def _put_order(self, od: InOutOrder, action: str, data: str = None):
@@ -217,7 +218,7 @@ class OrderManager(metaclass=SingletonArg):
         od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od, od.exit_tag)
-        self._put_order(od, 'exit')
+        self._put_order(od, OrderJob.ACT_EXIT)
         return od
 
     def _finish_order(self, od: InOutOrder):
@@ -487,6 +488,7 @@ class LiveOrderManager(OrderManager):
         self.wallets: CryptoWallet = self.wallets
         self.exg_orders: Dict[Tuple[str, str], int] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
+        '未匹配交易，key: symbol, order_id；每个订单只保留一个未匹配交易，也只应该有一个'
         self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
         self.od_type = config.get('order_type', 'limit')
         self.max_market_rate = config.get('max_market_rate', 0.0001)
@@ -495,10 +497,12 @@ class LiveOrderManager(OrderManager):
         self.order_q = Queue(1000)  # 最多1000个待执行订单
         self.take_over_stgy: str = config.get('take_over_stgy')
         self.old_unsubmits = set()
-        # 限价单的深度对应的秒级成交量
+        self.allow_take_over = self.take_over_stgy and self.name.find('binance') >= 0 and self.market_type == 'future'
+        '目前仅币安期货支持接管用户订单'
         self.limit_vol_secs = config.get('limit_vol_secs', 10)
-        # 交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s
+        '限价单的深度对应的秒级成交量'
         self._pair_prices: Dict[str, Tuple[float, float, float]] = dict()
+        '交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s'
         if self.od_type not in {'limit', 'market'}:
             raise ValueError(f'invalid order type: {self.od_type}, `limit` or `market` is accepted')
         if self.market_type == 'future' and self.od_type == 'limit':
@@ -905,7 +909,7 @@ class LiveOrderManager(OrderManager):
             # logger.info(f'edit push: {od} {tg_price}')
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
-    async def _update_bnb_order(self, od: Order, data: dict):
+    def _update_bnb_order(self, od: Order, data: dict):
         info: dict = data['info']
         state = info['X']
         if state == 'NEW':
@@ -962,7 +966,7 @@ class LiveOrderManager(OrderManager):
     async def _update_order(self, od: Order, data: dict):
         async with od.lock():
             if self.name.find('binance') >= 0:
-                await self._update_bnb_order(od, data)
+                self._update_bnb_order(od, data)
             else:
                 raise ValueError(f'unsupport exchange to update order: {self.name}')
 
@@ -978,10 +982,14 @@ class LiveOrderManager(OrderManager):
             sess = db.session
             related_ods = set()
             for data in trades:
-                trade_key = f"{data['symbol']}_{data['id']}"
+                symbol = data['symbol']
+                if symbol not in BotGlobal.pairs:
+                    # 忽略不处理的交易对
+                    continue
+                trade_key = f"{symbol}_{data['id']}"
                 if trade_key in self.handled_trades:
                     continue
-                od_key = data['symbol'], data['order']
+                od_key = symbol, data['order']
                 if od_key not in self.exg_orders:
                     self.unmatch_trades[trade_key] = data
                     continue
@@ -996,34 +1004,105 @@ class LiveOrderManager(OrderManager):
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
 
+    def _try_fill_exit(self, iod: InOutOrder, filled: float, od_price: float, od_time: int, order_id: str,
+                       order_type: str, fee_name: str, fee_rate: float):
+        '''
+        尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
+        '''
+        ava_amount = iod.enter_amount if not iod.exit else iod.exit.amount - iod.exit.filled
+        if filled >= ava_amount:
+            fill_amt = ava_amount
+            exit_status = OrderStatus.Close
+            filled -= ava_amount
+        else:
+            fill_amt = filled
+            exit_status = OrderStatus.PartOk
+            filled = 0
+        iod.update_exit(amount=iod.enter.amount, filled=fill_amt, order_type=order_type,
+                        order_id=order_id, price=od_price, average=od_price,
+                        status=exit_status, fee=fee_rate, fee_type=fee_name,
+                        create_at=od_time, update_at=od_time)
+        iod.exit_tag = ExitTags.user_exit
+        iod.exit_at = od_time
+        if exit_status == OrderStatus.Close:
+            iod.status = InOutStatus.FullExit
+            if iod.id:
+                iod.save()
+        return filled
+
+    def _exit_any_bnb_order(self, trade: dict) -> bool:
+        info: dict = trade['info']
+        pair, filled = trade['symbol'], float(info['z'])
+        if not filled:
+            # 忽略未成交的交易
+            return False
+        is_short = info.get('ps') == 'SHORT'
+        od_side = trade['side']
+        open_ods = InOutOrder.open_orders(pairs=pair)
+        open_ods = [od for od in open_ods if od.short == is_short and od.enter.side != od_side]
+        if not open_ods:
+            # 没有同方向，相反操作的订单
+            return False
+        is_reduce_only = info.get('R', False)
+        od_price, od_time = float(info['ap']), trade['timestamp']
+        order_id, od_type = trade['order'], trade['type']
+        fee_name = info['N'] or ''
+        fee_val = float(info['n'])
+        if fee_val:
+            fee_name = info['N'] or ''
+            if pair.endswith(fee_name):
+                # 期货市场手续费以USD计算
+                fee_val /= od_price
+            fee_val /= filled
+        for iod in open_ods:
+            # 尝试平仓
+            filled = self._try_fill_exit(iod, filled, od_price, od_time, order_id, od_type, fee_name, fee_val)
+            if filled <= min_dust:
+                break
+            if iod.status == InOutStatus.FullExit:
+                self._finish_order(iod)
+                self._fire(iod, False)
+        if not is_reduce_only and filled > min_dust and self.allow_take_over:
+            # 有剩余数量，创建相反订单
+            exs = ExSymbol.get(self.name, self.market_type, pair)
+            iod = self._create_inout_od(exs, is_short, od_price, filled, od_type, fee_val, fee_name, od_time,
+                                        OrderStatus.Close, order_id)
+            if iod:
+                iod.save()
+                self._fire(iod, True)
+        return True
+
+    def _exit_any_order(self, trade: dict) -> bool:
+        '''
+        检查交易流是否是平仓操作
+        '''
+        if self.name.find('binance') >= 0:
+            return self._exit_any_bnb_order(trade)
+        else:
+            raise ValueError(f'unsupport exchange to _exit_any_order: {self.name}')
+
     def _handle_unmatches(self):
         '''
-        处理超时未匹配的订单，3s执行一次
+        处理超时未匹配的订单，1s执行一次
         '''
-        exp_unmatchs = []
-        for trade_key, trade in list(self.unmatch_trades.items()):
-            if btime.time() - trade['timestamp'] / 1000 >= 10:
-                # 未匹配订单10s过期
-                exp_unmatchs.append(trade)
+        exp_after = btime.time_ms() - 1000  # 未匹配交易，1s过期
+        cur_unmatchs = [(trade_key, trade) for trade_key, trade in self.unmatch_trades.items()
+                        if trade['timestamp'] < exp_after]
+        left_unmats = []
+        for trade_key, trade in cur_unmatchs:
+            matched = False
+            if self._exit_any_order(trade):
+                # 检测是否是平仓订单
+                matched = True
+            elif self.allow_take_over and self._create_order_from_bnb(trade):
+                # 检测是否应该接管第三方下单
+                matched = True
+            if not matched:
+                left_unmats.append(trade)
+            else:
                 del self.unmatch_trades[trade_key]
-        if exp_unmatchs:
-            left_unmats = self.try_manage_orders(exp_unmatchs)
+        if left_unmats:
             logger.warning('expired unmatch orders: %s', left_unmats)
-
-    def try_manage_orders(self, trades: List[dict]) -> List[dict]:
-        if not self.take_over_stgy:
-            return trades
-        if self.name.find('binance') < 0:
-            logger.error(f'try_manage_orders for {self.name} not support, {len(trades)} trades skipped')
-            return trades
-        if self.market_type != 'future':
-            logger.error(f'try_manage_orders for {self.market_type} not support, {len(trades)} trades skipped')
-            return trades
-        left_trades = []
-        for trade in trades:
-            if not self._create_order_from_bnb(trade):
-                left_trades.append(trade)
-        return left_trades
 
     def _create_order_from_bnb(self, trade: dict):
         info: dict = trade['info']
@@ -1058,6 +1137,7 @@ class LiveOrderManager(OrderManager):
                                    btime.time_ms(), od_status, trade['id'])
         if od:
             od.save()
+            self._fire(od, True)
             stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')
             stg = next((stg for stg in stg_list if stg.name == self.take_over_stgy), None)
             if stg:
@@ -1107,11 +1187,11 @@ class LiveOrderManager(OrderManager):
                     with db():
                         sess = db.session
                         od = InOutOrder.get(sess, job.od_id)
-                        if job.action == 'enter':
+                        if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
-                        elif job.action == 'exit':
+                        elif job.action == OrderJob.ACT_EXIT:
                             await self._exec_order_exit(od)
-                        elif job.action == 'edit_trigger':
+                        elif job.action == OrderJob.ACT_EDITTG:
                             await self._edit_trigger_od(od, job.data)
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
@@ -1153,7 +1233,7 @@ class LiveOrderManager(OrderManager):
     @loop_forever
     async def trail_unmatches_forever(self):
         '''
-        2s一次轮训处理未匹配的订单。尝试跟踪用户下单。
+        1s一次轮训处理未匹配的订单。尝试跟踪用户下单。
         '''
         if not btime.prod_mode():
             return
@@ -1162,7 +1242,7 @@ class LiveOrderManager(OrderManager):
                 self._handle_unmatches()
         except Exception:
             logger.exception('trail_unmatches_forever error')
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
     @loop_forever
     async def trail_open_orders_forever(self):

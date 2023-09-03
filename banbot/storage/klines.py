@@ -759,6 +759,7 @@ ORDER BY sid, 2'''
                 merged[-1] = old_h
         for m in merged:
             if not m.id:
+                assert m.stop <= btime.now(), 'hole.stop exceed cur time'
                 sess.add(m)
         sess.commit()
 
