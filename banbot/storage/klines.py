@@ -714,6 +714,7 @@ ORDER BY sid, 2'''
         # 取 >= start_ms的第一个bar开始时间
         start_ms = math.ceil(start_ms / tf_msecs) * tf_msecs
         # 取 < end_ms的最后一个bar开始时间
+        end_ms = min(end_ms, btime.time_ms())
         end_ms = (math.ceil(end_ms / tf_msecs) - 1) * tf_msecs
         if start_ms > end_ms:
             return
