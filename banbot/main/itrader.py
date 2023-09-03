@@ -163,7 +163,10 @@ class Trader:
             self._job = (func_name, cur_time, cur_time + interval * 2)
             job_start = time.monotonic()
             # 执行任务
-            await run_async(biz_func)
+            try:
+                await run_async(biz_func)
+            except Exception:
+                logger.exception(f'run loop task error: {func_name}')
             exec_cost = time.monotonic() - job_start
             if live_mode and exec_cost >= interval * 0.9 and not is_debug():
                 logger.warning('loop task timeout {0} cost {1:.3f} > {2:.3f}', func_name, exec_cost, interval)

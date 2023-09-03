@@ -159,7 +159,7 @@ class OrderManager(metaclass=SingletonArg):
         tag = sigin.pop('tag')
         if 'leverage' not in sigin and self.market_type == 'future':
             sigin['leverage'] = self.leverage
-        ent_side = 'sell' if sigin.get('short') else 'buy'
+        ent_side = 'short' if sigin.get('short') else 'long'
         od_key = f'{exs.symbol}|{strategy}|{ent_side}|{tag}|{btime.time_ms()}'
         legal_cost = self.wallets.enter_od(exs, sigin, od_key, self.last_ts)
         if not legal_cost:
@@ -522,6 +522,7 @@ class LiveOrderManager(OrderManager):
             since_ms = 0
         else:
             since_ms = max([od.enter_at for od in op_ods])
+        res_odlist = set()
         for pair in symbols:
             cur_ods = [od for od in op_ods if od.symbol == pair]
             cur_pos = [p for p in positions if p['symbol'] == pair]
@@ -530,6 +531,15 @@ class LiveOrderManager(OrderManager):
             long_pos = next((p for p in cur_pos if p['side'] == 'long'), None)
             short_pos = next((p for p in cur_pos if p['side'] == 'short'), None)
             await self._sync_pair_orders(pair, long_pos, short_pos, cur_ods, since_ms)
+            res_odlist.update(cur_ods)
+        new_ods = res_odlist - set(op_ods)
+        old_ods = res_odlist.intersection(op_ods)
+        del_ods = set(op_ods) - res_odlist
+        if old_ods:
+            logger.info(f'恢复{len(old_ods)}个未平仓订单：{old_ods}')
+        if new_ods:
+            logger.info(f'开始跟踪{len(new_ods)}个用户下单：{new_ods}')
+        return len(old_ods), len(new_ods), len(del_ods)
 
     async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict,
                                 op_ods: List[InOutOrder], since_ms: int):
@@ -560,7 +570,6 @@ class LiveOrderManager(OrderManager):
             # 当前op_ods剩余的必定是开仓的，保存状态并跟踪
             for iod in op_ods:
                 iod.save()
-            logger.info(f'{len(op_ods)} open orders: {op_ods}')
 
     def _create_order_from_position(self, pos: dict):
         '''

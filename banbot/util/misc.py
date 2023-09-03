@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-from typing import List
+from typing import List, Optional
 _run_env = None
 
 
@@ -216,3 +216,21 @@ def get_module_classes(module, base_cls: type):
         result.append(cld_cls)
     return result
 
+
+class LazyTqdm:
+    def __init__(self, *args, **kwargs):
+        from tqdm import tqdm
+        self.bar: Optional[tqdm] = None
+        self.args = args
+        self.kwargs = kwargs
+
+    def update(self, n=1):
+        if self.bar is None:
+            from tqdm import tqdm
+            self.bar = tqdm(*self.args, **self.kwargs)
+        self.bar.update(n)
+
+    def close(self):
+        if self.bar is not None:
+            self.bar.close()
+            self.bar = None

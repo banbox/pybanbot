@@ -67,10 +67,14 @@ class LiveTrader(Trader):
             await self.wallets.init(self.pair_mgr.symbols)
             await self.exchange.init(self.pair_mgr.symbols)
             pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
-            await self.order_mgr.init_pairs(self.pair_mgr.symbols)
+            old_num, new_num, del_num = await self.order_mgr.init_pairs(self.pair_mgr.symbols)
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         await self.rpc.startup_messages()
+        await self.rpc.send_msg(dict(
+            type=RPCMessageType.STATUS,
+            status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}'
+        ))
 
     async def run(self):
         self.start_heartbeat_check(3)

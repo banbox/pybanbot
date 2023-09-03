@@ -8,9 +8,7 @@ import datetime
 import math
 import os
 import six
-
-from tqdm import tqdm
-
+from banbot.util.misc import LazyTqdm
 from banbot.config.consts import *
 from banbot.config.timerange import TimeRange
 from banbot.exchange.exchange_utils import *
@@ -205,7 +203,7 @@ def load_data_range_from_bt(btres: dict):
 
 
 async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, start_ms: int, end_ms: int,
-                          pbar: tqdm = None):
+                          pbar: LazyTqdm = None):
     '''
     按给定时间段下载交易对的K线数据。
     :param exchange:
@@ -256,7 +254,7 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0., pbar: Union[tqdm, str] = 'auto') -> int:
+                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto') -> int:
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -273,7 +271,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     if not start_ms:
         return 0
     if isinstance(pbar, six.string_types) and pbar == 'auto':
-        pbar = tqdm()
+        pbar = LazyTqdm()
     down_count = 0
     if check_exist:
         measure.start_for('query_range')
@@ -342,7 +340,7 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
 
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
-                           allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[tqdm, str] = 'auto'):
+                           allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto'):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -387,7 +385,7 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     '''
     from banbot.util.misc import parallel_jobs
     from banbot.storage import db
-    pbar = tqdm()
+    pbar = LazyTqdm()
     if isinstance(kwargs, dict):
         kwargs['pbar'] = pbar
         kwargs = [kwargs] * len(symbols)
