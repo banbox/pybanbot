@@ -861,9 +861,15 @@ class LiveOrderManager(OrderManager):
 
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
+        if is_enter and od.leverage and self.exchange.get_leverage(od.symbol, False) != od.leverage:
+            item = await self.exchange.set_leverage(od.leverage, od.symbol)
+            if item.leverage < od.leverage:
+                # 此币种杠杆比较小，对应缩小金额
+                rate = item.leverage / od.leverage
+                od.leverage = item.leverage
+                sub_od.amount *= rate
+                od.quote_cost *= rate
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
-        if od.leverage and self.exchange.get_leverage(od.symbol, False) != od.leverage:
-            await self.exchange.set_leverage(od.leverage, od.symbol)
         params = dict()
         if self.market_type == 'future':
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
