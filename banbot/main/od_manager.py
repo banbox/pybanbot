@@ -1195,7 +1195,7 @@ class LiveOrderManager(OrderManager):
                             else:
                                 # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                        logger.error('consume order %s: %s, force exit: %s', type(e), e, job)
+                        logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                     else:
                         logger.exception('consume order exception: %s', job)
                 self.order_q.task_done()
