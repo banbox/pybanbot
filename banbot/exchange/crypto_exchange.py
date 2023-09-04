@@ -616,8 +616,7 @@ class CryptoExchange:
         if not hasattr(self.api_async, 'set_leverage'):
             raise ValueError(f'exchange {self.name}.{self.market_type} not support set_leverage')
         res = await self.api_async.set_leverage(leverage, symbol, params)
-        logger.info(f'set leverage res: {res}')
-        item.leverage = leverage
+        item.leverage = int(res['leverage'])
         return item
 
     async def update_symbol_leverages(self, symbols=None, cur_val=-1):
