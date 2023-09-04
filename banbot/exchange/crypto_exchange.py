@@ -610,7 +610,10 @@ class CryptoExchange:
         if not item:
             await self.update_symbol_leverages([symbol], 0)
             item = self.leverages.get(symbol)
-        leverage = min(leverage, item.max_leverage)
+        if item.max_leverage:
+            leverage = min(leverage, item.max_leverage)
+        else:
+            logger.info(f'invalid max lev: {item.max_leverage} {item.tiers}')
         if item.leverage == leverage:
             return item
         if not hasattr(self.api_async, 'set_leverage'):
