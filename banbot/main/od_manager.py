@@ -863,7 +863,6 @@ class LiveOrderManager(OrderManager):
         sub_od = od.enter if is_enter else od.exit
         old_lev = self.exchange.get_leverage(od.symbol, False)
         if is_enter and od.leverage and old_lev != od.leverage:
-            logger.info(f'set leverage: {od.leverage} {self.leverage} {old_lev}')
             item = await self.exchange.set_leverage(od.leverage, od.symbol)
             if item.leverage < od.leverage:
                 # 此币种杠杆比较小，对应缩小金额

@@ -41,6 +41,6 @@ class LeverageTiers:
             self.tiers.append(LeverageTier(**item))
         self.max_leverage = 0
         if self.tiers:
-            self.max_leverage = max([t.maxLeverage for t in self.tiers])
+            self.max_leverage = int(max([t.maxLeverage for t in self.tiers]))
         self.leverage = 0
 

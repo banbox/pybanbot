@@ -624,10 +624,8 @@ class CryptoExchange:
         获取持仓风险。future市场可用。同时更新币种的杠杆倍数。
         '''
         tiers = await self.api_async.fetch_leverage_tiers(symbols)
-        logger.info(f'fetch_leverage_tiers {tiers}')
         for pair, raw_list in tiers.items():
             self.leverages[pair] = LeverageTiers(raw_list)
-            logger.info(f'max lev {self.leverages[pair].max_leverage}')
         if cur_val < 0:
             risks = await self.api_async.fetch_positions_risk(symbols, {})
             for risk in risks:
