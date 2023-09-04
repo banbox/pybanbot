@@ -608,12 +608,9 @@ class CryptoExchange:
     async def set_leverage(self, leverage: int, symbol: str, params={}):
         item = self.leverages.get(symbol)
         if not item:
-            await self.update_symbol_leverages([symbol], 0)
+            await self.update_symbol_leverages([symbol])
             item = self.leverages.get(symbol)
-        if item.max_leverage:
-            leverage = min(leverage, item.max_leverage)
-        else:
-            logger.info(f'invalid max lev: {item.max_leverage} {item.tiers}')
+        leverage = min(leverage, item.max_leverage)
         if item.leverage == leverage:
             return item
         if not hasattr(self.api_async, 'set_leverage'):
@@ -627,8 +624,10 @@ class CryptoExchange:
         获取持仓风险。future市场可用。同时更新币种的杠杆倍数。
         '''
         tiers = await self.api_async.fetch_leverage_tiers(symbols)
+        logger.info(f'fetch_leverage_tiers {tiers}')
         for pair, raw_list in tiers.items():
             self.leverages[pair] = LeverageTiers(raw_list)
+            logger.info(f'max lev {self.leverages[pair].max_leverage}')
         if cur_val < 0:
             risks = await self.api_async.fetch_positions_risk(symbols, {})
             for risk in risks:
