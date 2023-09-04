@@ -3,7 +3,8 @@
 # File  : types.py
 # Author: anyongjin
 # Date  : 2023/4/18
-from typing import Dict, Optional, TypedDict
+from typing import Dict, Optional, TypedDict, List
+from dataclasses import dataclass
 
 
 class Ticker(TypedDict):
@@ -19,3 +20,27 @@ class Ticker(TypedDict):
 
 
 Tickers = Dict[str, Ticker]
+
+
+@dataclass
+class LeverageTier:
+    tier: float
+    currency: str
+    minNotional: float
+    maxNotional: float
+    maintenanceMarginRate: float
+    maxLeverage: float
+
+
+class LeverageTiers:
+    def __init__(self, raw_list: List[Dict]):
+        self.tiers: List[LeverageTier] = []
+        for item in raw_list:
+            if 'info' in item:
+                item.pop('info')
+            self.tiers.append(LeverageTier(**item))
+        self.max_leverage = 0
+        if self.tiers:
+            self.max_leverage = max([t.maxLeverage for t in self.tiers])
+        self.leverage = 0
+

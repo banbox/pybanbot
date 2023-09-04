@@ -600,7 +600,7 @@ class LiveOrderManager(OrderManager):
         if not job:
             logger.warning(f'take over job not found: {exs.symbol} {self.take_over_stgy}')
             return
-        leverage = self.exchange.leverages[exs.symbol]
+        leverage = self.exchange.get_leverage(exs.symbol)
         quote_cost = filled * average / leverage
         io_status = InOutStatus.FullEnter if ent_status == OrderStatus.Close else InOutStatus.PartEnter
         return InOutOrder(
@@ -862,7 +862,7 @@ class LiveOrderManager(OrderManager):
     async def _create_exg_order(self, od: InOutOrder, is_enter: bool):
         sub_od = od.enter if is_enter else od.exit
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
-        if od.leverage and self.exchange.leverages.get(od.symbol) != od.leverage:
+        if od.leverage and self.exchange.get_leverage(od.symbol, False) != od.leverage:
             await self.exchange.set_leverage(od.leverage, od.symbol)
         params = dict()
         if self.market_type == 'future':
@@ -1212,7 +1212,7 @@ class LiveOrderManager(OrderManager):
                                                                left_amount, price)
                 await self._update_subod_by_ccxtres(od, is_enter, res)
             except ccxt.InvalidOrder as e:
-                logger.error('edit invalid order: %s', e)
+                logger.exception('edit invalid order: %s, %s', e, od)
 
     @loop_forever
     async def trail_unmatches_forever(self):
@@ -1302,7 +1302,10 @@ class LiveOrderManager(OrderManager):
             # 忽略保证金状态更新
             return
         symbol = msg['symbol']
-        self.exchange.leverages[symbol] = leverage
+        if symbol not in self.exchange.leverages:
+            await self.exchange.update_symbol_leverages([symbol], leverage)
+        else:
+            self.exchange.leverages[symbol].leverage = leverage
 
     async def cleanup(self):
         with db():

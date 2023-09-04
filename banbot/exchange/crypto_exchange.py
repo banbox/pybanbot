@@ -20,6 +20,7 @@ from banbot.exchange.exchange_utils import *
 from banbot.storage import BotGlobal
 from banbot.main.addons import MarketPrice
 from banbot.exchange.ccxt_exts import get_pro_overrides, get_asy_overrides
+from banbot.exchange.types import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
@@ -236,7 +237,8 @@ class CryptoExchange:
         self.mtype = exg_mtype_map.get(self.market_type) or self.market_type
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
         self.markets: Dict = {}
-        self.leverages = dict()  # 记录每个币种的杠杆
+        self._leverage = config.get('leverage')
+        self.leverages: Dict[str, LeverageTiers] = dict()  # 记录每个币种的杠杆
         # 记录每个交易对最近一次交易的费用类型，费率
         self.pair_fees: Dict[str, Tuple[str, float]] = dict()
         self.markets_at = btime.utctime() - 7200
@@ -603,26 +605,41 @@ class CryptoExchange:
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
         return await self.api_async.create_order(symbol, od_type, side, amount, price, params)
 
-    async def fetch_positions_risk(self, symbols=None, params={}):
-        '''
-        获取持仓风险。future市场可用。包含当前币种的杠杆倍数
-        '''
-        return await self.api_async.fetch_positions_risk(symbols, params)
-
     async def set_leverage(self, leverage: int, symbol: str, params={}):
-        if self.leverages.get(symbol) == leverage:
-            return
+        item = self.leverages.get(symbol)
+        if not item:
+            await self.update_symbol_leverages([symbol], 0)
+            item = self.leverages.get(symbol)
+        leverage = min(leverage, item.max_leverage)
+        if item.leverage == leverage:
+            return item
         if not hasattr(self.api_async, 'set_leverage'):
             raise ValueError(f'exchange {self.name}.{self.market_type} not support set_leverage')
         res = await self.api_async.set_leverage(leverage, symbol, params)
         logger.info(f'set leverage res: {res}')
-        self.leverages[symbol] = leverage
-        return res
+        item.leverage = leverage
+        return item
 
-    async def update_symbol_leverages(self, symbols=None):
-        risks = await self.api_async.fetch_positions_risk(symbols, {})
-        for risk in risks:
-            self.leverages[risk['symbol']] = risk['leverage']
+    async def update_symbol_leverages(self, symbols=None, cur_val=-1):
+        '''
+        获取持仓风险。future市场可用。同时更新币种的杠杆倍数。
+        '''
+        tiers = await self.api_async.fetch_leverage_tiers(symbols)
+        for pair, raw_list in tiers.items():
+            self.leverages[pair] = LeverageTiers(raw_list)
+        if cur_val < 0:
+            risks = await self.api_async.fetch_positions_risk(symbols, {})
+            for risk in risks:
+                self.leverages[risk['symbol']].leverage = risk['leverage']
+        else:
+            for pair in tiers:
+                self.leverages[pair].leverage = cur_val
+
+    def get_leverage(self, symbol: str, with_def=True):
+        item = self.leverages.get(symbol)
+        if item and item.leverage:
+            return item.leverage
+        return self._leverage if with_def else 0
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单

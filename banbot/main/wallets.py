@@ -290,7 +290,8 @@ class WalletsLocal:
         return bomb_ods
 
     def get(self, symbol: str, after_ts: float = 0):
-        assert self.update_at - after_ts >= -1, f'wallet ts expired: {self.update_at} > {after_ts}'
+        if self.update_at - after_ts >= -1:
+            logger.warning(f'wallet ts expired: {self.update_at} > {after_ts}')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet()
         return self.data[symbol]
