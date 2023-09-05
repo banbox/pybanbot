@@ -67,7 +67,8 @@ class WalletsLocal:
         :param min_rate: 最低扣除比率
         :return 实际扣除数量
         '''
-        assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
+        if self.update_at + 1 < after_ts:
+            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet()
         wallet = self.data[symbol]
@@ -91,7 +92,8 @@ class WalletsLocal:
         从frozen中扣除，如果不够，从available扣除剩余部分
         扣除后，添加到pending中
         '''
-        assert self.update_at - after_ts >= -1, f'wallet expired, expect > {after_ts}, current: {self.update_at}'
+        if self.update_at + 1 < after_ts:
+            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
         if symbol not in self.data:
             return 0
         wallet = self.data[symbol]
@@ -290,8 +292,8 @@ class WalletsLocal:
         return bomb_ods
 
     def get(self, symbol: str, after_ts: float = 0):
-        if self.update_at - after_ts >= -1:
-            logger.warning(f'wallet ts expired: {self.update_at} > {after_ts}')
+        if self.update_at + 1 < after_ts:
+            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet()
         return self.data[symbol]

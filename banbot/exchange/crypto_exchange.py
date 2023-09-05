@@ -249,7 +249,7 @@ class CryptoExchange:
             os.mkdir(self.market_dir)
 
     async def init(self, pairs: List[str]):
-        await self.update_symbol_prices()
+        await self.update_prices()
         await self._check_fee_limits()
         await self.cancel_open_orders(pairs)
         await self.update_symbol_leverages(pairs)
@@ -585,12 +585,19 @@ class CryptoExchange:
             ohlc_arr = ohlc_arr[:-1]
         return ohlc_arr
 
-    async def update_symbol_prices(self):
+    async def update_prices(self):
+        '''
+        更新所有币种的价格
+        '''
         if not BotGlobal.live_mode:
             return
-        for symbol in MarketPrice.pairs():
-            od_books = await self.api_async.fetch_order_book(symbol, limit=5)
-            MarketPrice.set_new_price(symbol, od_books['bids'][0][0] + od_books['asks'][0][0])
+        try:
+            prices: Dict[str, Dict] = await self.api_async.fetch_last_prices()
+        except ccxt.NetworkError as e:
+            logger.error(f'watch_prices net error: {e}')
+            return
+        for key, item in prices.items():
+            MarketPrice.set_new_price(key, item['price'])
 
     async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
         return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)
