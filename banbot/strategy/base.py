@@ -6,6 +6,7 @@
 import random
 from banbot.strategy.common import *
 from banbot.main.wallets import WalletsLocal
+from banbot.rpc import Notify, NotifyType  # noqa
 
 
 class BaseStrategy:
@@ -17,6 +18,8 @@ class BaseStrategy:
     '指定运行周期，从里面计算最小符合分数的周期，不提供尝试使用config.json中run_timeframes或Kline.agg_list'
     paintFields: Dict[str, str] = dict()
     '要绘制显示到K线图的字段列表[key, plotType]'
+    params = []
+    '传入参数'
     warmup_num = 600
     min_tfscore = 0.8
     nofee_tfscore = 0.6

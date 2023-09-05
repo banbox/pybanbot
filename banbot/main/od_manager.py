@@ -1288,10 +1288,10 @@ class LiveOrderManager(OrderManager):
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
                 sess.commit()
-        from banbot.rpc import RPCManager, RPCMessageType
-        if unsubmits and RPCManager.instance:
-            await RPCManager.instance.send_msg(dict(
-                type=RPCMessageType.EXCEPTION,
+        from banbot.rpc import Notify, NotifyType
+        if unsubmits and Notify.instance:
+            await Notify.instance.send_msg(dict(
+                type=NotifyType.EXCEPTION,
                 status=f'超时未提交订单：{unsubmits}',
             ))
 

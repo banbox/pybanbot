@@ -13,14 +13,14 @@ from banbot.util.redis_helper import AsyncRedis
 from banbot.util import btime
 from banbot.exchange.crypto_exchange import tf_to_secs
 from banbot.compute.ctx import ccol
-from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
+from banbot.rpc.rpc_manager import Notify, RPCMessageType
 from banbot.config.appconfig import AppConfig
 
 up_rate = 0.03
 down_rate = -0.03
 
 
-async def _check_symbol(rpc: RPCManager, redis: AsyncRedis, exg_name: str, market: str, symbol: str, timeframe: str):
+async def _check_symbol(rpc: Notify, redis: AsyncRedis, exg_name: str, market: str, symbol: str, timeframe: str):
     time_ms = btime.utcstamp()
     dt_key = f'eye_{btime.to_datestr(time_ms, fmt="%Y%m%d")}'
     up_key = f'{exg_name}_{market}_{symbol}_u'
@@ -74,7 +74,7 @@ async def run_market_monitor():
     from banbot.storage.base import init_db, db
     init_db()
     logger.info(f'start market change monitor')
-    rpc = RPCManager(config)
+    rpc = Notify(config)
     while True:
         exg_name, market, symbol, timeframe = await KLine.wait_bars('*', '*', '*', '5m')
         try:

@@ -5,7 +5,7 @@
 # Date  : 2023/2/28
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
-from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
+from banbot.rpc.rpc_manager import Notify, RPCMessageType
 from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
@@ -24,7 +24,7 @@ class LiveTrader(Trader):
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
-        self.rpc = RPCManager(config)
+        self.rpc = Notify(config)
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
@@ -112,8 +112,6 @@ class LiveTrader(Trader):
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
                 # 订单异步消费队列
                 asyncio.create_task(self.order_mgr.consume_queue()),
-                # 监听币种的最新价格
-                asyncio.create_task(self.exchange.watch_prices())
             ])
             logger.info('listen websocket , watch wallets and order updates ...')
 

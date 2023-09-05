@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# File  : rpc_manager.py
+# File  : notify_mgr.py
 # Author: anyongjin
 # Date  : 2023/4/1
 from collections import deque
@@ -10,11 +10,11 @@ from banbot.util import btime
 from banbot.util.common import Singleton
 
 
-class RPCManager(metaclass=Singleton):
-    instance: 'RPCManager' = None
+class Notify(metaclass=Singleton):
+    instance: 'Notify' = None
 
     def __init__(self, config: Config):
-        RPCManager.instance = self
+        Notify.instance = self
         self.config = config
         self._rpc = RPC(config)
         self.channels: List[RPCHandler] = []
@@ -64,17 +64,6 @@ class RPCManager(metaclass=Singleton):
             except Exception:
                 logger.exception('Exception occurred within RPC module %s: %s', mod.name, msg)
 
-    async def process_msg_queue(self, queue: deque) -> None:
-        """
-        Process all messages in the queue.
-        """
-        while queue:
-            msg = queue.popleft()
-            await self.send_msg({
-                'type': RPCMessageType.STRATEGY_MSG,
-                'msg': msg,
-            })
-
     async def startup_messages(self):
         from banbot.symbols import group_symbols
         exg_name = self.config['exchange']['name']
@@ -92,6 +81,11 @@ class RPCManager(metaclass=Singleton):
             for key, items in groups.items():
                 pairs += f"\n{key}: {', '.join(items)}"
         await self.send_msg({
-            'type': RPCMessageType.STARTUP,
+            'type': NotifyType.STARTUP,
             'status': f'{exg_name}.{market}\n模式: {run_mode}\n单笔金额: {stake_amount}{leverage}\n{pairs}'
         })
+
+    @classmethod
+    def send_msg(cls, msg: Dict[str, Any]):
+        assert cls.instance, 'RPC is not initialized'
+        cls.instance.send_msg(msg)

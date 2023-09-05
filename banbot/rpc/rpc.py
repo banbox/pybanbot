@@ -79,7 +79,7 @@ class RPC:
         return {'status': 'already stopped'}
 
 
-class RPCMessageType:
+class NotifyType:
     STATUS = 'status'
     WARNING = 'warning'
     EXCEPTION = 'exception'
@@ -105,7 +105,7 @@ class RPCMessageType:
 
 
 def map_msg_type(msg_type: str):
-    if msg_type in (RPCMessageType.STATUS, RPCMessageType.STARTUP):
+    if msg_type in (NotifyType.STATUS, NotifyType.STARTUP):
         return 'status'
     return msg_type
 

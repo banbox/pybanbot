@@ -43,11 +43,11 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
     发送异常通知给管理员：微信
     不要直接调用此方法。应调用带限流的try_send_exc_notify
     '''
-    from banbot.rpc.rpc_manager import RPCManager, RPCMessageType
-    if not RPCManager.instance:
+    from banbot.rpc.rpc_manager import Notify, RPCMessageType
+    if not Notify.instance:
         from banbot.config import AppConfig
         if AppConfig.obj:
-            RPCManager(AppConfig.get())
+            Notify(AppConfig.get())
         else:
             print('no appconfig load, send exc notify skip')
             return
@@ -58,7 +58,7 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     content = f'EXC:{key}，数量:{num}\n{del_third_traces(detail)}'
-    loop.run_until_complete(RPCManager.instance.send_msg(dict(
+    loop.run_until_complete(Notify.instance.send_msg(dict(
         type=RPCMessageType.EXCEPTION,
         status=content,
     )))
