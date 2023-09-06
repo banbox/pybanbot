@@ -86,7 +86,9 @@ class Notify(metaclass=Singleton):
 
     @classmethod
     def send(cls, msg: Dict[str, Any]):
-        assert cls.instance, 'RPC is not initialized'
+        if not cls.instance:
+            from banbot.config import AppConfig
+            Notify(AppConfig.get())
         asyncio.create_task(cls.instance.send_msg(msg))
 
     @classmethod
