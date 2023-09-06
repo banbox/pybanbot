@@ -6,6 +6,8 @@
 import re
 import asyncio
 import datetime
+import sys
+
 from banbot.config import Config
 _re_err_stack = re.compile(r'^\s+File\s*"([^"]+)"')
 
@@ -97,15 +99,18 @@ def _send_exc_notify(key: str, desp: str):
 
 def del_third_traces(content: str) -> str:
     lines = content.split('\n')
-    result, trace_id = [], -1
+    result = []
+    skip_gt_than = sys.maxsize  # 跳过行首空格大于此数值的所有行。
     for i, line in enumerate(lines):
+        tab_len = len(line) - len(line.lstrip())
+        if tab_len > skip_gt_than:
+            continue
+        skip_gt_than = sys.maxsize
         mat = _re_err_stack.search(line)
         if mat:
             path = mat.group(1).lower()
             if path.find('/ban') < 0:
-                trace_id = i
+                skip_gt_than = tab_len
                 continue
-        elif trace_id + 1 == i and trace_id >= 0:
-            continue
         result.append(line)
     return '\n'.join(result)

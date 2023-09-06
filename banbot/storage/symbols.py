@@ -44,6 +44,12 @@ class ExSymbol(BaseDbModel):
         data['short_name'] = to_short_symbol(self.symbol)
         return data
 
+    def __eq__(self, other):
+        if not isinstance(other, ExSymbol):
+            return False
+        return (self.id == other.id and self.exchange == other.exchange and self.market == other.market and
+                self.symbol == other.symbol)
+
     def __str__(self):
         return f'[{self.id}] {self.exchange}:{self.symbol}:{self.market}'
 
