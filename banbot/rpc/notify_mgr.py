@@ -3,7 +3,6 @@
 # File  : notify_mgr.py
 # Author: anyongjin
 # Date  : 2023/4/1
-from collections import deque
 
 from banbot.rpc.rpc import *
 from banbot.util import btime
@@ -86,6 +85,11 @@ class Notify(metaclass=Singleton):
         })
 
     @classmethod
-    def send_msg(cls, msg: Dict[str, Any]):
+    def send(cls, msg: Dict[str, Any]):
         assert cls.instance, 'RPC is not initialized'
-        cls.instance.send_msg(msg)
+        asyncio.create_task(cls.instance.send_msg(msg))
+
+    @classmethod
+    async def send_async(cls, msg: Dict[str, Any]):
+        assert cls.instance, 'RPC is not initialized'
+        await cls.instance.send_msg(msg)

@@ -1291,7 +1291,7 @@ class LiveOrderManager(OrderManager):
                 sess.commit()
         from banbot.rpc import Notify, NotifyType
         if unsubmits and Notify.instance:
-            await Notify.instance.send_msg(dict(
+            await Notify.send_async(dict(
                 type=NotifyType.EXCEPTION,
                 status=f'超时未提交订单：{unsubmits}',
             ))
