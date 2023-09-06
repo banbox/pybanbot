@@ -93,11 +93,12 @@ async def _consume_jobs():
         exg_name, market, symbol = wait_jobs.pop(0)
         try:
             cur_ms = btime.utcstamp()
-            for tf in _tf_stgy_cls:
-                state = _get_state(exg_name, market, symbol, tf)
-                cur_end = cur_ms // state.tf_msecs * state.tf_msecs
-                if cur_end > state.end_ms:
-                    await run_on_bar(state)
+            with db():
+                for tf in _tf_stgy_cls:
+                    state = _get_state(exg_name, market, symbol, tf)
+                    cur_end = cur_ms // state.tf_msecs * state.tf_msecs
+                    if cur_end > state.end_ms:
+                        await run_on_bar(state)
         except Exception:
             logger.exception(f'_run_watch_job error: {exg_name} {market} {symbol}')
 
