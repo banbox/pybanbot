@@ -112,9 +112,6 @@ async def run_watch_jobs():
         return
     from banbot.storage.base import init_db
     init_db()
-    tbl_list = [item.tbl for item in KLine.agg_list]
-    with db():
-        KLine.pause_compress(tbl_list)
     logger.info(f'start kline watch_jobs: {_tf_stgy_cls}')
     while True:
         exg_name, market, symbol, timeframe = await KLine.wait_bars('*', '*', '*', '*')
