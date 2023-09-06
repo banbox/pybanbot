@@ -544,9 +544,6 @@ class LiveSpider(RedisChannel):
             from banbot.storage import db
             spider = LiveSpider()
             asyncio.create_task(spider._heartbeat())
-        # 注册策略信号计算事件处理
-        from banbot.worker.sig_sync import reg_redis_event
-        await reg_redis_event()
 
         with db():
             logger.info('[spider] sync timeframe ranges ...')
@@ -582,11 +579,9 @@ async def run_spider_forever(args: dict):
     此函数仅用于从命令行启动
     '''
     from banbot.worker.top_change import TopChange
-    from banbot.worker.sig_sync import run_tdsig_updater
-    # from banbot.worker.market_monitor import run_market_monitor
+    from banbot.worker.watch_job import run_watch_jobs
     logger.info('start top change update timer...')
     await TopChange.start()
-    asyncio.create_task(run_tdsig_updater())
-    # asyncio.create_task(run_market_monitor())
+    asyncio.create_task(run_watch_jobs())
     await LiveSpider.run_spider()
     # await TopChange.clear()

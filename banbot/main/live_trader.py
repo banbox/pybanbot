@@ -5,7 +5,7 @@
 # Date  : 2023/2/28
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
-from banbot.rpc.rpc_manager import Notify, RPCMessageType
+from banbot.rpc.notify_mgr import Notify, NotifyType
 from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
@@ -27,7 +27,7 @@ class LiveTrader(Trader):
         self.rpc = Notify(config)
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
-        msg_type = RPCMessageType.ENTRY if is_enter else RPCMessageType.EXIT
+        msg_type = NotifyType.ENTRY if is_enter else NotifyType.EXIT
         sub_od = od.enter if is_enter else od.exit
         if sub_od.status != OrderStatus.Close:
             return
@@ -72,7 +72,7 @@ class LiveTrader(Trader):
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         await self.rpc.startup_messages()
         await self.rpc.send_msg(dict(
-            type=RPCMessageType.STATUS,
+            type=NotifyType.STATUS,
             status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}'
         ))
 
@@ -153,7 +153,7 @@ class LiveTrader(Trader):
     async def cleanup(self):
         await self.order_mgr.cleanup()
         await self.rpc.send_msg(dict(
-            type=RPCMessageType.STATUS,
+            type=NotifyType.STATUS,
             status='Bot stopped'
         ))
         await self.rpc.cleanup()

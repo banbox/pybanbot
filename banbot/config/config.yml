@@ -10,7 +10,6 @@ order_type: market  # 下单类型：market市价单  limit限价单
 prefire: false  # 是否在bar即将完成时，提前10%时间触发
 refill_margin: true  # 交易合约时，如保证金不足是否自动从余额扣除填补
 take_over_stgy: null  # 接管非当前机器人的下单的策略
-signal_strategy: DigoChain  # 指定运算交易信号的策略，爬虫端运行，用于网站端显示
 stake_amount: 15  # 单笔订单默认本金
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000
@@ -22,6 +21,8 @@ fatal_stop:  # 全局止损，当全局损失达到限制时，禁止下单
 fatal_stop_hours: 8  # 全局止损的禁止时间，默认8小时
 timerange: "20230701-20230808"  # 使用的K线范围，用于回测
 run_timeframes: [5m]
+watch_jobs:  # K线监听执行的任务，仅用于爬虫端运行
+  1h: [Demo]
 run_policy:  # 运行的策略，可以多个策略同时运行
 - name: Demo  # 策略名称
   run_timeframes: [5m]  # 此策略支持的时间周期，提供时覆盖根层级的run_timeframes

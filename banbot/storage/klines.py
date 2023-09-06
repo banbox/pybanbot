@@ -700,6 +700,7 @@ ORDER BY sid, 2'''
         try:
             conn.execute(sa.text(stmt))
         except Exception as e:
+            # 如果遇到insert into with on conflict on compressed block 错误，可在启动时，调用Kline.pause_compress暂时解压缩
             logger.exception(f'refresh conti agg error: {e}, {sid} {tbl.tf}')
             return old_start, old_end, old_start, old_end
         new_start, new_end = cls._update_range(sid, tbl.tf, start_ms, end_ms)

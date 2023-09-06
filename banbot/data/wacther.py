@@ -42,7 +42,7 @@ class Watcher:
             if btime.run_mode not in btime.LIVE_MODES:
                 btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
             self.callback(pair, timeframe, bar_row)
-        if btime.run_mode in btime.LIVE_MODES and not BotGlobal.is_wramup:
+        if btime.run_mode in btime.LIVE_MODES and not BotGlobal.is_warmup:
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息

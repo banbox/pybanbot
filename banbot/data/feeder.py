@@ -68,10 +68,10 @@ class DataFeeder(Watcher):
             end_dt = btime.to_datestr(ohlcv_arr[-1][0] + tf_secs * 1000)
             logger.info(f'warmup {self.pair}/{tf} {start_dt} - {end_dt}')
             try:
-                BotGlobal.is_wramup = True
+                BotGlobal.is_warmup = True
                 self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
             finally:
-                BotGlobal.is_wramup = False
+                BotGlobal.is_warmup = False
             tf_next_ms = ohlcv_arr[-1][0] + tf_secs * 1000
             state = next((s for s in self.states if s.timeframe == tf), None)
             if state:

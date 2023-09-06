@@ -886,7 +886,8 @@ class LiveOrderManager(OrderManager):
             else:
                 # 平仓，取消关联订单
                 await self._cancel_trigger_ods(od)
-            self._fire(od, is_enter)
+            if sub_od.status == OrderStatus.Close:
+                self._fire(od, is_enter)
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
 

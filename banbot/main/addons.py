@@ -3,7 +3,6 @@
 # File  : addons.py
 # Author: anyongjin
 # Date  : 2023/8/10
-from banbot.storage import BotGlobal
 
 
 class MarketPrice:
@@ -18,6 +17,7 @@ class MarketPrice:
         '''
         获取指定币种的价格
         '''
+        from banbot.storage import BotGlobal
         is_pair = len(symbol.split('/')) > 1
         if BotGlobal.live_mode:
             if symbol in cls.prices:

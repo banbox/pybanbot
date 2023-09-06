@@ -17,7 +17,6 @@ from banbot.util.misc import *
 from banbot.util.common import logger
 from banbot.config.consts import *
 from banbot.exchange.exchange_utils import *
-from banbot.storage import BotGlobal
 from banbot.main.addons import MarketPrice
 from banbot.exchange.ccxt_exts import get_pro_overrides, get_asy_overrides
 from banbot.exchange.types import *
@@ -589,6 +588,7 @@ class CryptoExchange:
         '''
         更新所有币种的价格
         '''
+        from banbot.storage import BotGlobal
         if not BotGlobal.live_mode:
             return
         try:

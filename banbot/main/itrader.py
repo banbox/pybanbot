@@ -50,14 +50,14 @@ class Trader:
 
     def on_data_feed(self, pair: str, timeframe: str, row: list):
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
-        if not BotGlobal.is_wramup and btime.run_mode in btime.LIVE_MODES:
+        if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = delay >= max(60., tf_secs * 0.5)
         is_live_mode = btime.run_mode == RunMode.PROD
-        if bar_expired and is_live_mode and not BotGlobal.is_wramup:
+        if bar_expired and is_live_mode and not BotGlobal.is_warmup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         # 更新最新价格
         MarketPrice.set_bar_price(pair, float(row[ccol]))
@@ -70,7 +70,7 @@ class Trader:
             except ValueError as e:
                 logger.info(f'skip invalid bar: {e}')
                 return [], [], []
-            if not BotGlobal.is_wramup:
+            if not BotGlobal.is_warmup:
                 self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
             ext_tags: Dict[int, dict] = dict()
@@ -88,7 +88,7 @@ class Trader:
                 if not strategy.skip_exit_on_enter or not sigin:
                     if sigout:
                         exit_list.append((stg_name, sigout))
-                    if not BotGlobal.is_wramup:
+                    if not BotGlobal.is_warmup:
                         exts, cur_edits = self.order_mgr.calc_custom_exits(pair_arr, strategy)
                         edit_triggers.extend(cur_edits)
                         ext_tags.update(exts)
@@ -96,7 +96,7 @@ class Trader:
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
-        if not BotGlobal.is_wramup:
+        if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
             self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags, edit_tgs)
         return enter_list, exit_list, ext_tags
