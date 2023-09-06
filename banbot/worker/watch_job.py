@@ -81,7 +81,7 @@ async def run_on_bar(state: WatchState):
         for i in range(len(ohlcvs)):
             ohlcv_arr = append_new_bar(ohlcvs[i], tf_msecs // 1000)
             [stg.on_bar(ohlcv_arr) for stg in state.stgs]
-        state.end_ms = ohlcvs[-1][0] + tf_msecs
+        state.end_ms = bar_time.get()[1]
         BotGlobal.is_warmup = False
 
 

@@ -91,5 +91,7 @@ class Notify(metaclass=Singleton):
 
     @classmethod
     async def send_async(cls, msg: Dict[str, Any]):
-        assert cls.instance, 'RPC is not initialized'
+        if not cls.instance:
+            from banbot.config import AppConfig
+            Notify(AppConfig.get())
         await cls.instance.send_msg(msg)
