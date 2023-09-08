@@ -650,7 +650,7 @@ class CryptoExchange:
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单
         from banbot.storage import InOutOrder, db, InOutStatus
-        op_ods = InOutOrder.open_orders()
+        op_ods = InOutOrder.open_orders(pairs=symbols)
         open_pairs = set()
         if op_ods:
             sess = db.session

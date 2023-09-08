@@ -63,17 +63,20 @@ class LiveTrader(Trader):
             BotTask.init()
             sync_timeframes()
             await ExSymbol.fill_list_dts()
-            await self.pair_mgr.refresh_pairlist()
-            await self.wallets.init(self.pair_mgr.symbols)
-            await self.exchange.init(self.pair_mgr.symbols)
-            pair_tfs = self._load_strategies(self.pair_mgr.symbols, self.pair_mgr.pair_tfscores)
-            old_num, new_num, del_num = await self.order_mgr.init_pairs(self.pair_mgr.symbols)
+            # 先更新所有未平仓订单的状态
+            old_num, new_num, del_num, open_ods = await self.order_mgr.sync_orders_with_exg()
+            add_pairs = {od.symbol for od in open_ods}
+            await self.pair_mgr.refresh_pairlist(add_pairs)
+            cur_pairs = self.pair_mgr.symbols
+            await self.wallets.init(cur_pairs)
+            await self.exchange.init(cur_pairs)
+            pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         await self.rpc.startup_messages()
         await self.rpc.send_msg(dict(
             type=NotifyType.STATUS,
-            status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}'
+            status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}，已开启{len(open_ods)}单'
         ))
 
     async def run(self):
@@ -129,7 +132,9 @@ class LiveTrader(Trader):
         if del_symbols:
             logger.info(f"remove symbols: {del_symbols}")
             await self.exchange.cancel_open_orders(del_symbols)
-            self.order_mgr.exit_open_orders(dict(tag='pair_del'), pairs=del_symbols, od_dir='both')
+            ext_dic = dict(tag=ExitTags.pair_del)
+            exit_ods = self.order_mgr.exit_open_orders(ext_dic, pairs=del_symbols, od_dir='both', is_force=True)
+            logger.info(f'exit orders: {exit_ods}')
             await self.data_mgr.unsub_pairs(del_symbols)
         # 处理新增的交易对
         add_symbols = list(set(now_symbols).difference(old_symbols))

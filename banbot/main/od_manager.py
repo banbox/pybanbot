@@ -508,8 +508,9 @@ class LiveOrderManager(OrderManager):
         if self.market_type == 'future' and self.od_type == 'limit':
             raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
 
-    async def init_pairs(self, symbols: List[str]):
+    async def sync_orders_with_exg(self):
         '''
+        将交易所最新状态本地订单和进行
         先通过fetch_account_positions抓取交易所所有币的仓位情况。
         如果本地没有未平仓订单：
             如果交易所没有持仓：忽略
@@ -519,15 +520,17 @@ class LiveOrderManager(OrderManager):
              从交易所订单记录来确定未平仓订单的当前状态：已平仓、部分平仓、未平仓
              对于冗余的仓位，视为用户开的新订单，创建新订单跟踪。
         '''
-        positions = await self.exchange.fetch_account_positions(symbols)
+        positions = await self.exchange.fetch_account_positions()
         positions = [p for p in positions if p['notional']]
+        cur_symbols = {p['symbol'] for p in positions}
         op_ods = InOutOrder.open_orders()
         if not op_ods:
             since_ms = 0
         else:
             since_ms = max([od.enter_at for od in op_ods])
+            cur_symbols.update({od.symbol for od in op_ods})
         res_odlist = set()
-        for pair in symbols:
+        for pair in cur_symbols:
             cur_ods = [od for od in op_ods if od.symbol == pair]
             cur_pos = [p for p in positions if p['symbol'] == pair]
             if not cur_pos and not cur_ods:
@@ -543,7 +546,7 @@ class LiveOrderManager(OrderManager):
             logger.info(f'恢复{len(old_ods)}个未平仓订单：{old_ods}')
         if new_ods:
             logger.info(f'开始跟踪{len(new_ods)}个用户下单：{new_ods}')
-        return len(old_ods), len(new_ods), len(del_ods)
+        return len(old_ods), len(new_ods), len(del_ods), list(res_odlist)
 
     async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict,
                                 op_ods: List[InOutOrder], since_ms: int):
@@ -566,10 +569,13 @@ class LiveOrderManager(OrderManager):
             # 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
             ex_orders = await self.exchange.fetch_orders(pair, since_ms)
             for exod in ex_orders:
-                client_id: str = exod['clientOrderId']
-                if client_id.startswith(BotGlobal.bot_name) or exod['status'] != 'closed':
-                    # 跳过当前机器人的订单，跳过未完成的订单
+                if exod['status'] != 'closed':
+                    # 跳过未完成的订单
                     continue
+                client_id: str = exod['clientOrderId']
+                if client_id.startswith(BotGlobal.bot_name):
+                    # 这里不应该有当前机器人的订单，除非是两个同名的机器人交易同一个账户
+                    logger.error(f'unexpect order for bot: {BotGlobal.bot_name}: {exod}')
                 self._apply_history_order(op_ods, exod)
             # 当前op_ods剩余的必定是开仓的，保存状态并跟踪
             for iod in op_ods:

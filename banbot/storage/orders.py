@@ -34,10 +34,15 @@ class EnterTags:
 
 class ExitTags:
     bot_stop = 'bot_stop'
+    '机器人停止强制平仓（回测）'
     force_exit = 'force_exit'
+    '发生错误时强制平仓'
     user_exit = 'user_exit'
+    '用户主动平仓'
     fatal_err = 'fatal_err'
     '退出时交易所返回错误，无法追踪订单状态'
+    pair_del = 'pair_del'
+    '交易对删除时平仓'
 
 
 class Order(BaseDbModel):

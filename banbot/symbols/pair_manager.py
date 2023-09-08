@@ -43,7 +43,7 @@ class PairManager:
     def symbols(self):
         return self._whitelist
 
-    async def refresh_pairlist(self):
+    async def refresh_pairlist(self, add_pairs: Iterable[str] = None):
         if self.config.get('pairs'):
             # 回测模式传入pairs
             pairlist = self.config['pairs']
@@ -59,6 +59,11 @@ class PairManager:
             for handler in self.handlers[1:]:
                 pairlist = await handler.filter_pairlist(pairlist, tickers)
                 logger.info(f'left {len(pairlist)} symbols after {handler.name}')
+
+        if add_pairs:
+            new_pairs = set(add_pairs).difference(pairlist)
+            if new_pairs:
+                pairlist.extend(new_pairs)
 
         # 计算交易对各维度K线质量分数
         back_num = 300
