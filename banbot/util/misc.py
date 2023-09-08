@@ -53,7 +53,7 @@ def hash_data(data, method=None):
     return file_hash.hexdigest()
 
 
-async def run_async(func, timeout=0, *args, **kwargs):
+async def run_async(func, *args, timeout=0, **kwargs):
     if asyncio.iscoroutinefunction(func):
         if not timeout:
             return await func(*args, **kwargs)
