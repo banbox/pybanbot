@@ -553,19 +553,7 @@ class LiveOrderManager(OrderManager):
         '''
         对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
         '''
-        if not op_ods:
-            # 本地没有未平仓订单，直接从仓位创建跟踪
-            if not self.take_over_stgy:
-                return
-            if long_pos:
-                long_od = self._create_order_from_position(long_pos)
-                if long_od:
-                    long_od.save()
-            if short_pos:
-                short_od = self._create_order_from_position(short_pos)
-                if short_od:
-                    short_od.save()
-        else:
+        if op_ods:
             # 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
             ex_orders = await self.exchange.fetch_orders(pair, since_ms)
             for exod in ex_orders:
@@ -577,9 +565,48 @@ class LiveOrderManager(OrderManager):
                     # 这里不应该有当前机器人的订单，除非是两个同名的机器人交易同一个账户
                     logger.error(f'unexpect order for bot: {BotGlobal.bot_name}: {exod}')
                 self._apply_history_order(op_ods, exod)
-            # 当前op_ods剩余的必定是开仓的，保存状态并跟踪
+            long_pos_amt = long_pos['contracts'] if long_pos else 0.
+            short_pos_amt = short_pos['contracts'] if short_pos else 0.
+            # 检查剩余的打开订单是否和仓位匹配，如不匹配强制关闭对应的订单
+            del_ods = []
             for iod in op_ods:
-                iod.save()
+                od_amt = iod.enter.filled - (iod.exit.filled if iod.exit else 0)
+                if od_amt * iod.init_price < 1:
+                    # TODO: 这里计算的quote价值，后续需要改为法币价值
+                    if iod.status < InOutStatus.FullExit:
+                        msg = '订单没有入场仓位'
+                        iod.local_exit(ExitTags.fatal_err, iod.init_price, status_msg=msg)
+                    del_ods.append(iod)
+                    continue
+                pos_amt = short_pos_amt if iod.short else long_pos_amt
+                pos_amt -= od_amt
+                if iod.short:
+                    short_pos_amt = pos_amt
+                else:
+                    long_pos_amt = pos_amt
+                if pos_amt > od_amt * -0.01:
+                    iod.save()
+                else:
+                    msg = f'订单在交易所没有对应仓位，交易所：{(pos_amt + od_amt):.5f}'
+                    iod.local_exit(ExitTags.fatal_err, iod.init_price, status_msg=msg)
+                    del_ods.append(iod)
+            [op_ods.remove(od) for od in del_ods]
+            if long_pos:
+                long_pos['contracts'] = long_pos_amt
+            if short_pos:
+                short_pos['contracts'] = short_pos_amt
+        if not self.take_over_stgy:
+            return
+        if long_pos and long_pos['contracts'] > min_dust:
+            long_od = self._create_order_from_position(long_pos)
+            if long_od:
+                long_od.save()
+                op_ods.append(long_od)
+        if short_pos and short_pos['contracts'] > min_dust:
+            short_od = self._create_order_from_position(short_pos)
+            if short_od:
+                short_od.save()
+                op_ods.append(short_od)
 
     def _create_order_from_position(self, pos: dict):
         '''
