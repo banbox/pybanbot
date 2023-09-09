@@ -74,6 +74,9 @@ def to_utcstamp(dt, ms=False, cut_int=False) -> Union[int, float]:
         if dt.tzinfo != datetime.timezone.utc:
             dt = dt.replace(tzinfo=datetime.timezone.utc)
         stamp = dt.timestamp()
+    elif isinstance(dt, datetime.date):
+        dt = datetime.datetime.combine(dt, datetime.datetime.min.time()).replace(tzinfo=datetime.timezone.utc)
+        stamp = dt.timestamp()
     elif isinstance(dt, (int, float)):
         stamp = dt
     else:

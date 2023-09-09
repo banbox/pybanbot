@@ -3,8 +3,9 @@
 # File  : types.py
 # Author: anyongjin
 # Date  : 2023/4/18
-from typing import Dict, Optional, TypedDict, List
+from typing import Dict, Optional, List
 from dataclasses import dataclass
+from typing_extensions import TypedDict
 
 
 class Ticker(TypedDict):
@@ -44,3 +45,15 @@ class LeverageTiers:
             self.max_leverage = int(max([t.maxLeverage for t in self.tiers]))
         self.leverage = 0
 
+
+class TradeModeType(TypedDict):
+    trading_mode: str
+    margin_mode: str
+
+
+class ValidExchangesType(TypedDict):
+    name: str
+    valid: bool
+    supported: bool
+    comment: str
+    trade_modes: List[TradeModeType]

@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/1
 
-from banbot.rpc.rpc import *
+from banbot.rpc.webhook import *
 from banbot.util import btime
 from banbot.util.common import Singleton
 
@@ -15,8 +15,7 @@ class Notify(metaclass=Singleton):
     def __init__(self, config: Config):
         Notify.instance = self
         self.config = config
-        self._rpc = RPC(config)
-        self.channels: List[RPCHandler] = []
+        self.channels: List[Webhook] = []
         self.name = config.get('name', '')
         chl_items = config.get('rpc_channels') or dict()
         for key, item in chl_items.items():
@@ -26,7 +25,7 @@ class Notify(metaclass=Singleton):
             try:
                 if chl_type == 'wework':
                     from banbot.rpc.wework import WeWork
-                    self.channels.append(WeWork(self._rpc, config, item))
+                    self.channels.append(WeWork(config, item))
                 else:
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
             except Exception:

@@ -70,6 +70,8 @@ class IResolver:
         for (name, cld_cls) in clsmembers:
             if not issubclass(cld_cls, cls.object_type) or name == cls.object_type_str:
                 continue
+            if hasattr(cld_cls, '__source__'):
+                setattr(cld_cls, '__source__', inspect.getsource(module))
             result.append(cld_cls)
         return result
 

@@ -11,6 +11,7 @@ prefire: false  # 是否在bar即将完成时，提前10%时间触发
 refill_margin: true  # 交易合约时，如保证金不足是否自动从余额扣除填补
 take_over_stgy: null  # 接管非当前机器人的下单的策略
 stake_amount: 15  # 单笔订单默认本金
+max_open_orders: 100  # 最大开单数量，默认100
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000
 stake_currency: [USDT, TUSD]  # 限定只交易定价币为这些的交易对
@@ -94,6 +95,16 @@ database:  # 数据库配置
   retention: all
   url: postgresql://postgres:123@[127.0.0.1]:5432/bantd
 redis_url: redis://127.0.0.1:6379/0
+api_server:  # 启用此项后，可通过rest api访问和控制机器人；尽量不要暴露到公网
+  enabled: false
+  listen_ip_address: "127.0.0.1"  # 绑定地址，0.0.0.0表示暴露到公网
+  listen_port: 8080  # 本地监听端口
+  verbosity: "error"
+  enable_openapi: false  # 是否将所有url接口文档提供到"/docs"
+  jwt_secret_key: "somethingrandom"  # 用于密码加密的密钥
+  CORS_origins: [ ]  # banweb访问时，需要这里添加banweb的地址放行
+  username: "banuser"
+  password: "SuperSecurePassword"
 rpc_channels:  # 支持的全部rpc渠道
   wx_bot:  # rpc的渠道名
     agentid: '1000004'

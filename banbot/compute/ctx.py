@@ -100,9 +100,13 @@ class TempContext:
         self.back_symbol = None
 
     def __enter__(self):
-        self.back_symbol = symbol_tf.get()
+        try:
+            cur_val = symbol_tf.get()
+        except LookupError:
+            cur_val = None
+        self.back_symbol = cur_val
         if self.back_symbol != self.pair_tf:
-            self.back_symbol = symbol_tf.get()
+            self.back_symbol = cur_val
             self.is_locked = True
             set_context(self.pair_tf)
 

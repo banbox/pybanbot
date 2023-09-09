@@ -7,6 +7,8 @@ from banbot.symbols.pairlist.base import *
 
 
 class ProducerPairList(PairList):
+    is_generator = True
+
     '''
     接收外部传入的交易对。用于分布式机器人。
     Usage:

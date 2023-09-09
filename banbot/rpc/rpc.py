@@ -3,13 +3,22 @@
 # File  : rpc.py
 # Author: anyongjin
 # Date  : 2023/4/1
-from abc import abstractmethod
-from enum import Enum
-from typing import *
+import asyncio
+import time
 
-from banbot.config import Config
+import psutil
+from datetime import datetime, timedelta, timezone, date
+from dateutil.relativedelta import relativedelta
+from dateutil.tz import tzlocal
 from banbot.storage.common import *
-from banbot.util.common import *
+from banbot.config.consts import *
+from banbot.storage import db, sa, InOutOrder, InOutStatus, get_db_orders, BotTask, get_order_filters
+from banbot.data.metrics import *
+from banbot.util import btime
+from banbot.main.addons import MarketPrice
+from banbot.compute import get_context
+from banbot.util.common import bufferHandler
+from banbot.config import AppConfig
 
 
 class RPCException(Exception):
@@ -27,40 +36,13 @@ class RPCException(Exception):
         }
 
 
-class RPCHandler:
-
-    def __init__(self, rpc: 'RPC', config: Config, item: dict) -> None:
-        """
-        Initializes RPCHandlers
-        :param rpc: instance of RPC Helper class
-        :param config: Configuration object
-        :return: None
-        """
-        self._rpc = rpc
-        self._config: Config = config
-        self._params = item
-        self.msg_types = set(item.get('msg_types') or [])
-        if not self.msg_types:
-            logger.error(f'no msg type configured for {item}')
-
-    @property
-    def name(self) -> str:
-        """ Returns the lowercase name of the implementation """
-        return self.__class__.__name__.lower()
-
-    @abstractmethod
-    async def cleanup(self) -> None:
-        """ Cleanup pending module resources """
-
-    @abstractmethod
-    async def send_msg(self, msg: Dict[str, str]) -> None:
-        """ Sends a message to all registered rpc modules """
-
-
 class RPC:
 
-    def __init__(self, config: Config):
-        self._config = config
+    def __init__(self, bot):
+        # 这里不导入LiveTrader类型提示，会导致循环引用
+        self.bot = bot
+        self._config = bot.config
+        self._wallet = bot.wallets
 
     def _rpc_start(self) -> Dict[str, str]:
         """ Handler for start """
@@ -78,96 +60,459 @@ class RPC:
 
         return {'status': 'already stopped'}
 
+    def balance(self, stake_currency: str, fiat_display_currency: str) -> Dict:
+        """ Returns current account balance per crypto """
+        currencies: List[Dict] = []
+        total = 0.0
 
-class NotifyType:
-    STATUS = 'status'
-    WARNING = 'warning'
-    EXCEPTION = 'exception'
-    STARTUP = 'startup'
+        for coin, balance in self.bot.wallets.data.items():
+            cur_total = balance.total
+            if not cur_total:
+                continue
+            total += cur_total
+            currencies.append({
+                'currency': coin,
+                'free': balance.available,
+                'balance': cur_total,
+                'used': cur_total - balance.available,
+                'stake': stake_currency,
+                'side': 'long',
+                'leverage': 1,
+                'position': 0,
+                'is_position': False,
+            })
 
-    ENTRY = 'entry'
-    ENTRY_FILL = 'entry_fill'
-    ENTRY_CANCEL = 'entry_cancel'
+        return {
+            'currencies': currencies,
+            'total': total,
+            'symbol': fiat_display_currency,
+            'stake': stake_currency,
+        }
 
-    EXIT = 'exit'
-    EXIT_FILL = 'exit_fill'
-    EXIT_CANCEL = 'exit_cancel'
+    def open_num(self):
+        open_ods = InOutOrder.open_orders()
+        return dict(
+            current=len(open_ods),
+            max=self.bot.order_mgr.max_open_orders,
+            total_stake=sum(od.enter_cost for od in open_ods)
+        )
 
-    PROTECTION_TRIGGER = 'protection_trigger'
-    PROTECTION_TRIGGER_GLOBAL = 'protection_trigger_global'
+    def performance(self):
+        return InOutOrder.get_overall_performance()
 
-    STRATEGY_MSG = 'strategy_msg'
+    def trade_statistics(self, stake_currency: str):
+        orders = InOutOrder.get_orders()
 
-    WHITELIST = 'whitelist'
-    NEW_CANDLE = 'new_candle'
+        profit_all = []
+        day_ts = []
+        profit_closed = []
+        durations = []
+        winning_trades = 0
+        losing_trades = 0
+        winning_profit = 0.0
+        losing_profit = 0.0
+        best_pair, best_rate = None, 0
+        total_cost = 0
 
-    MARKET_TIP = 'market_tip'
+        for od in orders:
+            if od.exit_at:
+                durations.append((od.exit_at - od.enter_at) / 1000)
+            profit_val = od.profit or 0.0
+            profit_pct = od.profit_rate or 0.0
+            if profit_val > best_rate:
+                best_pair, best_rate = od.symbol, profit_pct
+            if od.status < InOutStatus.FullExit:
+                if profit_val >= 0:
+                    winning_trades += 1
+                    winning_profit += profit_val
+                else:
+                    losing_trades += 1
+                    losing_profit -= profit_val
+            else:
+                profit_closed.append(profit_val)
+            profit_all.append(profit_val)
+            day_ts.append(od.exit_at // 1000 // secs_day)
+            total_cost += od.enter_cost_real
 
+        closed_num = len(profit_closed)
+        profit_closed_sum = sum(profit_closed) if closed_num else 0.
+        profit_closed_mean = float(profit_closed_sum / closed_num) if closed_num else 0.
 
-def map_msg_type(msg_type: str):
-    if msg_type in (NotifyType.STATUS, NotifyType.STARTUP):
-        return 'status'
-    return msg_type
+        all_num = len(profit_all)
+        profit_all_sum = sum(profit_all) if all_num else 0.
+        profit_all_mean = float(profit_all_sum / all_num) if all_num else 0.
 
+        # 计算初始余额
+        init_balance = self._wallet.fiat_value() - profit_all_sum
+        trading_volume = sum(od.enter_cost for od in orders)
 
-class Webhook(RPCHandler):
-    """  This class handles all webhook communication """
+        profit_factor = winning_profit / abs(losing_profit) if losing_profit else float('inf')
+        winrate = (winning_trades / closed_num) if closed_num > 0 else 0
 
-    def __init__(self, rpc: RPC, config: Config, item: dict) -> None:
+        # 按天分组得到每日利润
+        zip_profits = list(zip(day_ts, profit_all))
+        from banbot.util.misc import groupby
+        profit_gps = groupby(zip_profits, lambda x: x[0])
+        day_profits = [(key, sum(v[1] for v in items)) for key, items in profit_gps.items()]
+        if not day_profits:
+            day_ts, day_profit_vals = [], []
+        else:
+            day_ts, day_profit_vals = list(zip(*day_profits))
+
+        # 计算每日利润的期望
+        expectancy, expectancy_ratio = calc_expectancy(day_profit_vals)
+        # 按天计算最大回撤
+        abs_max_drawdown, _, _, _, _, max_drawdown = calc_max_drawdown(day_profit_vals, init_balance)
+
+        first_ms = orders[0].enter_at if orders else None
+        last_ms = orders[-1].enter_at if orders else None
+        num = float(len(durations) or 1)
+        return {
+            'profit_closed_percent_mean': round(profit_closed_mean * 100, 2),
+            'profit_closed_ratio_mean': profit_closed_mean,
+            'profit_closed_percent_sum': round(profit_closed_sum * 100, 2),
+            'profit_closed_ratio_sum': profit_closed_sum,
+            'profit_all_percent_mean': round(profit_all_mean * 100, 2),
+            'profit_all_ratio_mean': profit_all_mean,
+            'profit_all_percent_sum': round(profit_all_sum * 100, 2),
+            'profit_all_ratio_sum': profit_all_sum,
+            'trade_count': len(orders),
+            'closed_trade_count': closed_num,
+            'first_trade_date': btime.to_datestr(first_ms),
+            'first_trade_timestamp': first_ms,
+            'latest_trade_date': btime.to_datestr(last_ms),
+            'latest_trade_timestamp': last_ms,
+            'avg_duration': str(timedelta(seconds=sum(durations) / num)).split('.')[0],
+            'best_pair': best_pair,
+            'best_pair_profit_ratio': best_rate,
+            'winning_trades': winning_trades,
+            'losing_trades': losing_trades,
+            'profit_factor': profit_factor,
+            'winrate': winrate,
+            'expectancy': expectancy,
+            'expectancy_ratio': expectancy_ratio,
+            'max_drawdown': max_drawdown,
+            'max_drawdown_abs': abs_max_drawdown,
+            'trading_volume': trading_volume,
+            'bot_start_timestamp': BotGlobal.start_at,
+            'bot_start_date': btime.to_datestr(BotGlobal.start_at)
+        }
+
+    def stats(self) -> Dict[str, Any]:
+        orders = InOutOrder.his_orders()
+        # Duration
+        dur: Dict[str, List[float]] = {'wins': [], 'draws': [], 'losses': []}
+        # Exit reason
+        exit_reasons = {}
+        for od in orders:
+            if od.exit_tag not in exit_reasons:
+                exit_reasons[od.exit_tag] = {'wins': 0, 'losses': 0, 'draws': 0}
+            od_sta = 'wins' if od.profit > 0 else ('losses' if od.profit < 0 else 'draws')
+            exit_reasons[od.exit_tag][od_sta] += 1
+
+            dur[od_sta].append((od.exit_at - od.enter_at) / 1000)
+
+        wins_dur = sum(dur['wins']) / len(dur['wins']) if len(dur['wins']) > 0 else None
+        draws_dur = sum(dur['draws']) / len(dur['draws']) if len(dur['draws']) > 0 else None
+        losses_dur = sum(dur['losses']) / len(dur['losses']) if len(dur['losses']) > 0 else None
+
+        durations = {'wins': wins_dur, 'draws': draws_dur, 'losses': losses_dur}
+        return {'exit_reasons': exit_reasons, 'durations': durations}
+
+    def timeunit_profit(self, timescale: int, stake_currency: List[str], timeunit: str = 'days') -> Dict[str, Any]:
+        start_date = datetime.now(timezone.utc).date()
+        if timeunit == 'weeks':
+            # weekly
+            start_date = start_date - timedelta(days=start_date.weekday())  # Monday
+        if timeunit == 'months':
+            start_date = start_date.replace(day=1)
+
+        def time_offset(step: int):
+            if timeunit == 'months':
+                return relativedelta(months=step)
+            return timedelta(**{timeunit: step})
+
+        if not (isinstance(timescale, int) and timescale > 0):
+            raise RPCException('timescale must be an integer greater than 0')
+
+        profit_units: Dict[date, Dict] = {}
+        daily_stake = self._wallet.fiat_value()
+
+        his_ods = InOutOrder.his_orders()
+        for day in range(0, timescale):
+            profitday = start_date - time_offset(day)
+            stop_date = profitday + time_offset(1)
+            start_ms = btime.to_utcstamp(profitday, ms=True)
+            stop_ms = btime.to_utcstamp(stop_date, ms=True)
+            cur_profits = [od.profit for od in his_ods if start_ms <= od.enter_at <= stop_ms]
+
+            curdayprofit = sum(cur_profits)
+            # Calculate this periods starting balance
+            daily_stake -= curdayprofit
+            profit_units[profitday] = {
+                'amount': curdayprofit,
+                'daily_stake': daily_stake,
+                'rel_profit': round(curdayprofit / daily_stake, 8) if daily_stake > 0 else 0,
+                'trades': len(cur_profits),
+            }
+
+        data = [
+            {
+                'date': key,
+                'abs_profit': value["amount"],
+                'starting_balance': value["daily_stake"],
+                'rel_profit': value["rel_profit"],
+                'trade_count': value["trades"],
+            }
+            for key, value in profit_units.items()
+        ]
+        return {
+            'stake_currency': stake_currency,
+            'data': data
+        }
+
+    def trade_status(self, trade_ids: List[int] = None) -> List[Dict[str, Any]]:
         """
-        Init the Webhook class, and init the super class RPCHandler
-        :param rpc: instance of RPC Helper class
-        :param config: Configuration object
-        :return: None
+        Below follows the RPC backend it is prefixed with rpc_ to raise awareness that it is
+        a remotely exposed function
         """
-        super().__init__(rpc, config, item)
+        # Fetch open trades
+        if trade_ids:
+            orders = get_db_orders(BotTask.cur_id, filters=[InOutOrder.id.in_(trade_ids)])
+        else:
+            orders = InOutOrder.open_orders()
 
-        self._url = self._config['webhook'].get('url')
-        self._retries = self._config['webhook'].get('retries', 0)
-        self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
+        if not orders:
+            raise RPCException('no active trade')
+        else:
+            results = []
+            for od in orders:
+                if od.is_open:
+                    cur_price = MarketPrice.get(od.symbol)
+                    od.update_by_price(cur_price)
+                else:
+                    cur_price = od.close_rate
+                od_dict = od.dict()
+                od_dict.update(dict(
+                    close_profit=od.profit_rate if od.exit_at else None,
+                    current_rate=cur_price,
+                ))
+                results.append(od_dict)
+            return results
 
-    async def cleanup(self) -> None:
+    def trade_history(self, limit: int, offset: int = 0, order_by_id: bool = False) -> Dict:
+        """ Returns the X last trades """
+        order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
+        orders = get_db_orders(BotTask.cur_id, limit=limit, offset=offset, order_by=order_by)
+        output = [od.dict() for od in orders]
+
+        sess = db.session
+        fts = get_order_filters(task_id=BotTask.cur_id, status='his')
+        total_trades = sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
+
+        return {
+            "trades": output,
+            "trades_count": len(output),
+            "offset": offset,
+            "total_trades": total_trades,
+        }
+
+    def _force_entry_validations(self, pair: str, order_side: str):
+        if order_side not in {'long', 'short'}:
+            raise RPCException("order_side must be long/short")
+
+        if order_side == 'short' and self._config['market_type'] == 'spot':
+            raise RPCException("Can't go short on Spot markets.")
+
+        if pair not in self.bot.exchange.get_markets(tradable_only=True):
+            raise RPCException('Symbol does not exist or market is not active.')
+        # Check if pair quote currency equals to the stake currency.
+        cur_quote = self.bot.exchange.get_pair_quote_currency(pair)
+        if cur_quote not in self.bot.exchange.quote_symbols:
+            raise RPCException(
+                f'Wrong pair selected. Only pairs with stake-currency {cur_quote} allowed.')
+
+    async def force_entry(self, pair: str, price: Optional[float], *,
+                         order_type: Optional[str] = None,
+                         order_side: Optional[str] = 'long',
+                         stake_amount: Optional[float] = None,
+                         enter_tag: Optional[str] = 'force_entry',
+                         leverage: Optional[float] = None) -> Optional[dict]:
         """
-        Cleanup pending module resources.
-        This will do nothing for webhooks, they will simply not be called anymore
+        Handler for forcebuy <asset> <price>
+        Buys a pair trade at the given or current price
         """
-        pass
+        from banbot.strategy import BaseStrategy  # 放到顶层会导致循环引用
+        from banbot.compute import TempContext
+        self._force_entry_validations(pair, order_side)
 
-    async def send_msg(self, msg: Dict[str, Any]) -> None:
-        """ Send a message to telegram channel """
-        try:
-            msg_type = msg['type']
-            valuedict = self._config['webhook'].get(msg_type)
+        open_ods = InOutOrder.open_orders(pairs=pair)
+        if len(open_ods) >= self.bot.order_mgr.max_open_orders:
+            raise RPCException("Maximum number of trades is reached.")
 
-            if not valuedict:
-                logger.info("Message type '%s' not configured for webhooks", msg['type'])
-                return
+        enter_dic = dict(
+            tag=enter_tag,
+            short=order_side == 'short',
+            leverage=leverage,
+            enter_price=price,
+            enter_order_type=order_type,
+        )
 
-            payload = {key: value.format(**msg) for (key, value) in valuedict.items()}
-            await self._send_msg(payload)
-        except KeyError as exc:
-            logger.exception("Problem calling Webhook. Please check your webhook configuration. "
-                             "Exception: %s", exc)
+        if not stake_amount:
+            stake_amount = BaseStrategy.custom_cost(enter_dic)
+        enter_dic['legal_cost'] = stake_amount
 
-    async def _do_send_msg(self, payload: dict):
-        raise NotImplementedError('_do_send_msg not implemented')
+        # execute buy
+        job = next((p for p in BotGlobal.stg_symbol_tfs if p[1] == pair), None)
+        watch_pairs = {p[1] for p in BotGlobal.stg_symbol_tfs}
+        if not job:
+            raise RPCException(f'{pair} is not managed by bot, valid: {watch_pairs}')
+        timeframe = job[2]
+        pair_tf = f'{self.bot.exchange.name}_{self.bot.exchange.market_type}_{pair}_{timeframe}'
+        with TempContext(pair_tf):
+            ctx = get_context(pair_tf)
+            od = self.bot.order_mgr.enter_order(ctx, job[0], enter_dic)
+            if od:
+                start = time.time()
+                sess = db.session
+                while time.time() - start < 10:
+                    od = InOutOrder.get(sess, od.id)
+                    if not od.enter.order_id and not od.exit_tag and not od.exit:
+                        await asyncio.sleep(1)
+                        continue
+                    break
+                result = od.dict()
+                result['enter'] = od.enter.dict()
+                if od.exit:
+                    result['exit'] = od.exit.dict()
+                return result
+        raise RPCException(f'Failed to enter position for {pair}.')
 
-    async def _send_msg(self, payload: dict) -> None:
-        """do the actual call to the webhook"""
+    def force_exit(self, trade_id: str) -> Dict[str, str]:
+        """
+        Handler for forceexit <id>.
+        Sells the given trade at current price
+        """
+        if trade_id == 'all':
+            open_ods = InOutOrder.open_orders()
+            for od in open_ods:
+                od.force_exit()
+            return {'result': 'Created exit orders for all open trades.'}
 
-        success = False
-        attempts = 0
-        while not success and attempts <= self._retries:
-            if attempts:
-                if self._retry_delay:
-                    await asyncio.sleep(self._retry_delay)
-                logger.info("Retrying webhook...")
+        od = get_db_orders(BotTask.cur_id, filters=[InOutOrder.id == int(trade_id)])
+        if not od:
+            raise RPCException('invalid argument')
+        od[0].force_exit()
+        return {'result': f'Created exit order for trade {trade_id}.'}
 
-            attempts += 1
+    def blacklist(self, add: Optional[List[str]] = None) -> Dict:
+        """ Returns the currently active blacklist"""
+        errors = {}
+        if add:
+            valid_keys = set(self.bot.exchange.get_markets().keys())
+            old_list = set(self.bot.pair_mgr.blacklist)
+            for pair in add:
+                if pair not in valid_keys:
+                    errors[pair] = f'Pair {pair} is not a valid symbol.'
+                    continue
+                if pair in old_list:
+                    self.bot.pair_mgr.blacklist.append(pair)
+                else:
+                    errors[pair] = f'Pair {pair} already in pairlist.'
 
-            try:
-                await self._do_send_msg(payload)
-                success = True
+        res = {'method': self.bot.pair_mgr.name_list,
+               'length': len(self.bot.pair_mgr.blacklist),
+               'blacklist': self.bot.pair_mgr.blacklist,
+               'errors': errors}
+        return res
 
-            except Exception as exc:
-                logger.warning("Could not call webhook url. Exception: %s", exc)
+    def blacklist_delete(self, delete: List[str]) -> Dict:
+        """ Removes pairs from currently active blacklist """
+        errors = {}
+        old_list = set(self.bot.pair_mgr.blacklist)
+        for pair in delete:
+            if pair in old_list:
+                self.bot.pair_mgr.blacklist.remove(pair)
+            else:
+                errors[pair] = {
+                    'error_msg': f"Pair {pair} is not in the current blacklist."
+                }
+        resp = self.blacklist()
+        resp['errors'] = errors
+        return resp
+
+    def whitelist(self) -> Dict:
+        """ Returns the currently active whitelist"""
+        res = {'method': self.bot.pair_mgr.name_list,
+               'length': len(self.bot.pair_mgr.whitelist),
+               'whitelist': self.bot.pair_mgr.whitelist
+               }
+        return res
+
+    @staticmethod
+    def get_logs(limit: Optional[int]) -> Dict[str, Any]:
+        """Returns the last X logs"""
+        if limit:
+            buffer = bufferHandler.buffer[-limit:]
+        else:
+            buffer = bufferHandler.buffer
+        records = [[btime.to_datestr(r.created),
+                   r.created * 1000, r.name, r.levelname,
+                   r.message + ('\n' + r.exc_text if r.exc_text else '')]
+                   for r in buffer]
+
+        # Log format:
+        # [logtime-formatted, logepoch, logger-name, loglevel, message \n + exception]
+        # e.g. ["2020-08-27 11:35:01", 1598520901097.9397,
+        #       "freqtrade.worker", "INFO", "Starting worker develop"]
+
+        return {'log_count': len(records), 'logs': records}
+
+    def stopentry(self) -> Dict[str, str]:
+        """
+        Handler to stop buying, but handle open trades gracefully.
+        """
+        # Set 'max_open_trades' to 0
+        self._config['max_open_trades'] = 0
+        self.bot.order_mgr.max_open_orders = 0
+
+        return {'status': 'No more entries will occur from now. Run /reload_config to reset.'}
+
+    def reload_config(self) -> Dict[str, str]:
+        """ Handler for reload_config. """
+        if AppConfig.obj:
+            AppConfig.obj.config = None
+        config = AppConfig.get()
+        self._config = config
+        self.bot.config = config
+        # TODO: 这里应该给这些组件实现reload_config方法
+        self.bot.order_mgr.config = config
+        self.bot.wallets.config = config
+        self.bot.pair_mgr.config = config
+        self.bot.exchange.config = config
+        self.bot.data_mgr.config = config
+        return {'status': 'Reloading config ...'}
+
+    def health(self) -> Dict[str, Optional[Union[str, int]]]:
+        last_p = self.bot.last_process
+        if last_p is None:
+            return {
+                "last_process": None,
+                "last_process_loc": None,
+                "last_process_ts": None,
+            }
+        dt_obj = btime.to_datetime(last_p)
+        last_dt = btime.to_datestr(dt_obj)
+        last_dt_loc = btime.to_datestr(dt_obj.astimezone(tzlocal()))
+        return {
+            "last_process": last_dt,
+            "last_process_loc": last_dt_loc,
+            "last_process_ts": last_p,
+        }
+
+    @staticmethod
+    def sysinfo() -> Dict[str, Any]:
+        return {
+            "cpu_pct": psutil.cpu_percent(interval=1, percpu=True),
+            "ram_pct": psutil.virtual_memory().percent
+        }

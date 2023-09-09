@@ -11,6 +11,8 @@ import orjson
 import six
 import os
 from ccxt import TICK_SIZE
+from asyncio import Lock
+from cachetools import TTLCache
 
 from banbot.config.appconfig import AppConfig
 from banbot.util.misc import *
@@ -19,7 +21,7 @@ from banbot.config.consts import *
 from banbot.exchange.exchange_utils import *
 from banbot.main.addons import MarketPrice
 from banbot.exchange.ccxt_exts import get_pro_overrides, get_asy_overrides
-from banbot.exchange.types import *
+from banbot.types import *
 
 _market_keys = ['markets_by_id', 'markets', 'symbols', 'ids', 'currencies', 'baseCurrencies',
                 'quoteCurrencies', 'currencies_by_id', 'codes']
@@ -243,6 +245,10 @@ class CryptoExchange:
         self.markets_at = btime.utctime() - 7200
         self.market_dir = os.path.join(config['data_dir'], 'exg_markets')
         self.pair_fee_limits = self.exg_config.get('pair_fee_limits') or dict()
+        # Cache for 10 minutes ...
+        self._cache_lock = Lock()
+        self._fetch_tickers_cache: TTLCache = TTLCache(maxsize=2, ttl=60 * 10)
+
         self.conti_error = 0
         if not os.path.isdir(self.market_dir):
             os.mkdir(self.market_dir)
@@ -284,6 +290,15 @@ class CryptoExchange:
         传入BTCUSDT，不带/
         '''
         return self.api.market(symbol_id)
+
+    def exchange_has(self, endpoint: str) -> bool:
+        """
+        Checks if exchange implements a specific API endpoint.
+        Wrapper around ccxt 'has' attribute
+        :param endpoint: Name of endpoint (e.g. 'fetchOHLCV', 'fetchTickers')
+        :return: bool
+        """
+        return endpoint in self.api_async.has and self.api_async.has[endpoint]
 
     async def _check_fee_limits(self):
         exg_fees = await self.api_async.fetch_trading_fees()
@@ -465,10 +480,6 @@ class CryptoExchange:
         return await self.api_async.fetch_ticker(symbol, params)
 
     @net_retry
-    async def fetch_tickers(self, symbols=None, params={}):
-        return await self.api_async.fetch_tickers(symbols, params)
-
-    @net_retry
     async def fetch_ohlcv(self, symbol, timeframe='1m', since=None, limit=None, params=None):
         if params is None:
             params = {}
@@ -583,6 +594,30 @@ class CryptoExchange:
         if not last_finish:
             ohlc_arr = ohlc_arr[:-1]
         return ohlc_arr
+
+    @net_retry
+    async def fetch_tickers(self, symbols: Optional[List[str]] = None, cached: bool = False) -> Tickers:
+        """
+        :param cached: Allow cached result
+        :return: fetch_tickers result
+        """
+        tickers: Tickers
+        if not self.exchange_has('fetchTickers'):
+            return {}
+        if cached:
+            with self._cache_lock:
+                tickers = self._fetch_tickers_cache.get('fetch_tickers')  # type: ignore
+            if tickers:
+                return tickers
+        try:
+            tickers = await self.api_async.fetch_tickers(symbols)
+            with self._cache_lock:
+                self._fetch_tickers_cache['fetch_tickers'] = tickers
+            return tickers
+        except ccxt.NotSupported as e:
+            raise OperateError(
+                f'Exchange {self.api_async.name} does not support fetching tickers in batch. '
+                f'Message: {e}') from e
 
     async def update_prices(self):
         '''

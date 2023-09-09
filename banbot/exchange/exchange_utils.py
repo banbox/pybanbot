@@ -7,16 +7,11 @@ from typing import *
 
 import ccxt
 
+from banbot.config.consts import *
 from banbot.util import btime
 
 _tfsecs_map = dict()
 _secstf_map = dict()
-secs_min = 60
-secs_hour = secs_min * 60
-secs_day = secs_hour * 24
-secs_week = secs_day * 7
-secs_mon = secs_day * 30
-secs_year = secs_day * 365
 
 
 def max_sub_timeframe(timeframes: List[str], current: str, force_sub=False) -> Tuple[str, int]:

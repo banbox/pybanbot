@@ -2,5 +2,4 @@
 # -*- coding: utf-8 -*-
 # File  : __init__.py.py
 # Author: anyongjin
-# Date  : 2023/2/24
-__version__ = '0.1'
+# Date  : 2023/9/6

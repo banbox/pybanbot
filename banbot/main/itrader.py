@@ -22,6 +22,8 @@ class Trader:
         self.data_mgr: DataProvider = None
         self._job: Tuple[str, float, float] = None
         self._run_tasks: List[asyncio.Task] = []
+        self.last_process = 0
+        '上次处理bar的毫秒时间戳，用于判断是否工作正常'
 
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
             -> Dict[str, Dict[str, int]]:
@@ -53,6 +55,7 @@ class Trader:
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
+            self.last_process = btime.utcstamp()
         tf_secs = tf_to_secs(timeframe)
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)

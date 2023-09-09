@@ -3,16 +3,16 @@
 # File  : wework.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import asyncio
 from functools import partial
-
 from corpwechatbot.app import AppMsgSender
 
-from banbot.rpc.rpc import *
+from banbot.rpc.webhook import *
 
 
 class WeWork(Webhook):
-    def __init__(self, rpc: RPC, config: Config, item: dict):
-        super(WeWork, self).__init__(rpc, config, item)
+    def __init__(self, config: Config, item: dict):
+        super(WeWork, self).__init__(config, item)
         import logging
         arg_keys = ['corpid', 'agentid', 'corpsecret']
         arg_dic = {k: v for k, v in item.items() if k in arg_keys}

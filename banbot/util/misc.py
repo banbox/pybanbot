@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-from typing import List, Optional
+from typing import List, Optional, Callable
 _run_env = None
 
 
@@ -130,6 +130,19 @@ def deep_merge_dicts(source, destination, allow_null_overrides: bool = True):
             destination[key] = value
 
     return destination
+
+
+def groupby(data, key: Callable):
+    '''
+    对给定的数据进行分组。
+    返回：[(key1, list1), ...]
+    '''
+    if data is None or not len(data):
+        return dict()
+    from itertools import groupby as gpby
+    data = sorted(data, key=key)
+    gps = gpby(data, key=key)
+    return {key: list(gp) for key, gp in gps}
 
 
 def nearly_group(data, max_pct=0.1, do_sort=True):

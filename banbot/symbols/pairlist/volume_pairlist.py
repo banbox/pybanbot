@@ -13,6 +13,7 @@ SORT_VALUES = ['quoteVolume']
 
 
 class VolumePairList(PairList):
+    is_generator = True
     '''
     交易量倒排产品列表
     '''

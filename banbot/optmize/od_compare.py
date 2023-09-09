@@ -10,7 +10,6 @@ import numpy as np
 from banbot.config import AppConfig
 from banbot.config.consts import *
 from banbot.storage import *
-from banbot.strategy.resolver import StrategyResolver
 from banbot.util.common import logger
 
 
@@ -78,6 +77,7 @@ def compare_task_orders(bt_task_id: int, live_task_ids: List[int]):
 
 
 def compare_orders(task_ids: List[int], task_hash: str):
+    from banbot.strategy.resolver import StrategyResolver
     config = AppConfig.get()
     sess = db.session
     if not task_ids:

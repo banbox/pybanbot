@@ -50,6 +50,7 @@ class OrderManager(metaclass=SingletonArg):
         self.wallets = wallets
         self.data_mgr = data_hd
         self.callback = callback
+        self.max_open_orders = config.get('max_open_orders', 100)
         self.fatal_stop = dict()
         self.last_ts = 0  # 记录上次订单时间戳，方便对比钱包时间戳是否正确
         self._load_fatal_stop()
@@ -110,8 +111,10 @@ class OrderManager(metaclass=SingletonArg):
             enter_ods, exit_ods = [], []
             if enters:
                 if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
-                    for stg_name, sigin in enters:
-                        enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                    open_ods = InOutOrder.open_orders()
+                    if len(open_ods) < self.max_open_orders:
+                        for stg_name, sigin in enters:
+                            enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
                 else:
                     logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
             if exits:
@@ -134,14 +137,12 @@ class OrderManager(metaclass=SingletonArg):
             self._put_order(od, OrderJob.ACT_EDITTG, prefix)
         return enter_ods, exit_ods
 
-    def enter_order(self, ctx: Context, strategy: str, sigin: dict, price: Optional[float] = None,
-                    do_check=True) -> Optional[InOutOrder]:
+    def enter_order(self, ctx: Context, strategy: str, sigin: dict, do_check=True) -> Optional[InOutOrder]:
         '''
         策略产生入场信号，执行入场订单。（目前仅支持做多）
         :param ctx:
         :param strategy:
         :param sigin: tag,short,legal_cost,cost_rate, stoploss_price, takeprofit_price
-        :param price:
         :param do_check: 是否执行入场检查
         :return:
         '''
@@ -171,7 +172,6 @@ class OrderManager(metaclass=SingletonArg):
             sid=exs.id,
             symbol=exs.symbol,
             timeframe=timeframe,
-            enter_price=price,
             enter_tag=tag,
             enter_at=btime.time_ms(),
             init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
@@ -907,7 +907,8 @@ class LiveOrderManager(OrderManager):
         params = dict()
         if self.market_type == 'future':
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
-        order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, price, params)
+        od_type = sub_od.order_type or self.od_type
+        order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)
@@ -1225,8 +1226,9 @@ class LiveOrderManager(OrderManager):
                     if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                         err_msg = str(e)
                         with db():
+                            od = InOutOrder.get(sess, job.od_id)
                             if job.action == OrderJob.ACT_ENTER:
-                                await od.force_exit()
+                                od.force_exit(status_msg=err_msg)
                             else:
                                 # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)

@@ -17,14 +17,16 @@ class PairManager:
     同时计算交易对的最佳交易周期。
     暂时不建议在回测中使用：SpreadFilter
     '''
+    obj: ClassVar['PairManager'] = None
 
     def __init__(self, config: Config, exchange: CryptoExchange):
+        PairManager.obj = self
         self.exchange = exchange
         self.config = config
         self.market_type = config.get('market_type') or 'spot'
         self.stake_currency: Set[str] = set(config.get('stake_currency') or [])
-        self._whitelist = exchange.exg_config.get('pair_whitelist')
-        self._blacklist = exchange.exg_config.get('pair_blacklist', [])
+        self.whitelist: List[str] = exchange.exg_config.get('pair_whitelist')
+        self.blacklist: List[str] = exchange.exg_config.get('pair_blacklist', [])
         self.handlers = PairResolver.load_handlers(exchange, self, config)
         if not self.handlers:
             raise RuntimeError('no pairlist defined')
@@ -41,7 +43,7 @@ class PairManager:
 
     @property
     def symbols(self):
-        return self._whitelist
+        return self.whitelist
 
     async def refresh_pairlist(self, add_pairs: Iterable[str] = None):
         if self.config.get('pairs'):
@@ -71,8 +73,13 @@ class PairManager:
             back_num = self.handlers[0].refresh_secs // 30
         self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist, back_num)
 
-        self._whitelist = pairlist
+        self.whitelist = pairlist
         BotGlobal.pairs = set(pairlist)
+
+    @property
+    def name_list(self) -> List[str]:
+        """Get list of loaded Pairlist Handler names"""
+        return [p.name for p in self.handlers]
 
     @property
     def avaiable_symbols(self) -> Set[str]:
@@ -93,11 +100,11 @@ class PairManager:
             return []
 
     def verify_blacklist(self, pairlist: List[str]) -> List[str]:
-        if not self._blacklist:
+        if not self.blacklist:
             return pairlist
         try:
             all_pairs = list(self.exchange.markets.keys())
-            all_blacks = search_pairlist(self._blacklist, all_pairs)
+            all_blacks = search_pairlist(self.blacklist, all_pairs)
         except ValueError as e:
             logger.error(f'pair list contains invalid wildcard {e}')
             return []

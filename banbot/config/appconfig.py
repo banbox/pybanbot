@@ -3,6 +3,7 @@
 # File  : configuration.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import copy
 import os.path
 import sys
 from pathlib import Path
@@ -203,3 +204,33 @@ class AppConfig(metaclass=Singleton):
         if not result:
             raise ValueError(f'no config.json found in {data_dir}!')
         return result
+
+    @classmethod
+    def get_pub(cls):
+        '''返回配置的公开版本，删除敏感信息。'''
+        config = copy.deepcopy(cls.get())
+        exg_cfg = config.get('exchange')
+        if exg_cfg:
+            for key, item in exg_cfg.items():
+                if not isinstance(item, dict):
+                    continue
+                credit_keys = [k for k in item if k.startswith('credit_')]
+                [item.pop(k) for k in credit_keys]
+        if 'redis_url' in config:
+            del config['redis_url']
+        if 'database' in config:
+            del config['database']
+        if 'timerange' in config:
+            from banbot.config.timerange import TimeRange
+            timerange = config['timerange']
+            if isinstance(timerange, TimeRange):
+                config['timerange'] = timerange.timerange_str
+        chl_cfg = config.get('rpc_channels')
+        if chl_cfg:
+            keep_keys = {'enabled', 'msg_types', 'type'}
+            for key, item in chl_cfg.items():
+                if not isinstance(item, dict):
+                    continue
+                del_keys = [k for k in item if k not in keep_keys]
+                [item.pop(k) for k in del_keys]
+        return config

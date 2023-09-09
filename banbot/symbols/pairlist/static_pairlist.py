@@ -7,6 +7,8 @@ from banbot.symbols.pairlist.base import *
 
 
 class StaticPairList(PairList):
+    is_generator = True
+
     def __init__(self, manager, exchange: CryptoExchange,
                  config: Config, handler_cfg: Dict[str, Any]):
         super(StaticPairList, self).__init__(manager, exchange, config, handler_cfg)

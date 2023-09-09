@@ -16,3 +16,5 @@ tqdm
 tzlocal
 tabulate
 PyYaml
+
+starlette

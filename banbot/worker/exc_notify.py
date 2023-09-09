@@ -45,7 +45,7 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
     发送异常通知给管理员：微信
     不要直接调用此方法。应调用带限流的try_send_exc_notify
     '''
-    from banbot.rpc.notify_mgr import Notify, NotifyType
+    from banbot.rpc import Notify, NotifyType
     if not Notify.instance:
         from banbot.config import AppConfig
         if AppConfig.obj:

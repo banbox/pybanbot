@@ -5,7 +5,7 @@
 # Date  : 2023/2/28
 from banbot.main.itrader import *
 from banbot.main.od_manager import *
-from banbot.rpc.notify_mgr import Notify, NotifyType
+from banbot.rpc import Notify, NotifyType, start_api
 from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
@@ -83,6 +83,8 @@ class LiveTrader(Trader):
         self.start_heartbeat_check(3)
         # 初始化
         await self.init()
+        # 启动restapi
+        start_api(self)
         # 启动异步任务
         await self._start_tasks()
         # 轮训执行任务

@@ -3,12 +3,14 @@
 # File  : utils.py
 # Author: anyongjin
 # Date  : 2023/2/11
-import asyncio
 import collections.abc
 import logging
 import sys
 import threading
 import time
+from logging.handlers import BufferingHandler
+
+LOGFORMAT = '%(asctime)s %(process)d %(levelname)s %(message)s'
 
 
 def bell():
@@ -189,6 +191,25 @@ class StrFormatLogRecord(logging.LogRecord):
         return msg
 
 
+class MyBufferingHandler(BufferingHandler):
+    def flush(self):
+        """
+        Override Flush behaviour - we keep half of the configured capacity
+        otherwise, we have moments with "empty" logs.
+        """
+        self.acquire()
+        try:
+            # Keep half of the records in buffer.
+            self.buffer = self.buffer[-int(self.capacity / 2):]
+        finally:
+            self.release()
+
+
+# Initialize bufferhandler - will be used for /log endpoints
+bufferHandler = MyBufferingHandler(1000)
+bufferHandler.setFormatter(logging.Formatter(LOGFORMAT))
+
+
 class NotifyHandler(logging.Handler):
     '''
     异常发送通知给管理员
@@ -214,7 +235,7 @@ def get_logger(level=logging.INFO):
     if log.hasHandlers():
         return log
     # 定义handler的输出格式
-    formatter = logging.Formatter(fmt='%(asctime)s %(process)d %(levelname)s %(message)s')
+    formatter = logging.Formatter(fmt=LOGFORMAT)
     # 使用UTC时间
     formatter.converter = time.gmtime
     low_handler = logging.StreamHandler(sys.stdout)
@@ -227,6 +248,8 @@ def get_logger(level=logging.INFO):
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(formatter)
     log.addHandler(error_handler)
+
+    log.addHandler(bufferHandler)
 
     return log
 

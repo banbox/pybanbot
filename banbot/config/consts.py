@@ -45,3 +45,9 @@ class BotState(Enum):
         return self.name.lower()
 
 
+secs_min = 60
+secs_hour = secs_min * 60
+secs_day = secs_hour * 24
+secs_week = secs_day * 7
+secs_mon = secs_day * 30
+secs_year = secs_day * 365

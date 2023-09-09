@@ -231,6 +231,16 @@ class InOutOrder(BaseDbModel):
         return self.enter.amount * (self.enter.price or self.init_price)
 
     @property
+    def enter_cost_real(self):
+        '''
+        获取订单真实花费（现货模式等同enter_cost，期货模式下除以leverage）
+        '''
+        cost = self.enter_cost
+        if self.leverage <= 1:
+            return cost
+        return cost / self.leverage
+
+    @property
     def enter_amount(self):
         '''
         获取入场标的的数量
@@ -379,11 +389,13 @@ class InOutOrder(BaseDbModel):
             self.set_info(status_msg=status_msg)
         self.save()
 
-    async def force_exit(self):
+    def force_exit(self, status_msg: str = None):
         '''
         强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
         '''
         from banbot.main.od_manager import LiveOrderManager, LocalOrderManager
+        if status_msg:
+            self.set_info(status_msg=status_msg)
         if self.exit:
             if btime.prod_mode():
                 # 实盘模式，提交到交易所平仓
@@ -410,11 +422,12 @@ class InOutOrder(BaseDbModel):
         return self
 
     @classmethod
-    def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None)\
+    def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+                   close_after: int = None)\
             -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
             from banbot.storage.bot_task import BotTask
-            return get_db_orders(BotTask.cur_id, strategy, pairs, status)
+            return get_db_orders(BotTask.cur_id, strategy, pairs, status, close_after)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -426,6 +439,8 @@ class InOutOrder(BaseDbModel):
                 return candicates
             if strategy:
                 candicates = [od for od in candicates if od.strategy == strategy]
+            if close_after:
+                candicates = [od for od in candicates if od.exit_at > close_after]
             if pairs:
                 if isinstance(pairs, six.string_types):
                     candicates = [od for od in candicates if od.symbol == pairs]
@@ -441,6 +456,28 @@ class InOutOrder(BaseDbModel):
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:
         return cls.get_orders(status='his')
+
+    @classmethod
+    def get_overall_performance(cls, minutes=None) -> List[Dict[str, Any]]:
+        from itertools import groupby
+        close_after = None
+        if minutes:
+            close_after = btime.utcstamp() - minutes * 60000
+        his_ods = cls.get_orders(status='his', close_after=close_after)
+        his_ods = sorted(his_ods, key=lambda x: x.symbol)
+        gps = groupby(his_ods, key=lambda x: x.symbol)
+        result = []
+        for key, gp in gps:
+            gp_items = list(gp)
+            profit_sum = sum(od.profit for od in gp_items)
+            amount_sum = sum(od.enter_cost_real for od in gp_items)
+            result.append(dict(
+                pair=key,
+                profit_ratio=profit_sum,
+                profit_pct=profit_sum / amount_sum,
+                count=len(gp_items)
+            ))
+        return result
 
     @classmethod
     def get(cls, sess: SqlSession, od_id: int):
@@ -480,13 +517,11 @@ class OrderJob:
     data: str = None
 
 
-def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None,
-                  status: str = None) -> List[InOutOrder]:
-    '''
-    此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
-    '''
-    sess = db.session
-    where_list = [InOutOrder.task_id == task_id]
+def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+                      close_after: int = None, filters=None):
+    where_list = []
+    if task_id:
+        where_list.append(InOutOrder.task_id == task_id)
     if status:
         if status == 'his':
             where_list.append(InOutOrder.status == InOutStatus.FullExit)
@@ -494,12 +529,33 @@ def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str
             where_list.append(InOutOrder.status < InOutStatus.FullExit)
     if strategy:
         where_list.append(InOutOrder.strategy == strategy)
+    if close_after:
+        where_list.append(InOutOrder.exit_at > close_after)
     if pairs:
         if isinstance(pairs, six.string_types):
             where_list.append(InOutOrder.symbol == pairs)
         else:
             where_list.append(InOutOrder.symbol.in_(set(pairs)))
-    io_rows = sess.query(InOutOrder).filter(*where_list).all()
+    if filters:
+        where_list.extend(filters)
+    return where_list
+
+
+def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+                  close_after: int = None, filters=None, limit=0, offset=0, order_by=None) -> List[InOutOrder]:
+    '''
+    此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
+    '''
+    sess = db.session
+    where_list = get_order_filters(task_id, strategy, pairs, status, close_after, filters)
+    query = sess.query(InOutOrder).filter(*where_list)
+    if order_by:
+        query = query.order_by(order_by)
+    if offset:
+        query = query.offset(offset)
+    if limit:
+        query = query.limit(limit)
+    io_rows: List[InOutOrder] = query.all()
     io_ids = {row.id for row in io_rows}
     ex_filters = [Order.task_id == task_id, Order.inout_id.in_(io_ids)]
     ex_ods = sess.query(Order).filter(*ex_filters).order_by(Order.inout_id).all()

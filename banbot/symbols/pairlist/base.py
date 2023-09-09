@@ -6,11 +6,12 @@
 from copy import deepcopy
 
 from banbot.data.provider import *
-from banbot.exchange.types import *
+from banbot.types.exg_types import *
 
 
 class PairList:
     need_tickers = False
+    is_generator = False
 
     def __init__(self, manager, exchange: CryptoExchange, config: Config, handler_cfg: Dict[str, Any]):
         self.exchange = exchange

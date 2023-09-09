@@ -351,6 +351,20 @@ class WalletsLocal:
             legal_cost += quote_amount * MarketPrice.get(quote_s)
         return legal_cost
 
+    def fiat_value(self, *symbols):
+        '''
+        返回给定币种的对法币价值。为空时返回所有币种
+        '''
+        if not symbols:
+            symbols = list(self.data.keys())
+        total_val = 0
+        for symbol in symbols:
+            item = self.data.get(symbol)
+            if not item:
+                continue
+            total_val += item.total * MarketPrice.get(symbol)
+        return total_val
+
     def __str__(self):
         from io import StringIO
         builder = StringIO()

@@ -27,7 +27,10 @@ class BaseStrategy:
     stop_loss = 0.05
     skip_exit_on_enter = True
     skip_enter_on_exit = True
+    stake_amount = 0
+    '每笔下单金额基数'
     version = 1
+    __source__: str = ''
 
     def __init__(self, config: dict):
         self.config = config
@@ -35,7 +38,6 @@ class BaseStrategy:
         self._state_fn = dict()
         self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
         self.calc_num = 0
-        self.base_cost = self.config.get('stake_amount', 1000)  # 每笔下单金额基数
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -59,15 +61,6 @@ class BaseStrategy:
         :return: InOutOrder的属性。额外：tag,short,legal_cost,cost_rate, stoploss_price, takeprofit_price
         '''
         pass
-
-    def custom_cost(self, sigin: dict) -> float:
-        '''
-        返回自定义的此次订单花费金额（基于法定币，如USDT、RMB）
-        :param sigin:
-        :return:
-        '''
-        rate = sigin.get('cost_rate', 1)
-        return self.base_cost * rate
 
     def on_exit(self, arr: np.ndarray) -> Optional[dict]:
         '''
@@ -109,6 +102,18 @@ class BaseStrategy:
     @property
     def name(self):
         return self.__class__.__name__
+
+    @classmethod
+    def custom_cost(cls, sigin: dict) -> float:
+        '''
+        返回自定义的此次订单花费金额（基于法定币，如USDT、RMB）
+        :param sigin:
+        :return:
+        '''
+        if cls.stake_amount:
+            cls.stake_amount = AppConfig.get().get('stake_amount', 1000)
+        rate = sigin.get('cost_rate', 1)
+        return cls.stake_amount * rate
 
     @classmethod
     def pick_timeframe(cls, exg_name: str, symbol: str, tfscores: List[Tuple[str, float]]) -> Optional[str]:
