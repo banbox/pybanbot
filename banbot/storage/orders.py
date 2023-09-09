@@ -436,8 +436,7 @@ class InOutOrder(BaseDbModel):
 
     @classmethod
     def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
-        iorders = cls.get_orders(strategy, pairs, 'open')
-        return [od for od in iorders if od.symbol in BotGlobal.pairs]
+        return cls.get_orders(strategy, pairs, 'open')
 
     @classmethod
     def his_orders(cls) -> List['InOutOrder']:

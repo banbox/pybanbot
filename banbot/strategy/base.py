@@ -87,7 +87,20 @@ class BaseStrategy:
         获取仓位大小，返回基于基准金额的倍数。
         '''
         symbol = symbol_tf.get().split('_')[2]
-        legal_cost = WalletsLocal.obj.position(symbol, self.name, side, enter_tag)
+        if btime.prod_mode():
+            # 实盘模式，从订单计算仓位
+            open_ods = InOutOrder.open_orders(self.name, symbol)
+            if enter_tag:
+                open_ods = [od for od in open_ods if od.enter_tag == enter_tag]
+            if side and side != 'both':
+                is_short = side == 'short'
+                open_ods = [od for od in open_ods if od.short == is_short]
+            if open_ods:
+                legal_cost = sum(od.enter_cost for od in open_ods)
+            else:
+                legal_cost = 0
+        else:
+            legal_cost = WalletsLocal.obj.position(symbol, self.name, side, enter_tag)
         return legal_cost / self.base_cost
 
     def init_third_od(self, od: InOutOrder):

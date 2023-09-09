@@ -338,7 +338,7 @@ class WalletsLocal:
 
     def position(self, symbol: str, strategy: str, side: str = None, enter_tag: str = None):
         '''
-        获取指定条件的仓位
+        获取指定条件的仓位；仅支持回测
         '''
         prefix = f'{symbol}|{strategy}|'
         base_s, quote_s = split_symbol(symbol)

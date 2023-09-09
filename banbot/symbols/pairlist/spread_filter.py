@@ -41,6 +41,6 @@ class SpreadFilter(PairList):
                 return False
             else:
                 return True
-        logger.info(f"Removed {pair} from whitelist due to invalid ticker data: {ticker}")
-        return False
+        logger.info(f"skip check {pair} in SpreadFilter due to invalid ticker data: {ticker}")
+        return True
 

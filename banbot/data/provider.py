@@ -69,7 +69,7 @@ class DataProvider:
         for hold in self.holders:
             if hold.pair == pair:
                 return hold.states[0].latest
-        raise ValueError(f'unknown pair to get price: {pair}')
+        return MarketPrice.get(pair)
 
 
 class HistDataProvider(DataProvider):
@@ -96,7 +96,8 @@ class HistDataProvider(DataProvider):
 
     async def down_data(self):
         timeframes = {s.timeframe for hold in self.holders for s in hold.states}
-        jobs = KLine.pause_compress(list(timeframes))
+        tbls = [item.tbl for item in KLine.agg_list if item.tf in timeframes]
+        jobs = KLine.pause_compress(tbls)
         for hold in self.holders:
             await hold.down_if_need()
         KLine.restore_compress(jobs)

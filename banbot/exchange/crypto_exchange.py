@@ -589,7 +589,8 @@ class CryptoExchange:
         更新所有币种的价格
         '''
         from banbot.storage import BotGlobal
-        if not BotGlobal.live_mode:
+        if not BotGlobal.live_mode or (btime.time_ms() - BotGlobal.last_bar_ms) > 20000:
+            # 只在收到一个bar的后续20s内允许更新，足够处理订单，否则太频繁容易被封ip
             return
         try:
             prices: Dict[str, Dict] = await self.api_async.fetch_last_prices()

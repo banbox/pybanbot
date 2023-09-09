@@ -49,6 +49,7 @@ class Trader:
         return pair_tfs
 
     def on_data_feed(self, pair: str, timeframe: str, row: list):
+        BotGlobal.last_bar_ms = btime.time_ms()
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
