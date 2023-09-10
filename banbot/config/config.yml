@@ -108,18 +108,17 @@ api_server:  # 启用此项后，可通过rest api访问和控制机器人；尽
 rpc_channels:  # 支持的全部rpc渠道
   wx_bot:  # rpc的渠道名
     agentid: '1000004'
-    corpid: ww0f524655066bfb7f
-    corpsecret: hbXBhPn5Kgv_bjg01RIA2ufFHryQ_hONzPiJZ-gmouA
+    corpid: ww0f52xxxxxxx1234
+    corpsecret: hbXBcvdfnwerkjhvjerwbjnevvv-gmouA
     enabled: true  # 是否启动此RPC
     msg_types: [entry, exit, status]  # 允许发送的消息类型
     type: wework  # rpc类型
-  wx_notify:
-    agentid: '1000005'
-    corpid: ww0f524655066bfb7f
-    corpsecret: b4LSTYRiMkfT_1Cxx4xc1JFYB9K-Mu3rGI8MbJ4iBiw
+  tg_notify:
+    token: 'vsdf234:vsdfsdvc'
+    channel: vcsdfvvvvv
     enabled: true
     msg_types: [exception]
-    type: wework
+    type: telegram
 webhook:  # 发送消息的配置
   entry:  # 入场消息
     content: "{name} {action}\n标的：{pair} {timeframe}\n信号：{enter_tag}\n价格：{price:.5f}\n花费：{value:.2f}"

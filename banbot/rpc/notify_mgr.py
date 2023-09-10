@@ -26,6 +26,9 @@ class Notify(metaclass=Singleton):
                 if chl_type == 'wework':
                     from banbot.rpc.wework import WeWork
                     self.channels.append(WeWork(config, item))
+                elif chl_type == 'telegram':
+                    from banbot.rpc.telegram_ import Telegram
+                    self.channels.append(Telegram(config, item))
                 else:
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
             except Exception:
@@ -85,10 +88,7 @@ class Notify(metaclass=Singleton):
 
     @classmethod
     def send(cls, msg: Dict[str, Any]):
-        if not cls.instance:
-            from banbot.config import AppConfig
-            Notify(AppConfig.get())
-        asyncio.create_task(cls.instance.send_msg(msg))
+        asyncio.create_task(cls.send_async(msg))
 
     @classmethod
     async def send_async(cls, msg: Dict[str, Any]):

@@ -3,6 +3,7 @@
 # File  : webhook.py
 # Author: anyongjin
 # Date  : 2023/9/7
+import asyncio
 from banbot.config import Config
 from banbot.storage.common import *
 from banbot.util.common import *
@@ -111,4 +112,4 @@ class Webhook:
                 success = True
 
             except Exception as exc:
-                logger.warning("Could not call webhook url. Exception: %s", exc)
+                logger.exception("Could not call webhook url. Exception: %s", exc)
