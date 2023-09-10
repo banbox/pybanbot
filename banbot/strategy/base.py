@@ -99,6 +99,22 @@ class BaseStrategy:
     def init_third_od(self, od: InOutOrder):
         pass
 
+    @classmethod
+    def send_notify(cls, msg: str, with_pair=True):
+        '''
+        发送策略消息通知
+        '''
+        if BotGlobal.is_warmup:
+            return
+        if with_pair:
+            exs, tf = get_cur_symbol()
+            msg = f'{exs.symbol} {tf} {msg}'
+        logger.info(f'send strategy_msg: {msg}')
+        Notify.send(dict(
+            type=NotifyType.STRATEGY_MSG,
+            msg=msg
+        ))
+
     @property
     def name(self):
         return self.__class__.__name__
