@@ -39,7 +39,7 @@ class Notify(metaclass=Singleton):
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
                 else:
                     chl = ChlClass(self.config, item)
-                    asyncio.create_task(chl.comsume_forever())
+                    asyncio.create_task(chl.consume_forever())
                     self.channels.append(chl)
             except Exception:
                 logger.exception(f'init rpc.{key}:{chl_type} fail')

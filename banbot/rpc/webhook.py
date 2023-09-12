@@ -93,10 +93,11 @@ class Webhook:
             logger.exception("Problem calling Webhook. Please check your webhook configuration. "
                              "Exception: %s", exc)
 
-    async def comsume_forever(self):
+    async def consume_forever(self):
         while True:
             try:
                 payload: dict = self.queue.get_nowait()
+                logger.info(f'try consume: {payload}')
                 await self._send_msg(payload)
                 self.queue.task_done()
             except asyncio.QueueEmpty:
