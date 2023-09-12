@@ -15,18 +15,20 @@ class Line(Webhook):
         token = item.get('token')
         if not token:
             raise ValueError('token is required for line channel')
-        self.target = item.get('target')
-        if not self.target:
-            raise ValueError('channel is required for line channel')
+        targetIds = item.get('targets')
+        self.targets = list(targetIds) if isinstance(targetIds, (list, tuple, set)) else [targetIds]
+        if not self.targets:
+            raise ValueError('targets is required for line channel')
 
     async def _do_send_msg(self, payload: dict):
         text = payload['content']
         sess = await get_http_sess(self.send_url)
-        data = dict(
-            to=self.target,
-            messages=[dict(type='text', text=text)]
-        )
-        rsp = await sess.post(self.send_url, data=data)
-        res = await parse_http_rsp(rsp)
-        logger.info(f'send line rsp[{rsp.status}]: {res}')
+        for to_id in self.targets:
+            data = dict(
+                to=to_id,
+                messages=[dict(type='text', text=text)]
+            )
+            rsp = await sess.post(self.send_url, data=data)
+            res = await parse_http_rsp(rsp)
+            logger.info(f'send line rsp[{rsp.status}]: {res}')
 

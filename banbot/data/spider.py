@@ -210,17 +210,19 @@ class WebsocketWatcher:
 
     @classmethod
     async def consume_queue(cls):
+        from banbot.storage import db
         while True:
             try:
                 sid, ohlcv, save_tf, skip_first = await cls.write_q.get()
-                if sid not in cls.init_sid:
-                    await cls._save_init(sid, ohlcv, save_tf, skip_first)
-                else:
-                    try:
-                        KLine.insert(sid, save_tf, ohlcv)
-                    except DisContiError as e:
-                        logger.warning(f"Kline DisConti {e}, try fill...")
-                        await cls._save_init(sid, ohlcv, save_tf, False)
+                with db():
+                    if sid not in cls.init_sid:
+                        await cls._save_init(sid, ohlcv, save_tf, skip_first)
+                    else:
+                        try:
+                            KLine.insert(sid, save_tf, ohlcv)
+                        except DisContiError as e:
+                            logger.warning(f"Kline DisConti {e}, try fill...")
+                            await cls._save_init(sid, ohlcv, save_tf, False)
                 cls.write_q.task_done()
             except Exception:
                 logger.exception("consume spider write_q error")
