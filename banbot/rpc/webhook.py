@@ -96,7 +96,7 @@ class Webhook:
     async def comsume_forever(self):
         while True:
             try:
-                payload: dict = await self.queue.get_nowait()
+                payload: dict = self.queue.get_nowait()
                 await self._send_msg(payload)
                 self.queue.task_done()
             except asyncio.QueueEmpty:
