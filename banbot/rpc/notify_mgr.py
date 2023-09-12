@@ -12,6 +12,7 @@ from banbot.util.common import Singleton
 
 class Notify(metaclass=Singleton):
     instance: 'Notify' = None
+    _cache_msgs = []
 
     def __init__(self, config: Config):
         Notify.instance = self
@@ -42,6 +43,8 @@ class Notify(metaclass=Singleton):
                     self.channels.append(chl)
             except Exception:
                 logger.exception(f'init rpc.{key}:{chl_type} fail')
+        while self._cache_msgs:
+            self.send_msg(**self._cache_msgs.pop(0))
 
     async def cleanup(self) -> None:
         """ Stops all enabled rpc modules """
@@ -98,6 +101,14 @@ class Notify(metaclass=Singleton):
     @classmethod
     def send(cls, **msg):
         if not cls.instance:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                # 没有异步环境，无法初始化，缓存消息
+                cls._cache_msgs.append(msg)
+                if len(cls._cache_msgs) > 200:
+                    cls._cache_msgs = cls._cache_msgs[-100:]
+                return
             from banbot.config import AppConfig
             Notify(AppConfig.get())
         cls.instance.send_msg(**msg)
