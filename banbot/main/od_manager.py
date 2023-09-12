@@ -1326,10 +1326,7 @@ class LiveOrderManager(OrderManager):
                 sess.commit()
         from banbot.rpc import Notify, NotifyType
         if unsubmits and Notify.instance:
-            await Notify.send_async(dict(
-                type=NotifyType.EXCEPTION,
-                status=f'超时未提交订单：{unsubmits}',
-            ))
+            Notify.send(type=NotifyType.EXCEPTION, status=f'超时未提交订单：{unsubmits}')
 
     @loop_forever
     async def watch_leverage_forever(self):

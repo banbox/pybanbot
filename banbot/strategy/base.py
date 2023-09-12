@@ -110,10 +110,7 @@ class BaseStrategy:
             exs, tf = get_cur_symbol()
             msg = f'{exs.symbol} {tf} {msg}'
         logger.info(f'send strategy_msg: {msg}')
-        Notify.send(dict(
-            type=NotifyType.STRATEGY_MSG,
-            msg=msg
-        ))
+        Notify.send(type=NotifyType.STRATEGY_MSG, msg=msg)
 
     @property
     def name(self):

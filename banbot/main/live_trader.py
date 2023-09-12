@@ -35,7 +35,7 @@ class LiveTrader(Trader):
             action = '开空' if od.short else '开多'
         else:
             action = '平空' if od.short else '平多'
-        msg = dict(
+        self.rpc.send_msg(
             type=msg_type,
             action=action,
             enter_tag=od.enter_tag,
@@ -54,7 +54,6 @@ class LiveTrader(Trader):
             profit_rate=od.profit_rate,
             **(od.infos or dict())
         )
-        asyncio.create_task(self.rpc.send_msg(msg))
 
     async def init(self):
         from banbot.data.toolbox import sync_timeframes
@@ -73,11 +72,11 @@ class LiveTrader(Trader):
             pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
-        await self.rpc.startup_messages()
-        await self.rpc.send_msg(dict(
+        self.rpc.startup_messages()
+        self.rpc.send_msg(
             type=NotifyType.STATUS,
             status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}，已开启{len(open_ods)}单'
-        ))
+        )
 
     async def run(self):
         self.start_heartbeat_check(3)
@@ -159,9 +158,6 @@ class LiveTrader(Trader):
 
     async def cleanup(self):
         await self.order_mgr.cleanup()
-        await self.rpc.send_msg(dict(
-            type=NotifyType.STATUS,
-            status='Bot stopped'
-        ))
+        self.rpc.send_msg(type=NotifyType.STATUS, status='Bot stopped')
         await self.rpc.cleanup()
         await self.exchange.close()

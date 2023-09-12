@@ -60,10 +60,7 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     content = f'EXC:{key}，数量:{num}\n{del_third_traces(detail)}'
-    loop.run_until_complete(Notify.instance.send_msg(dict(
-        type=NotifyType.EXCEPTION,
-        status=content,
-    )))
+    Notify.send(type=NotifyType.EXCEPTION, status=content)
 
 
 def send_exc_notify_after(secs: int, key: str, desp: str):

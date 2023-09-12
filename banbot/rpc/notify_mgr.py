@@ -3,6 +3,7 @@
 # File  : notify_mgr.py
 # Author: anyongjin
 # Date  : 2023/4/1
+import asyncio
 
 from banbot.rpc.webhook import *
 from banbot.util import btime
@@ -36,7 +37,9 @@ class Notify(metaclass=Singleton):
                 if ChlClass is None:
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
                 else:
-                    self.channels.append(ChlClass(self.config, item))
+                    chl = ChlClass(self.config, item)
+                    asyncio.create_task(chl.comsume_forever())
+                    self.channels.append(chl)
             except Exception:
                 logger.exception(f'init rpc.{key}:{chl_type} fail')
 
@@ -49,7 +52,7 @@ class Notify(metaclass=Singleton):
             await mod.cleanup()
             del mod
 
-    async def send_msg(self, msg: Dict[str, Any]) -> None:
+    def send_msg(self, **msg) -> None:
         """
         Send given message to all registered rpc modules.
         A message consists of one or more key value pairs of strings.
@@ -65,13 +68,13 @@ class Notify(metaclass=Singleton):
             if msg_type not in mod.msg_types:
                 continue
             try:
-                await mod.send_msg(msg)
+                mod.send_msg(msg)
             except NotImplementedError:
                 logger.error("Message type '%s' not implemented by handler %s.", msg['type'], mod.name)
             except Exception:
                 logger.exception('Exception occurred within RPC module %s: %s', mod.name, msg)
 
-    async def startup_messages(self):
+    def startup_messages(self):
         from banbot.symbols import group_symbols
         exg_name = self.config['exchange']['name']
         market = self.config['market_type']
@@ -87,18 +90,15 @@ class Notify(metaclass=Singleton):
             pairs = '币种：'
             for key, items in groups.items():
                 pairs += f"\n{key}: {', '.join(items)}"
-        await self.send_msg({
-            'type': NotifyType.STARTUP,
-            'status': f'{exg_name}.{market}\n模式: {run_mode}\n单笔金额: {stake_amount}{leverage}\n{pairs}'
-        })
+        self.send_msg(
+            type=NotifyType.STARTUP,
+            status=f'{exg_name}.{market}\n模式: {run_mode}\n单笔金额: {stake_amount}{leverage}\n{pairs}'
+        )
 
     @classmethod
-    def send(cls, msg: Dict[str, Any]):
-        asyncio.create_task(cls.send_async(msg))
-
-    @classmethod
-    async def send_async(cls, msg: Dict[str, Any]):
+    def send(cls, **msg):
         if not cls.instance:
             from banbot.config import AppConfig
             Notify(AppConfig.get())
-        await cls.instance.send_msg(msg)
+        cls.instance.send_msg(**msg)
+

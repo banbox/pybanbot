@@ -48,7 +48,6 @@ class Webhook:
     def __init__(self, config: Config, item: dict) -> None:
         """
         Init the Webhook class, and init the super class RPCHandler
-        :param rpc: instance of RPC Helper class
         :param config: Configuration object
         :return: None
         """
@@ -58,6 +57,9 @@ class Webhook:
         self._url = self._config['webhook'].get('url')
         self._retries = self._config['webhook'].get('retries', 0)
         self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
+
+        self.queue = asyncio.Queue(500)
+        self._alive = True
 
         self.msg_types = set(item.get('msg_types') or [])
         if not self.msg_types:
@@ -73,9 +75,9 @@ class Webhook:
         Cleanup pending module resources.
         This will do nothing for webhooks, they will simply not be called anymore
         """
-        pass
+        self._alive = False
 
-    async def send_msg(self, msg: Dict[str, Any]) -> None:
+    def send_msg(self, msg: Dict[str, Any]) -> None:
         """ Send a message to telegram channel """
         try:
             msg_type = msg['type']
@@ -86,10 +88,23 @@ class Webhook:
                 return
 
             payload = {key: value.format(**msg) for (key, value) in valuedict.items()}
-            await self._send_msg(payload)
+            self.queue.put_nowait(payload)
         except KeyError as exc:
             logger.exception("Problem calling Webhook. Please check your webhook configuration. "
                              "Exception: %s", exc)
+
+    async def comsume_forever(self):
+        while True:
+            try:
+                payload: dict = await self.queue.get_nowait()
+                await self._send_msg(payload)
+                self.queue.task_done()
+            except asyncio.QueueEmpty:
+                if self._alive:
+                    break
+                await asyncio.sleep(0.1)
+            except Exception:
+                logger.exception(f'consume rpc {self.name} error')
 
     async def _do_send_msg(self, payload: dict):
         raise NotImplementedError('_do_send_msg not implemented')
