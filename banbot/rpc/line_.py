@@ -16,24 +16,21 @@ class Line(Webhook):
         token = item.get('token')
         if not token:
             raise ValueError('token is required for line channel')
-        self.headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+        self.headers = {'Authorization': f'Bearer {token}'}
         targetIds = item.get('targets')
         self.targets = list(targetIds) if isinstance(targetIds, (list, tuple, set)) else [targetIds]
         if not self.targets:
             raise ValueError('targets is required for line channel')
 
     async def _do_send_msg(self, payload: dict):
-        logger.info(f'sending line: {payload}')
         text = payload['content']
         sess = await get_http_sess(self.line_host)
         for to_id in self.targets:
-            logger.info(f'sending line: {payload} {to_id}')
             data = dict(
                 to=to_id,
                 messages=[dict(type='text', text=text)]
             )
-            rsp = await sess.post(self.push_path, data=data, headers=self.headers)
-            res = await parse_http_rsp(rsp)
-            logger.info(f'send line rsp[{rsp.status}]: {res}')
-        logger.info(f'sending line: {payload} ok')
+            rsp = await sess.post(self.push_path, json=data, headers=self.headers)
+            if rsp.status != 200:
+                logger.error(f'send line msg error[{rsp.status}]: {parse_http_rsp(rsp)}')
 

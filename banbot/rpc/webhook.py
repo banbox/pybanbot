@@ -97,7 +97,6 @@ class Webhook:
         while True:
             try:
                 payload: dict = self.queue.get_nowait()
-                logger.info(f'try consume: {payload}')
                 await self._send_msg(payload)
                 self.queue.task_done()
             except asyncio.QueueEmpty:
