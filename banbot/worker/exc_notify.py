@@ -46,15 +46,8 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
     不要直接调用此方法。应调用带限流的try_send_exc_notify
     '''
     from banbot.rpc import Notify, NotifyType
-    if not Notify.instance:
-        from banbot.config import AppConfig
-        if AppConfig.obj:
-            Notify(AppConfig.get())
-        else:
-            print('no appconfig load, send exc notify skip')
-            return
     try:
-        loop = asyncio.get_event_loop()
+        asyncio.get_event_loop()
     except RuntimeError:
         # 这里是在单独线程里，没有自动设置异步循环，需要手动设置
         loop = asyncio.new_event_loop()

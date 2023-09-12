@@ -46,15 +46,6 @@ class Notify(metaclass=Singleton):
         while self._cache_msgs:
             self.send_msg(**self._cache_msgs.pop(0))
 
-    async def cleanup(self) -> None:
-        """ Stops all enabled rpc modules """
-        logger.info('Cleaning up rpc modules ...')
-        while self.channels:
-            mod = self.channels.pop()
-            logger.info('Cleaning up rpc.%s ...', mod.name)
-            await mod.cleanup()
-            del mod
-
     def send_msg(self, **msg) -> None:
         """
         Send given message to all registered rpc modules.
@@ -77,7 +68,7 @@ class Notify(metaclass=Singleton):
             except Exception:
                 logger.exception('Exception occurred within RPC module %s: %s', mod.name, msg)
 
-    def startup_messages(self):
+    def _startup_msg(self):
         from banbot.symbols import group_symbols
         exg_name = self.config['exchange']['name']
         market = self.config['market_type']
@@ -99,17 +90,41 @@ class Notify(metaclass=Singleton):
         )
 
     @classmethod
-    def send(cls, **msg):
+    def _init_obj(cls, msg=None):
         if not cls.instance:
             try:
                 asyncio.get_running_loop()
             except RuntimeError:
                 # 没有异步环境，无法初始化，缓存消息
-                cls._cache_msgs.append(msg)
-                if len(cls._cache_msgs) > 200:
-                    cls._cache_msgs = cls._cache_msgs[-100:]
-                return
+                if msg:
+                    cls._cache_msgs.append(msg)
+                    if len(cls._cache_msgs) > 200:
+                        cls._cache_msgs = cls._cache_msgs[-100:]
+                return False
             from banbot.config import AppConfig
             Notify(AppConfig.get())
+        return True
+
+    @classmethod
+    def startup_msg(cls):
+        if not cls._init_obj():
+            return
+        cls.instance._startup_msg()
+
+    @classmethod
+    def send(cls, **msg):
+        if not cls._init_obj(msg):
+            return
         cls.instance.send_msg(**msg)
 
+    @classmethod
+    async def cleanup(cls) -> None:
+        """ Stops all enabled rpc modules """
+        if not cls.instance:
+            return
+        logger.info('Cleaning up rpc modules ...')
+        while cls.instance.channels:
+            mod = cls.instance.channels.pop()
+            logger.info('Cleaning up rpc.%s ...', mod.name)
+            await mod.cleanup()
+            del mod

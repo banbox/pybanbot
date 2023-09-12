@@ -24,7 +24,6 @@ class LiveTrader(Trader):
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
-        self.rpc = Notify(config)
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = NotifyType.ENTRY if is_enter else NotifyType.EXIT
@@ -35,7 +34,7 @@ class LiveTrader(Trader):
             action = '开空' if od.short else '开多'
         else:
             action = '平空' if od.short else '平多'
-        self.rpc.send_msg(
+        Notify.send_msg(
             type=msg_type,
             action=action,
             enter_tag=od.enter_tag,
@@ -72,8 +71,8 @@ class LiveTrader(Trader):
             pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
-        self.rpc.startup_messages()
-        self.rpc.send_msg(
+        Notify.startup_msg()
+        Notify.send(
             type=NotifyType.STATUS,
             status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}，已开启{len(open_ods)}单'
         )
@@ -158,6 +157,6 @@ class LiveTrader(Trader):
 
     async def cleanup(self):
         await self.order_mgr.cleanup()
-        self.rpc.send_msg(type=NotifyType.STATUS, status='Bot stopped')
-        await self.rpc.cleanup()
+        Notify.send(type=NotifyType.STATUS, status='Bot stopped')
+        await Notify.cleanup()
         await self.exchange.close()
