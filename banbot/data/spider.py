@@ -314,7 +314,6 @@ class OhlcvWatcher(WebsocketWatcher):
                 finish_bars.append(self.pbar)
             self.pbar = cur_bar
         if finish_bars:
-            logger.info(f'put write_q: {self.get_sid()} {finish_bars[0][0]} {self.state_ws.timeframe}')
             self.write_q.put_nowait((self.get_sid(), finish_bars, self.state_ws.timeframe, False))
 
 

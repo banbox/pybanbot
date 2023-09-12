@@ -7,6 +7,7 @@
 爬虫端运行策略监听市场行情。
 '''
 import asyncio
+import time
 
 from banbot.storage import *
 from banbot.exchange.exchange_utils import *
@@ -99,8 +100,10 @@ async def _consume_jobs():
                     cur_end = cur_ms // state.tf_msecs * state.tf_msecs
                     if cur_end > state.end_ms:
                         logger.info(f'start run_on_bar {symbol} {tf}')
+                        start = time.time()
                         await run_on_bar(state)
-                        logger.info(f'done run_on_bar {symbol} {tf}')
+                        cost = time.time() - start
+                        logger.info(f'done run_on_bar {symbol} {tf}, cost: {cost:.2f} s')
         except Exception:
             logger.exception(f'_run_watch_job error: {exg_name} {market} {symbol}')
 

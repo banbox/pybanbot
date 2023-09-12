@@ -16,6 +16,7 @@ class Line(Webhook):
         token = item.get('token')
         if not token:
             raise ValueError('token is required for line channel')
+        self.headers = {'Authorization': f'Bearer {token}'}
         targetIds = item.get('targets')
         self.targets = list(targetIds) if isinstance(targetIds, (list, tuple, set)) else [targetIds]
         if not self.targets:
@@ -29,7 +30,7 @@ class Line(Webhook):
                 to=to_id,
                 messages=[dict(type='text', text=text)]
             )
-            rsp = await sess.post(self.push_path, data=data)
+            rsp = await sess.post(self.push_path, data=data, headers=self.headers)
             res = await parse_http_rsp(rsp)
             logger.info(f'send line rsp[{rsp.status}]: {res}')
 
