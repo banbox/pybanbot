@@ -172,6 +172,13 @@ class WebsocketWatcher:
     async def try_update(self):
         pass
 
+    def get_sid(self) -> int:
+        if self.sid == 0:
+            from banbot.storage import db
+            with db():
+                self.sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, self.pair)
+        return self.sid
+
     @classmethod
     async def _save_init(cls, sid: int, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
         exs = ExSymbol.get_by_id(sid)
@@ -265,7 +272,7 @@ class TradesWatcher(WebsocketWatcher):
         if not ohlcvs_save:
             return
         logger.info(f'ws ohlcv: {self.pair} {ohlcvs_save}')
-        self.write_q.put_nowait((self.sid, ohlcvs_save, self.state_save.timeframe, True))
+        self.write_q.put_nowait((self.get_sid(), ohlcvs_save, self.state_save.timeframe, True))
 
 
 class OhlcvWatcher(WebsocketWatcher):
@@ -302,7 +309,7 @@ class OhlcvWatcher(WebsocketWatcher):
                 finish_bars.append(self.pbar)
             self.pbar = cur_bar
         if finish_bars:
-            self.write_q.put_nowait((self.sid, finish_bars, self.state_ws.timeframe, False))
+            self.write_q.put_nowait((self.get_sid(), finish_bars, self.state_ws.timeframe, False))
 
 
 class LiveMiner:
