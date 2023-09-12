@@ -16,5 +16,6 @@ tqdm
 tzlocal
 tabulate
 PyYaml
+aiohttp
 
 starlette

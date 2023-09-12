@@ -17,22 +17,28 @@ class Notify(metaclass=Singleton):
         self.config = config
         self.channels: List[Webhook] = []
         self.name = config.get('name', '')
-        chl_items = config.get('rpc_channels') or dict()
+        self._init_channels()
+
+    def _init_channels(self):
+        chl_items = self.config.get('rpc_channels') or dict()
         for key, item in chl_items.items():
             if not item.get('enabled', False):
                 continue
             chl_type = item.get('type')
             try:
+                ChlClass = None
                 if chl_type == 'wework':
-                    from banbot.rpc.wework import WeWork
-                    self.channels.append(WeWork(config, item))
+                    from banbot.rpc.wework import WeWork as ChlClass
                 elif chl_type == 'telegram':
-                    from banbot.rpc.telegram_ import Telegram
-                    self.channels.append(Telegram(config, item))
-                else:
+                    from banbot.rpc.telegram_ import Telegram as ChlClass
+                elif chl_type == 'line':
+                    from banbot.rpc.line_ import Line as ChlClass
+                if ChlClass is None:
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
+                else:
+                    self.channels.append(ChlClass(self.config, item))
             except Exception:
-                logger.exception('init wechat corp fail')
+                logger.exception(f'init rpc.{key}:{chl_type} fail')
 
     async def cleanup(self) -> None:
         """ Stops all enabled rpc modules """

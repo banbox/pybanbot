@@ -119,6 +119,12 @@ rpc_channels:  # 支持的全部rpc渠道
     enabled: true
     msg_types: [exception]
     type: telegram
+  line_notify:
+    token: 'vsdf234:vsdfsdvc'
+    target: vcsdfvvvvv  # userId/groupId/roomId 这个可通过line-bot-sdk-python.fastapi-echo部署webhook，从join事件中得到
+    enabled: true
+    msg_types: [exception]
+    type: line
 webhook:  # 发送消息的配置
   entry:  # 入场消息
     content: "{name} {action}\n标的：{pair} {timeframe}\n信号：{enter_tag}\n价格：{price:.5f}\n花费：{value:.2f}"
