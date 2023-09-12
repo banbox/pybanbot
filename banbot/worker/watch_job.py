@@ -98,7 +98,9 @@ async def _consume_jobs():
                     state = _get_state(exg_name, market, symbol, tf)
                     cur_end = cur_ms // state.tf_msecs * state.tf_msecs
                     if cur_end > state.end_ms:
+                        logger.info(f'start run_on_bar {symbol} {tf}')
                         await run_on_bar(state)
+                        logger.info(f'done run_on_bar {symbol} {tf}')
         except Exception:
             logger.exception(f'_run_watch_job error: {exg_name} {market} {symbol}')
 

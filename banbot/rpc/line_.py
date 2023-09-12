@@ -8,7 +8,8 @@ from banbot.util.net_utils import get_http_sess, parse_http_rsp
 
 
 class Line(Webhook):
-    send_url = 'https://api.line.me/v2/bot/message/push'
+    line_host = 'https://api.line.me'
+    push_path = '/v2/bot/message/push'
 
     def __init__(self, config: Config, item: dict):
         super(Line, self).__init__(config, item)
@@ -22,13 +23,13 @@ class Line(Webhook):
 
     async def _do_send_msg(self, payload: dict):
         text = payload['content']
-        sess = await get_http_sess(self.send_url)
+        sess = await get_http_sess(self.line_host)
         for to_id in self.targets:
             data = dict(
                 to=to_id,
                 messages=[dict(type='text', text=text)]
             )
-            rsp = await sess.post(self.send_url, data=data)
+            rsp = await sess.post(self.push_path, data=data)
             res = await parse_http_rsp(rsp)
             logger.info(f'send line rsp[{rsp.status}]: {res}')
 
