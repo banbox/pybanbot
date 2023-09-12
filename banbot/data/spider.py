@@ -234,6 +234,11 @@ class WebsocketWatcher:
             except Exception:
                 logger.exception("consume spider write_q error")
 
+    @classmethod
+    async def run_consumers(cls, num: int):
+        consumers = [WebsocketWatcher.consume_queue() for n in range(num)]
+        await asyncio.gather(*consumers)
+
 
 class TradesWatcher(WebsocketWatcher):
     '''
@@ -596,6 +601,6 @@ async def run_spider_forever(args: dict):
     logger.info('start top change update timer...')
     await TopChange.start()
     asyncio.create_task(run_watch_jobs())
-    asyncio.create_task(WebsocketWatcher.consume_queue())
+    asyncio.create_task(WebsocketWatcher.run_consumers(5))
     await LiveSpider.run_spider()
     # await TopChange.clear()
