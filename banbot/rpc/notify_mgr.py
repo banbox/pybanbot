@@ -39,6 +39,7 @@ class Notify(metaclass=Singleton):
                 if ChlClass is None:
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
                 else:
+                    item['name'] = key
                     chl = ChlClass(self.config, item)
                     # 单独线程运行队列消费任务
                     asyncio.run_coroutine_threadsafe(chl.consume_forever(), self._loop)
