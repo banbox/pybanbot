@@ -12,7 +12,6 @@ from banbot.util.common import Singleton
 
 class Notify(metaclass=Singleton):
     instance: 'Notify' = None
-    _cache_msgs = []
 
     def __init__(self, config: Config):
         from banbot.util.misc import new_async_thread
@@ -46,8 +45,6 @@ class Notify(metaclass=Singleton):
                     self.channels.append(chl)
             except Exception:
                 logger.exception(f'init rpc.{key}:{chl_type} fail')
-        while self._cache_msgs:
-            self.send_msg(**self._cache_msgs.pop(0))
 
     def send_msg(self, **msg) -> None:
         """
