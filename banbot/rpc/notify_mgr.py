@@ -19,8 +19,8 @@ class Notify(metaclass=Singleton):
         self.config = config
         self.channels: List[Webhook] = []
         self.name = config.get('name', '')
-        self._init_channels()
         self._loop = new_async_thread()[0]
+        self._init_channels()
 
     def _init_channels(self):
         chl_items = self.config.get('rpc_channels') or dict()
