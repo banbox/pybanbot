@@ -89,7 +89,7 @@ class Webhook:
                 return
 
             payload = {key: value.format(**msg) for (key, value) in valuedict.items()}
-            logger.info(f'push rpc msg {self.name}: {payload}')
+            logger.debug(f'push rpc msg %s: %s', self.name, payload)
             self.queue.put_nowait(payload)
         except KeyError as exc:
             logger.exception("Problem calling Webhook. Please check your webhook configuration. "
@@ -99,13 +99,12 @@ class Webhook:
         '''
         消费RPC消息队列。每个渠道单独一个队列。所有队列的消费应在单独一个线程的事件循环中，避免影响主线程的执行。
         '''
-        logger.info(f'start consume rpc for {self.name}')
+        logger.debug('start consume rpc for %s', self.name)
         while True:
             try:
                 payload: dict = self.queue.get_nowait()
-                logger.info(f'send {self.name}: {payload}')
                 await self._send_msg(payload)
-                logger.info(f'send {self.name} done: {payload}')
+                logger.debug('send %s done: %s', self.name, payload)
                 self.queue.task_done()
             except asyncio.QueueEmpty:
                 if not self._alive:
