@@ -233,7 +233,8 @@ class MetaStateVar(type):
 
     @classmethod
     def reset(cls, ctx_key: str):
-        del_keys = {key for key in cls._instances if key.startswith(ctx_key)}
+        all_keys = cls._instances.keys()
+        del_keys = {key for key in all_keys if key.startswith(ctx_key)}
         for key in del_keys:
             del cls._instances[key]
 
