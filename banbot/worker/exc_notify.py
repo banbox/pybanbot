@@ -46,12 +46,8 @@ def do_send_exc_notify(key: str, detail: str, num: int = 1):
     不要直接调用此方法。应调用带限流的try_send_exc_notify
     '''
     from banbot.rpc import Notify, NotifyType
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        # 这里是在单独线程里，没有自动设置异步循环，需要手动设置
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+    from banbot.util.misc import ensure_event_loop
+    ensure_event_loop()
     content = f'EXC:{key}，数量:{num}\n{del_third_traces(detail)}'
     Notify.send(type=NotifyType.EXCEPTION, status=content)
 

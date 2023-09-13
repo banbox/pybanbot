@@ -94,6 +94,9 @@ class Webhook:
                              "Exception: %s", exc)
 
     async def consume_forever(self):
+        '''
+        消费RPC消息队列。每个渠道单独一个队列。所有队列的消费应在单独一个线程的事件循环中，避免影响主线程的执行。
+        '''
         while True:
             try:
                 payload: dict = self.queue.get_nowait()

@@ -232,6 +232,34 @@ def get_module_classes(module, base_cls: type):
     return result
 
 
+def ensure_event_loop():
+    '''
+    检查事件循环是否存在，如不存在则设置。
+    用于线程的事件循环初始化
+    '''
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+
+def new_async_thread():
+    '''
+    开启一个新的线程专门运行长期执行的异步任务
+    '''
+    import threading
+    loop = asyncio.new_event_loop()
+
+    def _worker():
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+    return loop, thread
+
+
 class LazyTqdm:
     def __init__(self, *args, **kwargs):
         from tqdm import tqdm

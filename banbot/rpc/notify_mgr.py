@@ -15,11 +15,13 @@ class Notify(metaclass=Singleton):
     _cache_msgs = []
 
     def __init__(self, config: Config):
+        from banbot.util.misc import new_async_thread
         Notify.instance = self
         self.config = config
         self.channels: List[Webhook] = []
         self.name = config.get('name', '')
         self._init_channels()
+        self._loop = new_async_thread()[0]
 
     def _init_channels(self):
         chl_items = self.config.get('rpc_channels') or dict()
@@ -39,7 +41,8 @@ class Notify(metaclass=Singleton):
                     logger.error(f'nosupport rpc channel type: {chl_type} for {key}')
                 else:
                     chl = ChlClass(self.config, item)
-                    asyncio.create_task(chl.consume_forever())
+                    # 单独线程运行队列消费任务
+                    asyncio.run_coroutine_threadsafe(chl.consume_forever(), self._loop)
                     self.channels.append(chl)
             except Exception:
                 logger.exception(f'init rpc.{key}:{chl_type} fail')
@@ -90,31 +93,20 @@ class Notify(metaclass=Singleton):
         )
 
     @classmethod
-    def _init_obj(cls, msg=None):
+    def _init_obj(cls):
         if not cls.instance:
-            try:
-                asyncio.get_running_loop()
-            except RuntimeError:
-                # 没有异步环境，无法初始化，缓存消息
-                if msg:
-                    cls._cache_msgs.append(msg)
-                    if len(cls._cache_msgs) > 200:
-                        cls._cache_msgs = cls._cache_msgs[-100:]
-                return False
             from banbot.config import AppConfig
             Notify(AppConfig.get())
         return True
 
     @classmethod
     def startup_msg(cls):
-        if not cls._init_obj():
-            return
+        cls._init_obj()
         cls.instance._startup_msg()
 
     @classmethod
     def send(cls, **msg):
-        if not cls._init_obj(msg):
-            return
+        cls._init_obj()
         cls.instance.send_msg(**msg)
 
     @classmethod
