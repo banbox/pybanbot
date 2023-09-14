@@ -8,6 +8,7 @@ from banbot.rpc.webhook import *
 
 
 class Telegram(Webhook):
+    batch_size = 3
 
     def __init__(self, config: Config, item: dict):
         super(Telegram, self).__init__(config, item)
@@ -19,6 +20,7 @@ class Telegram(Webhook):
             raise ValueError('channel is required for telegram channel')
         self.bot = Bot(token)
 
-    async def _do_send_msg(self, payload: dict):
-        text = payload['content']
-        await self.bot.send_message(self.channel_id, text=text)
+    async def _do_send_msg(self, msg_list: List[dict]) -> int:
+        merge_text = '\n\n'.join([msg['content'] for msg in msg_list])
+        await self.bot.send_message(self.channel_id, text=merge_text, disable_web_page_preview=True)
+        return len(msg_list)

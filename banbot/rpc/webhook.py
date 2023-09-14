@@ -44,6 +44,8 @@ class Webhook:
     """
     消息通知基类
     """
+    batch_size = 1  # 每次批量处理消息的数量，对于一次能发送多个消息的渠道可取多个
+    next_send_ts = 0  # 对于触发429的渠道，设置下次发送时间，休眠重试
 
     def __init__(self, config: Config, item: dict) -> None:
         """
@@ -99,40 +101,56 @@ class Webhook:
         '''
         消费RPC消息队列。每个渠道单独一个队列。所有队列的消费应在单独一个线程的事件循环中，避免影响主线程的执行。
         '''
-        logger.debug('start consume rpc for %s', self.name)
+        cur_name = self.name
+        logger.debug('start consume rpc for %s', cur_name)
         while True:
             try:
-                payload: dict = self.queue.get_nowait()
-                await self._send_msg(payload)
-                logger.debug('send %s done: %s', self.name, payload)
-                self.queue.task_done()
-            except asyncio.QueueEmpty:
-                if not self._alive:
-                    logger.info(f'stop consume {self.name}')
-                    break
-                await asyncio.sleep(0.1)
+                msg_list = []
+                wait_secs = self.next_send_ts - time.time()
+                if wait_secs > 0:
+                    await asyncio.sleep(wait_secs)
+                while len(msg_list) < self.batch_size:
+                    try:
+                        msg_list.append(self.queue.get_nowait())
+                    except asyncio.QueueEmpty:
+                        break
+                if not msg_list:
+                    if not self._alive:
+                        logger.info(f'stop consume {cur_name}')
+                        break
+                    await asyncio.sleep(0.1)
+                    continue
+                ok_num = await self._send_msg(msg_list)
+                logger.debug('send %s done: %s', cur_name, msg_list)
+                [self.queue.task_done() for i in range(ok_num)]
             except Exception:
-                logger.exception(f'consume rpc {self.name} error')
+                logger.exception(f'consume rpc {cur_name} error')
 
-    async def _do_send_msg(self, payload: dict):
+    async def _do_send_msg(self, msg_list: List[dict]) -> int:
+        '''
+        执行发送消息。不带重试。必须按顺序发送，如前面发送失败，后面的不应尝试发送
+        '''
         raise NotImplementedError('_do_send_msg not implemented')
 
-    async def _send_msg(self, payload: dict) -> None:
-        """do the actual call to the webhook"""
-
-        success = False
-        attempts = 0
-        while not success and attempts <= self._retries:
+    async def _send_msg(self, msg_list: List[dict]) -> int:
+        '''
+        调用api发送消息。失败则按配置重试
+        '''
+        sent_num, attempts, total_num = 0, 0, len(msg_list)
+        while sent_num < total_num and msg_list and attempts <= self._retries:
             if attempts:
                 if self._retry_delay:
                     await asyncio.sleep(self._retry_delay)
                 logger.info("Retrying webhook...")
 
             attempts += 1
-
             try:
-                await self._do_send_msg(payload)
-                success = True
-
+                cur_sent = await self._do_send_msg(msg_list)
+                if not isinstance(cur_sent, int):
+                    logger.error(f'{self.__class__.__name__}._do_send_msg should return int!')
+                    return 0
+                sent_num += cur_sent
+                msg_list = msg_list[cur_sent:]  # 去除已发送的
             except Exception as exc:
                 logger.exception("Could not call webhook url. Exception: %s", exc)
+        return sent_num
