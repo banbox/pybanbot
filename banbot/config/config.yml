@@ -112,6 +112,7 @@ rpc_channels:  # 支持的全部rpc渠道
     corpsecret: hbXBcvdfnwerkjhvjerwbjnevvv-gmouA
     enabled: true  # 是否启动此RPC
     msg_types: [entry, exit, status]  # 允许发送的消息类型
+    keywords: []
     type: wework  # rpc类型
   tg_notify:
     token: 'vsdf234:vsdfsdvc'

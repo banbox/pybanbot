@@ -15,7 +15,7 @@ async def _do_send():
     AppConfig.init_by_args()
     Notify.send(
         type=NotifyType.STRATEGY_MSG,
-        msg='test msg'
+        msg='BTC test msg'
     )
     await asyncio.sleep(60)
 

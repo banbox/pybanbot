@@ -60,6 +60,9 @@ class Webhook:
         self._url = self._config['webhook'].get('url')
         self._retries = self._config['webhook'].get('retries', 0)
         self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
+        self.keywords = item.get('keywords' ,[])
+        if self.keywords:
+            self.keywords = [w for w in self.keywords if w]
 
         self.queue = asyncio.Queue(500)
         self._alive = True
@@ -92,6 +95,12 @@ class Webhook:
 
             payload = {key: value.format(**msg) for (key, value) in valuedict.items()}
             logger.debug(f'push rpc msg %s: %s', self.name, payload)
+
+            content: str = payload.get('content')
+            if self.keywords and content:
+                if not any(w for w in self.keywords if content.find(w) >= 0):
+                    return
+
             self.queue.put_nowait(payload)
         except KeyError as exc:
             logger.exception("Problem calling Webhook. Please check your webhook configuration. "

@@ -85,13 +85,15 @@ def http_basic_or_jwt_token(form_data: HTTPBasicCredentials = Depends(httpbasic)
 
 @router_login.post('/token/login', response_model=AccessAndRefreshToken)
 def token_login(form_data: HTTPBasicCredentials = Depends(HTTPBasic())):
-    api_config = AppConfig.get().get('api_server')
+    config = AppConfig.get()
+    api_config = config.get('api_server')
     if verify_auth(api_config, form_data.username, form_data.password):
         token_data = {'identity': {'u': form_data.username}}
         access_token = create_token(token_data, api_config.get('jwt_secret_key', 'super-secret'))
         refresh_token = create_token(token_data, api_config.get('jwt_secret_key', 'super-secret'),
                                      token_type="refresh")
         return {
+            "name": config.get('name', 'noname'),
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
