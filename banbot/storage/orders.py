@@ -3,6 +3,7 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
+import copy
 import json
 from dataclasses import dataclass
 from banbot.compute.sta_inds import *
@@ -467,15 +468,24 @@ class InOutOrder(BaseDbModel):
         his_ods = sorted(his_ods, key=lambda x: x.symbol)
         gps = groupby(his_ods, key=lambda x: x.symbol)
         result = []
+        all_pairs = copy.copy(BotGlobal.pairs)
         for key, gp in gps:
             gp_items = list(gp)
             profit_sum = sum(od.profit for od in gp_items)
             amount_sum = sum(od.enter_cost_real for od in gp_items)
+            all_pairs.remove(key)
             result.append(dict(
                 pair=key,
-                profit_ratio=profit_sum,
+                profit_sum=profit_sum,
                 profit_pct=profit_sum / amount_sum,
-                count=len(gp_items)
+                close_num=len(gp_items)
+            ))
+        for pair in all_pairs:
+            result.append(dict(
+                pair=pair,
+                profit_sum=0,
+                profit_pct=0,
+                close_num=0
             ))
         return result
 

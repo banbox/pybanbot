@@ -60,33 +60,29 @@ class RPC:
 
         return {'status': 'already stopped'}
 
-    def balance(self, stake_currency: str, fiat_display_currency: str) -> Dict:
+    def balance(self) -> Dict:
         """ Returns current account balance per crypto """
-        currencies: List[Dict] = []
+        items: List[Dict] = []
         total = 0.0
 
-        for coin, balance in self.bot.wallets.data.items():
-            cur_total = balance.total
+        for coin, item in self.bot.wallets.data.items():
+            cur_total = item.total
             if not cur_total:
                 continue
-            total += cur_total
-            currencies.append({
-                'currency': coin,
-                'free': balance.available,
-                'balance': cur_total,
-                'used': cur_total - balance.available,
-                'stake': stake_currency,
-                'side': 'long',
-                'leverage': 1,
-                'position': 0,
-                'is_position': False,
+            cur_total_fiat = cur_total * MarketPrice.get(coin)
+            total += cur_total_fiat
+            items.append({
+                'symbol': coin,
+                'free': item.available,
+                'used': cur_total - item.available,
+                'total': cur_total,
+                'total_fiat': cur_total_fiat,
             })
+        items = sorted(items, key=lambda x: x['total_fiat'], reverse=True)
 
         return {
-            'currencies': currencies,
+            'items': items,
             'total': total,
-            'symbol': fiat_display_currency,
-            'stake': stake_currency,
         }
 
     def open_num(self):
@@ -178,9 +174,7 @@ class RPC:
             'profit_all_ratio_sum': profit_all_sum,
             'trade_count': len(orders),
             'closed_trade_count': closed_num,
-            'first_trade_date': btime.to_datestr(first_ms),
             'first_trade_timestamp': first_ms,
-            'latest_trade_date': btime.to_datestr(last_ms),
             'latest_trade_timestamp': last_ms,
             'avg_duration': str(timedelta(seconds=sum(durations) / num)).split('.')[0],
             'best_pair': best_pair,
@@ -195,7 +189,6 @@ class RPC:
             'max_drawdown_abs': abs_max_drawdown,
             'trading_volume': trading_volume,
             'bot_start_timestamp': BotGlobal.start_at,
-            'bot_start_date': btime.to_datestr(BotGlobal.start_at)
         }
 
     def stats(self) -> Dict[str, Any]:
@@ -205,10 +198,11 @@ class RPC:
         # Exit reason
         exit_reasons = {}
         for od in orders:
-            if od.exit_tag not in exit_reasons:
-                exit_reasons[od.exit_tag] = {'wins': 0, 'losses': 0, 'draws': 0}
+            exit_tag = od.exit_tag or 'empty'
+            if exit_tag not in exit_reasons:
+                exit_reasons[exit_tag] = {'wins': 0, 'losses': 0, 'draws': 0}
             od_sta = 'wins' if od.profit > 0 else ('losses' if od.profit < 0 else 'draws')
-            exit_reasons[od.exit_tag][od_sta] += 1
+            exit_reasons[exit_tag][od_sta] += 1
 
             dur[od_sta].append((od.exit_at - od.enter_at) / 1000)
 
@@ -217,15 +211,20 @@ class RPC:
         losses_dur = sum(dur['losses']) / len(dur['losses']) if len(dur['losses']) > 0 else None
 
         durations = {'wins': wins_dur, 'draws': draws_dur, 'losses': losses_dur}
-        return {'exit_reasons': exit_reasons, 'durations': durations}
+        tag_list = []
+        for tag, item in exit_reasons.items():
+            item['tag'] = tag
+            tag_list.append(item)
+        tag_list = sorted(tag_list, key=lambda x: x['name'])
+        return {'exit_reasons': tag_list, 'durations': durations}
 
-    def timeunit_profit(self, timescale: int, stake_currency: List[str], timeunit: str = 'days') -> Dict[str, Any]:
-        start_date = datetime.now(timezone.utc).date()
+    def timeunit_profit(self, timescale: int, timeunit: str = 'days') -> List[Dict]:
+        init_date = datetime.now(timezone.utc).date()
         if timeunit == 'weeks':
             # weekly
-            start_date = start_date - timedelta(days=start_date.weekday())  # Monday
+            init_date = init_date - timedelta(days=init_date.weekday())  # Monday
         if timeunit == 'months':
-            start_date = start_date.replace(day=1)
+            init_date = init_date.replace(day=1)
 
         def time_offset(step: int):
             if timeunit == 'months':
@@ -235,41 +234,34 @@ class RPC:
         if not (isinstance(timescale, int) and timescale > 0):
             raise RPCException('timescale must be an integer greater than 0')
 
-        profit_units: Dict[date, Dict] = {}
-        daily_stake = self._wallet.fiat_value()
-
         his_ods = InOutOrder.his_orders()
-        for day in range(0, timescale):
-            profitday = start_date - time_offset(day)
+
+        if not his_ods:
+            return []
+
+        result = []
+        total_value = self._wallet.fiat_value()
+        min_start = min(od.enter_at for od in his_ods)
+        for num in range(0, timescale):
+            profitday = init_date - time_offset(num)
             stop_date = profitday + time_offset(1)
             start_ms = btime.to_utcstamp(profitday, ms=True)
             stop_ms = btime.to_utcstamp(stop_date, ms=True)
+            if start_ms < min_start:
+                break
             cur_profits = [od.profit for od in his_ods if start_ms <= od.enter_at <= stop_ms]
 
-            curdayprofit = sum(cur_profits)
+            profit_sum = sum(cur_profits)
             # Calculate this periods starting balance
-            daily_stake -= curdayprofit
-            profit_units[profitday] = {
-                'amount': curdayprofit,
-                'daily_stake': daily_stake,
-                'rel_profit': round(curdayprofit / daily_stake, 8) if daily_stake > 0 else 0,
-                'trades': len(cur_profits),
-            }
-
-        data = [
-            {
-                'date': key,
-                'abs_profit': value["amount"],
-                'starting_balance': value["daily_stake"],
-                'rel_profit': value["rel_profit"],
-                'trade_count': value["trades"],
-            }
-            for key, value in profit_units.items()
-        ]
-        return {
-            'stake_currency': stake_currency,
-            'data': data
-        }
+            total_value -= profit_sum
+            result.append({
+                'date_ms': btime.to_utcstamp(profitday, ms=True, cut_int=True),
+                'start_balance': total_value,
+                'profit_sum': profit_sum,
+                'profit_pct': round(profit_sum / total_value, 8) if total_value > 0 else 0,
+                'order_num': len(cur_profits),
+            })
+        return result
 
     def trade_status(self, trade_ids: List[int] = None) -> List[Dict[str, Any]]:
         """
@@ -468,15 +460,14 @@ class RPC:
 
         return {'log_count': len(records), 'logs': records}
 
-    def stopentry(self) -> Dict[str, str]:
+    def set_allow_trade_after(self, cost_secs: int) -> Dict[str, int]:
         """
-        Handler to stop buying, but handle open trades gracefully.
+        在给定的时间到达前，禁止交易。
+        :param cost_secs: 正数表示禁用一段时间开单；0表示立刻允许入场
         """
-        # Set 'max_open_trades' to 0
-        self._config['max_open_trades'] = 0
-        self.bot.order_mgr.max_open_orders = 0
-
-        return {'status': 'No more entries will occur from now. Run /reload_config to reset.'}
+        start_from = btime.utcstamp() + cost_secs * 1000
+        self.bot.order_mgr.disable_until = start_from
+        return dict(allow_trade_at=start_from)
 
     def reload_config(self) -> Dict[str, str]:
         """ Handler for reload_config. """
@@ -497,5 +488,6 @@ class RPC:
         return dict(
             cpu_pct=psutil.cpu_percent(interval=1),
             ram_pct=psutil.virtual_memory().percent,
-            last_process=self.bot.last_process
+            last_process=self.bot.last_process,
+            allow_trade_at=self.bot.order_mgr.disable_until
         )

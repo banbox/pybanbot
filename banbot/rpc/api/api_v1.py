@@ -5,7 +5,7 @@
 # Date  : 2023/9/7
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Body
 from fastapi.exceptions import HTTPException
 
 from banbot import __version__
@@ -46,8 +46,7 @@ def version():
 @router.get('/balance', response_model=Balances, tags=['info'])
 def balance(rpc: RPC = Depends(get_rpc)):
     """Account Balances"""
-    config = AppConfig.get()
-    return rpc.balance(config['stake_currency'], config.get('fiat_display_currency', ''),)
+    return rpc.balance()
 
 
 @router.get('/count', response_model=Count, tags=['info'])
@@ -71,22 +70,9 @@ def stats(rpc: RPC = Depends(get_rpc)):
     return rpc.stats()
 
 
-@router.get('/daily', response_model=DailyWeeklyMonthly, tags=['info'])
-def daily(timescale: int = 7, rpc: RPC = Depends(get_rpc)):
-    config = AppConfig.get()
-    return rpc.timeunit_profit(timescale, config['stake_currency'])
-
-
-@router.get('/weekly', response_model=DailyWeeklyMonthly, tags=['info'])
-def weekly(timescale: int = 4, rpc: RPC = Depends(get_rpc)):
-    config = AppConfig.get()
-    return rpc.timeunit_profit(timescale, config['stake_currency'], 'weeks')
-
-
-@router.get('/monthly', response_model=DailyWeeklyMonthly, tags=['info'])
-def monthly(timescale: int = 3, rpc: RPC = Depends(get_rpc)):
-    config = AppConfig.get()
-    return rpc.timeunit_profit(timescale, config['stake_currency'], 'months')
+@router.get('/profit_by', tags=['info'])
+def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
+    return rpc.timeunit_profit(limit, unit)
 
 
 @router.get('/status', response_model=List[OpenInoutOrderSchema], tags=['info'])
@@ -164,9 +150,9 @@ def logs(limit: Optional[int] = None):
     return RPC.get_logs(limit)
 
 
-@router.post('/stopentry', response_model=StatusMsg, tags=['botcontrol'])
-def stop_buy(rpc: RPC = Depends(get_rpc)):
-    return rpc.stopentry()
+@router.post('/delay_entry', tags=['botcontrol'])
+def delay_entry(rpc: RPC = Depends(get_rpc), delay_secs: int = Body(..., embed=True)):
+    return rpc.set_allow_trade_after(delay_secs)
 
 
 @router.post('/reload_config', response_model=StatusMsg, tags=['botcontrol'])
@@ -174,21 +160,30 @@ def reload_config(rpc: RPC = Depends(get_rpc)):
     return rpc.reload_config()
 
 
-@router.get('/strategies', response_model=StrategyListResponse, tags=['strategy'])
-def list_strategies():
-    stg_list = {j[0] for j in BotGlobal.stg_symbol_tfs}
-    return {'strategies': sorted(list(stg_list))}
+@router.get('/pair_stgs', tags=['strategy'])
+def pair_stgs():
+    from banbot.strategy.resolver import get_strategy
+    jobs = BotGlobal.stg_symbol_tfs
+    stgy_set = {j[0] for j in jobs}
+    stgy_dic = dict()
+    for stgy in stgy_set:
+        stg_cls = get_strategy(stgy)
+        if not stg_cls:
+            continue
+        stgy_dic[stgy] = stg_cls.version
+    jobs = [dict(stgy=j[0], pair=j[1], tf=j[2]) for j in jobs]
+    return dict(jobs=jobs, stgy=stgy_dic)
 
 
-@router.get('/strategy/{strategy}', response_model=StrategyResponse, tags=['strategy'])
-def get_strategy(strategy: str):
+@router.get('/strategy/{strategy}', tags=['strategy'])
+def get_stgy_code(strategy: str):
     from banbot.strategy.resolver import get_strategy
     stgy_cls = get_strategy(strategy)
     if not stgy_cls:
         raise HTTPException(status_code=404, detail='Strategy not found')
     return {
         'strategy': stgy_cls.__name__,
-        'code': stgy_cls.__source__,
+        'data': stgy_cls.__source__,
     }
 
 

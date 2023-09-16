@@ -43,23 +43,16 @@ class ResultMsg(BaseModel):
 
 
 class Balance(BaseModel):
-    currency: str
+    symbol: str
     free: float
-    balance: float
     used: float
-    stake: Iterable[str]
-    # Starting with 2.x
-    side: str
-    leverage: float
-    is_position: bool
-    position: float
+    total: float
+    total_fiat: float
 
 
 class Balances(BaseModel):
-    currencies: List[Balance]
+    items: List[Balance]
     total: float
-    symbol: str
-    stake: Iterable[str]
 
 
 class Count(BaseModel):
@@ -70,11 +63,9 @@ class Count(BaseModel):
 
 class PerformanceEntry(BaseModel):
     pair: str
-    profit: float
-    profit_ratio: float
+    profit_sum: float
     profit_pct: float
-    profit_abs: float
-    count: int
+    close_num: int
 
 
 class Profit(BaseModel):
@@ -88,9 +79,7 @@ class Profit(BaseModel):
     profit_all_ratio_sum: float
     trade_count: int
     closed_trade_count: int
-    first_trade_date: str
     first_trade_timestamp: Optional[int]
-    latest_trade_date: str
     latest_trade_timestamp: Optional[int]
     avg_duration: str
     best_pair: Optional[str]
@@ -105,31 +94,18 @@ class Profit(BaseModel):
     max_drawdown_abs: float
     trading_volume: Optional[float] = None
     bot_start_timestamp: int
-    bot_start_date: str
 
 
-class SellReason(BaseModel):
+class TagStat(BaseModel):
+    tag: str
     wins: int
     losses: int
     draws: int
 
 
 class Stats(BaseModel):
-    exit_reasons: Dict[str, SellReason]
+    exit_reasons: List[TagStat]
     durations: Dict[str, Optional[float]]
-
-
-class DailyWeeklyMonthlyRecord(BaseModel):
-    date: date
-    abs_profit: float
-    rel_profit: float
-    starting_balance: float
-    trade_count: int
-
-
-class DailyWeeklyMonthly(BaseModel):
-    data: List[DailyWeeklyMonthlyRecord]
-    stake_currency: List[str]
 
 
 class ShowConfig(BaseModel):
@@ -287,10 +263,6 @@ class DeleteTrade(BaseModel):
     trade_id: int
 
 
-class StrategyListResponse(BaseModel):
-    strategies: List[str]
-
-
 class ExchangeListResponse(BaseModel):
     exchanges: List[ValidExchangesType]
 
@@ -310,11 +282,6 @@ class PairListsPayload(ExchangeModePayloadMixin, BaseModel):
     pairlists: List[Dict[str, Any]]
     blacklist: List[str]
     stake_currency: str
-
-
-class StrategyResponse(BaseModel):
-    strategy: str
-    code: str
 
 
 class AvailablePairs(BaseModel):
