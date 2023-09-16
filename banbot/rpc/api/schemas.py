@@ -348,13 +348,3 @@ class PairHistory(BaseModel):
     model_config = ConfigDict(json_encoders={
         datetime: lambda v: v.strftime(DATETIME_PRINT_FORMAT),
     })
-
-
-class SysInfo(BaseModel):
-    cpu_pct: List[float]
-    ram_pct: float
-
-
-class Health(BaseModel):
-    last_process: Optional[datetime] = None
-    last_process_ts: Optional[int] = None

@@ -230,11 +230,7 @@ def list_available_pairs(timeframe: Optional[str] = None, stake_currency: Option
     return result
 
 
-@router.get('/sysinfo', response_model=SysInfo, tags=['info'])
-def sysinfo():
-    return RPC.sysinfo()
+@router.get('/bot_info', tags=['info'])
+def bot_info(rpc: RPC = Depends(get_rpc)):
+    return rpc.bot_info()
 
-
-@router.get('/health', response_model=Health, tags=['info'])
-def health(rpc: RPC = Depends(get_rpc)):
-    return rpc.health()

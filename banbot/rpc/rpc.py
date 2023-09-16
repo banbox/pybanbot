@@ -493,26 +493,9 @@ class RPC:
         self.bot.data_mgr.config = config
         return {'status': 'Reloading config ...'}
 
-    def health(self) -> Dict[str, Optional[Union[str, int]]]:
-        last_p = self.bot.last_process
-        if last_p is None:
-            return {
-                "last_process": None,
-                "last_process_loc": None,
-                "last_process_ts": None,
-            }
-        dt_obj = btime.to_datetime(last_p)
-        last_dt = btime.to_datestr(dt_obj)
-        last_dt_loc = btime.to_datestr(dt_obj.astimezone(tzlocal()))
-        return {
-            "last_process": last_dt,
-            "last_process_loc": last_dt_loc,
-            "last_process_ts": last_p,
-        }
-
-    @staticmethod
-    def sysinfo() -> Dict[str, Any]:
-        return {
-            "cpu_pct": psutil.cpu_percent(interval=1, percpu=True),
-            "ram_pct": psutil.virtual_memory().percent
-        }
+    def bot_info(self) -> Dict[str, Any]:
+        return dict(
+            cpu_pct=psutil.cpu_percent(interval=1),
+            ram_pct=psutil.virtual_memory().percent,
+            last_process=self.bot.last_process
+        )
