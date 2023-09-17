@@ -157,18 +157,10 @@ def text_day_profits(df: pd.DataFrame):
 
 def get_order_df() -> pd.DataFrame:
     from banbot.storage import InOutOrder
-    from banbot.util.misc import add_dict_prefix
-    from banbot.exchange.exchange_utils import tf_to_secs
     his_orders = InOutOrder.his_orders()
     data_list = []
     for od in his_orders:
-        item = od.dict()
-        tf_secs = tf_to_secs(od.timeframe)
-        item.update(add_dict_prefix(od.enter.dict(), 'enter_'))
-        item['enter_cost'] = od.enter.filled * od.enter.average
-        item.update(add_dict_prefix(od.exit.dict(), 'exit_'))
-        item['duration'] = round(od.exit.create_at - od.enter.create_at) // 1000 // tf_secs
-        data_list.append(item)
+        data_list.append(od.dict(flat_sub=True))
     return pd.DataFrame(data_list)
 
 

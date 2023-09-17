@@ -54,19 +54,19 @@ def count(rpc: RPC = Depends(get_rpc)):
     return rpc.open_num()
 
 
-@router.get('/performance', response_model=List[PerformanceEntry], tags=['info'])
-def performance(rpc: RPC = Depends(get_rpc)):
-    return rpc.performance()
-
-
-@router.get('/profit', response_model=Profit, tags=['info'])
-def profit(rpc: RPC = Depends(get_rpc)):
-    config = AppConfig.get()
-    return rpc.trade_statistics(config['stake_currency'])
+@router.get('/statistics', response_model=Profit, tags=['info'])
+def statistics(rpc: RPC = Depends(get_rpc)):
+    '''
+    整体面板统计信息
+    '''
+    return rpc.dash_statistics()
 
 
 @router.get('/stats', response_model=Stats, tags=['info'])
 def stats(rpc: RPC = Depends(get_rpc)):
+    '''
+    显示各个平仓信号的胜率。盈亏时持仓时间。
+    '''
     return rpc.stats()
 
 
@@ -75,27 +75,13 @@ def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depend
     return rpc.timeunit_profit(limit, unit)
 
 
-@router.get('/status', response_model=List[OpenInoutOrderSchema], tags=['info'])
-def status(rpc: RPC = Depends(get_rpc)):
-    try:
-        return rpc.trade_status()
-    except RPCException:
-        return []
-
-
-# Using the responsemodel here will cause a ~100% increase in response time (from 1s to 2s)
-# on big databases. Correct response model: response_model=TradeResponse,
-@router.get('/trades', tags=['info', 'trading'])
-def trades(limit: int = 500, offset: int = 0, rpc: RPC = Depends(get_rpc)):
-    return rpc.trade_history(limit, offset=offset, order_by_id=True)
-
-
-@router.get('/trade/{tradeid}', response_model=OpenInoutOrderSchema, tags=['info', 'trading'])
-def trade(tradeid: int = 0, rpc: RPC = Depends(get_rpc)):
-    try:
-        return rpc.trade_status([tradeid])[0]
-    except (RPCException, KeyError):
-        raise HTTPException(status_code=404, detail='Trade not found.')
+@router.get('/orders', tags=['info'])
+def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depends(get_rpc)):
+    '''
+    查询订单列表。status=open表示查询未平仓订单；status=his查询已平仓订单
+    '''
+    with_total = limit > 0
+    return rpc.get_orders(status, limit, offset, with_total, order_by_id=True)
 
 
 @router.get('/show_config', response_model=ShowConfig, tags=['info'])
@@ -134,10 +120,10 @@ def blacklist_post(payload: BlacklistPayload, rpc: RPC = Depends(get_rpc)):
 
 
 @router.delete('/blacklist', response_model=BlacklistResponse, tags=['info', 'pairlist'])
-def blacklist_delete(pairs_to_delete: List[str] = Query([]), rpc: RPC = Depends(get_rpc)):
+def blacklist_delete(pairs: List[str] = Query([]), rpc: RPC = Depends(get_rpc)):
     """Provide a list of pairs to delete from the blacklist"""
 
-    return rpc.blacklist_delete(pairs_to_delete)
+    return rpc.blacklist_delete(pairs)
 
 
 @router.get('/whitelist', response_model=WhitelistResponse, tags=['info', 'pairlist'])
@@ -173,6 +159,14 @@ def pair_stgs():
         stgy_dic[stgy] = stg_cls.version
     jobs = [dict(stgy=j[0], pair=j[1], tf=j[2]) for j in jobs]
     return dict(jobs=jobs, stgy=stgy_dic)
+
+
+@router.get('/performance', response_model=List[PerformanceEntry], tags=['info'])
+def performance(rpc: RPC = Depends(get_rpc)):
+    '''
+    按币种统计大致盈利状态。
+    '''
+    return rpc.pair_performance()
 
 
 @router.get('/strategy/{strategy}', tags=['strategy'])

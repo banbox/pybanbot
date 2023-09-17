@@ -93,10 +93,10 @@ class RPC:
             total_stake=sum(od.enter_cost for od in open_ods)
         )
 
-    def performance(self):
+    def pair_performance(self):
         return InOutOrder.get_overall_performance()
 
-    def trade_statistics(self, stake_currency: str):
+    def dash_statistics(self):
         orders = InOutOrder.get_orders()
 
         profit_all = []
@@ -263,51 +263,36 @@ class RPC:
             })
         return result
 
-    def trade_status(self, trade_ids: List[int] = None) -> List[Dict[str, Any]]:
-        """
-        Below follows the RPC backend it is prefixed with rpc_ to raise awareness that it is
-        a remotely exposed function
-        """
-        # Fetch open trades
-        if trade_ids:
-            orders = get_db_orders(BotTask.cur_id, filters=[InOutOrder.id.in_(trade_ids)])
-        else:
-            orders = InOutOrder.open_orders()
+    def get_orders(self, status: str = None, limit: int = 0, offset: int = 0, with_total: bool = False,
+                   order_by_id: bool = False) -> Dict[str, Any]:
+        '''
+        筛选符合条件的订单列表。查未平仓订单和已平仓订单都经过此接口
+        '''
+        order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
+        orders = get_db_orders(BotTask.cur_id, status=status, limit=limit, offset=offset, order_by=order_by)
+
+        total_num = 0
+        if with_total:
+            sess = db.session
+            fts = get_order_filters(task_id=BotTask.cur_id, status=status)
+            total_num = sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
 
         if not orders:
-            raise RPCException('no active trade')
-        else:
-            results = []
-            for od in orders:
-                if od.is_open:
-                    cur_price = MarketPrice.get(od.symbol)
-                    od.update_by_price(cur_price)
-                else:
-                    cur_price = od.close_rate
-                od_dict = od.dict()
-                od_dict.update(dict(
-                    close_profit=od.profit_rate if od.exit_at else None,
-                    current_rate=cur_price,
-                ))
-                results.append(od_dict)
-            return results
-
-    def trade_history(self, limit: int, offset: int = 0, order_by_id: bool = False) -> Dict:
-        """ Returns the X last trades """
-        order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
-        orders = get_db_orders(BotTask.cur_id, limit=limit, offset=offset, order_by=order_by)
-        output = [od.dict() for od in orders]
-
-        sess = db.session
-        fts = get_order_filters(task_id=BotTask.cur_id, status='his')
-        total_trades = sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
-
-        return {
-            "trades": output,
-            "trades_count": len(output),
-            "offset": offset,
-            "total_trades": total_trades,
-        }
+            return dict(data=[], total_num=total_num, offset=offset)
+        results = []
+        for od in orders:
+            if od.exit_tag and od.exit and od.exit.price:
+                cur_price = od.exit.price
+            else:
+                cur_price = MarketPrice.get(od.symbol)
+                od.update_by_price(cur_price)
+            od_dict = od.dict(flat_sub=True)
+            od_dict.update(dict(
+                close_profit=od.profit_rate if od.exit_at else None,
+                cur_price=cur_price,
+            ))
+            results.append(od_dict)
+        return dict(data=results, total_num=total_num, offset=offset)
 
     def _force_entry_validations(self, pair: str, order_side: str):
         if order_side not in {'long', 'short'}:
@@ -373,11 +358,7 @@ class RPC:
                         await asyncio.sleep(1)
                         continue
                     break
-                result = od.dict()
-                result['enter'] = od.enter.dict()
-                if od.exit:
-                    result['exit'] = od.exit.dict()
-                return result
+                return od.dict(flat_sub=True)
         raise RPCException(f'Failed to enter position for {pair}.')
 
     def force_exit(self, trade_id: str) -> Dict[str, str]:
@@ -413,7 +394,6 @@ class RPC:
                     errors[pair] = f'Pair {pair} already in pairlist.'
 
         res = {'method': self.bot.pair_mgr.name_list,
-               'length': len(self.bot.pair_mgr.blacklist),
                'blacklist': self.bot.pair_mgr.blacklist,
                'errors': errors}
         return res
@@ -436,7 +416,6 @@ class RPC:
     def whitelist(self) -> Dict:
         """ Returns the currently active whitelist"""
         res = {'method': self.bot.pair_mgr.name_list,
-               'length': len(self.bot.pair_mgr.whitelist),
                'whitelist': self.bot.pair_mgr.whitelist
                }
         return res

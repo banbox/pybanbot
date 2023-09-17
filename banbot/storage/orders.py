@@ -422,6 +422,32 @@ class InOutOrder(BaseDbModel):
             detach_obj(sess, self.exit)
         return self
 
+    def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None,
+             flat_sub: bool = False):
+        from banbot.util.misc import add_dict_prefix
+        result = super().dict(only, skips)
+        result['enter_cost'] = self.enter.filled * self.enter.average
+        if self.infos:
+            result.update(**self.infos)
+        if self.exit:
+            result['duration'] = 0
+        else:
+            result['duration'] = round(self.exit.create_at - self.enter.create_at) / 1000
+        ent_data = self.enter.dict()
+        if not flat_sub:
+            result['enter'] = ent_data
+        else:
+            ent_data = add_dict_prefix(ent_data, 'enter_')
+            result.update(**ent_data)
+        if self.exit:
+            ext_data = self.exit.dict()
+            if not flat_sub:
+                result['exit'] = ext_data
+            else:
+                ext_data = add_dict_prefix(ext_data, 'exit_')
+                result.update(**ext_data)
+        return result
+
     @classmethod
     def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
                    close_after: int = None)\

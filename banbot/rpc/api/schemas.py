@@ -194,20 +194,6 @@ class InoutOrderSchema(BaseModel):
     exit: Optional[OrderSchema] = None
 
 
-class OpenInoutOrderSchema(InoutOrderSchema):
-    stoploss_current_dist: Optional[float] = None
-    stoploss_current_dist_pct: Optional[float] = None
-    stoploss_current_dist_ratio: Optional[float] = None
-    stoploss_entry_dist: Optional[float] = None
-    stoploss_entry_dist_ratio: Optional[float] = None
-    current_rate: float
-    total_profit_abs: float
-    total_profit_fiat: Optional[float] = None
-    total_profit_ratio: Optional[float] = None
-
-    open_order: Optional[str] = None
-
-
 class InoutOrderResponse(BaseModel):
     trades: List[InoutOrderSchema]
     trades_count: int
@@ -246,13 +232,11 @@ class BlacklistPayload(BaseModel):
 class BlacklistResponse(BaseModel):
     blacklist: List[str]
     errors: Dict
-    length: int
     method: List[str]
 
 
 class WhitelistResponse(BaseModel):
     whitelist: List[str]
-    length: int
     method: List[str]
 
 

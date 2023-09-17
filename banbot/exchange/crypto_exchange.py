@@ -605,13 +605,13 @@ class CryptoExchange:
         if not self.exchange_has('fetchTickers'):
             return {}
         if cached:
-            with self._cache_lock:
+            async with self._cache_lock:
                 tickers = self._fetch_tickers_cache.get('fetch_tickers')  # type: ignore
             if tickers:
                 return tickers
         try:
             tickers = await self.api_async.fetch_tickers(symbols)
-            with self._cache_lock:
+            async with self._cache_lock:
                 self._fetch_tickers_cache['fetch_tickers'] = tickers
             return tickers
         except ccxt.NotSupported as e:
