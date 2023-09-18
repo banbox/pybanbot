@@ -35,7 +35,7 @@ class LiveTrader(Trader):
             action = '开空' if od.short else '开多'
         else:
             action = '平空' if od.short else '平多'
-        Notify.send_msg(
+        Notify.send(
             type=msg_type,
             action=action,
             enter_tag=od.enter_tag,

@@ -1244,18 +1244,22 @@ class LiveOrderManager(OrderManager):
         sub_od.price = price
         if not sub_od.order_id:
             await self._exec_order_enter(od)
-        else:
-            left_amount = sub_od.amount - sub_od.filled
-            try:
+            return
+        left_amount = sub_od.amount - sub_od.filled
+        try:
+            if self.market_type == 'future':
+                await self.exchange.cancel_order(sub_od.order_id, od.symbol)
+                od_type = sub_od.order_type or self.od_type
+                params = dict()
                 if self.market_type == 'future':
-                    await self.exchange.cancel_order(sub_od.order_id, od.symbol)
-                    res = await self.exchange.create_order(od.symbol, self.od_type, sub_od.side, left_amount, price)
-                else:
-                    res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
-                                                               left_amount, price)
-                await self._update_subod_by_ccxtres(od, is_enter, res)
-            except ccxt.InvalidOrder as e:
-                logger.exception('edit invalid order: %s, %s', e, od)
+                    params['positionSide'] = 'SHORT' if od.short else 'LONG'
+                res = await self.exchange.create_order(od.symbol, od_type, sub_od.side, left_amount, price, params)
+            else:
+                res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
+                                                           left_amount, price)
+            await self._update_subod_by_ccxtres(od, is_enter, res)
+        except ccxt.InvalidOrder as e:
+            logger.exception('edit invalid order: %s, %s', e, od)
 
     @loop_forever
     async def trail_unmatches_forever(self):

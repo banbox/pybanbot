@@ -61,7 +61,7 @@ def calc_max_drawdown(profits: List[float], init_balance: float = 0, relative=Fa
         idxmin = np.argmax(drawdown_rel) if relative else np.argmin(drawdown)
     except Exception:
         return 0, -1, -1, 0, 0, 0
-    idxmax = np.argmax(highs[:idxmin])
+    idxmax = np.argmax(highs[:idxmin + 1])
     high_val = cumulative[idxmax]
     low_val = cumulative[idxmin]
     max_drawdown_rel = drawdown_rel[idxmin]
