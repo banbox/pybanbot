@@ -160,7 +160,8 @@ class AppConfig(metaclass=Singleton):
             args = dict()
         config = AppConfig(args).get_config()
         deep_merge_dicts(args, config, False)
-        del config['func']
+        if 'func' in config:
+            del config['func']
         if 'timerange' in config:
             from banbot.config.timerange import TimeRange
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])

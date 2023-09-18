@@ -16,6 +16,65 @@ def get_pro_overrides():
 
 class probinanceusdm(ccxtpro.binanceusdm):
 
+    async def watch_mark_prices(self, params={}):
+        await self.load_markets()
+        defaultType = self.safe_string(self.options, 'defaultType', 'spot')
+        type = self.safe_string(params, 'type', defaultType)
+        subType, params = self.handle_sub_type_and_params('watchMarkPrices', None, params)
+        if self.isLinear(type, subType):
+            type = 'future'
+        elif self.isInverse(type, subType):
+            type = 'delivery'
+        messageHash = '!markPrice@arr'
+        url = self.urls['api']['ws'][type] + '/' + self.stream(type, messageHash)
+        requestId = self.request_id(url)
+        request = {
+            'method': 'SUBSCRIBE',
+            'params': [
+                messageHash,
+            ],
+            'id': requestId,
+        }
+        subscribe = {
+            'id': requestId,
+        }
+        query = self.omit(params, 'type')
+        message = self.extend(request, query)
+        return await self.watch(url, messageHash, message, messageHash, subscribe)
+
+    def handle_mark_prices(self, client, message):
+        '''
+        [
+          {
+            "e": "markPriceUpdate",     // 事件类型
+            "E": 1562305380000,         // 事件时间
+            "s": "BTCUSDT",             // 交易对
+            "p": "11185.87786614",      // 标记价格
+            "i": "11784.62659091"       // 现货指数价格
+            "P": "11784.25641265",      // 预估结算价,仅在结算前最后一小时有参考价值
+            "r": "0.00030000",          // 资金费率
+            "T": 1562306400000          // 下个资金时间
+          }
+        ]
+        '''
+        messageHash = '!markPrice@arr'
+        now = self.milliseconds()
+        index = client.url.find('/stream')
+        marketType = 'spot' if (index >= 0) else 'contract'
+        result = []
+        for msg in message:
+            marketId = self.safe_string(msg, 's')
+            symbol = self.safe_symbol(marketId, None, None, marketType)
+            result.append(dict(
+                info=msg,
+                event=self.safe_string(msg, 'e'),
+                timestamp=self.safe_integer(msg, 'E', now),
+                symbol=symbol,
+                markPrice=self.safe_float(msg, 'p'),
+                price=self.safe_float(msg, 'i'),
+            ))
+        client.resolve(result, messageHash)
+
     async def watch_account_config(self, params={}):
         """
         watches account update: leverage and margin
@@ -26,7 +85,7 @@ class probinanceusdm(ccxtpro.binanceusdm):
         await self.authenticate(params)
         defaultType = self.safe_string(self.options, 'defaultType', 'spot')
         type = self.safe_string(params, 'type', defaultType)
-        subType, params = self.handle_sub_type_and_params('watchMyTrades', None, params)
+        subType, params = self.handle_sub_type_and_params('watchAccountConfig', None, params)
         if self.isLinear(type, subType):
             type = 'future'
         elif self.isInverse(type, subType):
@@ -94,7 +153,8 @@ class probinanceusdm(ccxtpro.binanceusdm):
             'ACCOUNT_UPDATE': self.handle_balance,
             'executionReport': self.handle_order_update,
             'ORDER_TRADE_UPDATE': self.handle_order_update,
-            'ACCOUNT_CONFIG_UPDATE': self.handle_account_update
+            'ACCOUNT_CONFIG_UPDATE': self.handle_account_update,
+            'markPriceUpdate@arr': self.handle_mark_prices
         }
         event = self.safe_string(message, 'e')
         if isinstance(message, list):

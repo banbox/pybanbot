@@ -61,6 +61,14 @@ async def test_ccxt_future():
     print('exit:', od_res)
 
 
+async def test_watch_mark_prices():
+    AppConfig.init_by_args()
+    config = AppConfig.get()
+    exchange = get_exchange()
+    res = await exchange.watch_mark_prices()
+    logger.info(f'mark price: {res}')
+
+
 if __name__ == '__main__':
     # asyncio.run(test_watch_trades())
-    asyncio.run(test_ccxt_future())
+    asyncio.run(test_watch_mark_prices())

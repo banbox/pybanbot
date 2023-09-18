@@ -254,7 +254,6 @@ class CryptoExchange:
             os.mkdir(self.market_dir)
 
     async def init(self, pairs: List[str]):
-        await self.update_prices()
         await self._check_fee_limits()
         await self.cancel_open_orders(pairs)
         await self.update_symbol_leverages(pairs)
@@ -546,6 +545,12 @@ class CryptoExchange:
             raise ValueError(f'watch_account_config not found in {self.api_ws.name}')
         return await self.api_ws.watch_account_config(params)
 
+    async def watch_mark_prices(self, params={}):
+        if not hasattr(self.api_ws, 'watch_mark_prices'):
+            raise ValueError(f'watch_mark_prices not found in {self.api_ws.name}')
+        result = await self.api_ws.watch_mark_prices(params)
+        return [item for item in result if item['symbol'] in self.markets]
+
     async def fetch_orders(self, symbol: Optional[str] = None, since: Optional[int] = None,
                            limit: Optional[int] = None, params={}) -> List[dict]:
         return await self.api_async.fetch_orders(symbol, since, limit, params)
@@ -621,7 +626,8 @@ class CryptoExchange:
 
     async def update_prices(self):
         '''
-        更新所有币种的价格
+        更新所有币种的价格。
+        此方法运行一段时间后会卡住，请使用watch_mark_prices
         '''
         from banbot.storage import BotGlobal
         if not BotGlobal.live_mode or (btime.time_ms() - BotGlobal.last_bar_ms) > 20000:

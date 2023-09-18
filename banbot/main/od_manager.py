@@ -1347,6 +1347,18 @@ class LiveOrderManager(OrderManager):
         else:
             self.exchange.leverages[symbol].leverage = leverage
 
+    @loop_forever
+    async def watch_price_forever(self):
+        if self.market_type != 'future':
+            return 'exit'
+        try:
+            price_list = await self.exchange.watch_mark_prices()
+        except ccxt.NetworkError as e:
+            logger.error(f'watch_price_forever net error: {e}')
+            return
+        for item in price_list:
+            MarketPrice.set_new_price(item['symbol'], item['markPrice'])
+
     async def cleanup(self):
         with db():
             exit_ods = self.exit_open_orders(dict(tag='bot_stop'), 0, is_force=True, od_dir='both')

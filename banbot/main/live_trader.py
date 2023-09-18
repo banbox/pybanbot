@@ -91,8 +91,6 @@ class LiveTrader(Trader):
         await self._loop_tasks([
             # 两小时更新一次货币行情信息
             [self.exchange.load_markets, 7200, 7200],
-            # 更新所有货币的价格 5s一次
-            [self.exchange.update_prices, 5, 0],
             # 定时检查整体损失是否触发限制
             [self.order_mgr.check_fatal_stop, 300, 300]
         ])
@@ -115,6 +113,8 @@ class LiveTrader(Trader):
                 asyncio.create_task(self.order_mgr.trail_unmatches_forever()),
                 # 跟踪账户杠杆倍数和保证金配置
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
+                # 跟踪所有币的最新价格
+                asyncio.create_task(self.order_mgr.watch_price_forever()),
                 # 订单异步消费队列
                 asyncio.create_task(self.order_mgr.consume_queue()),
             ])
