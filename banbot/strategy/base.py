@@ -123,7 +123,7 @@ class BaseStrategy:
         :param sigin:
         :return:
         '''
-        if cls.stake_amount:
+        if not cls.stake_amount:
             cls.stake_amount = AppConfig.get().get('stake_amount', 1000)
         rate = sigin.get('cost_rate', 1)
         return cls.stake_amount * rate
