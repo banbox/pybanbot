@@ -400,7 +400,7 @@ class CryptoWallet(WalletsLocal):
             message.append(f'{symbol}: {free}/{used}')
         return '  '.join(message)
 
-    async def init(self, pairs: List[str]):
+    async def init(self, pairs: Iterable[str]):
         for p in pairs:
             self._symbols.update(split_symbol(p))
         await self.update_balance()

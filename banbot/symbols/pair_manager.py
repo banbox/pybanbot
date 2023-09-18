@@ -4,8 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/4/17
 
-from cachetools import TTLCache
-
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
 from banbot.symbols.tfscaler import calc_symboltf_scales
@@ -68,10 +66,7 @@ class PairManager:
                 pairlist.extend(new_pairs)
 
         # 计算交易对各维度K线质量分数
-        back_num = 300
-        if hasattr(self.handlers[0], 'refresh_secs'):
-            back_num = self.handlers[0].refresh_secs // 30
-        self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist, back_num)
+        self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist)
 
         self.whitelist = pairlist
         BotGlobal.pairs = set(pairlist)

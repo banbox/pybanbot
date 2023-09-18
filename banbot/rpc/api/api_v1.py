@@ -49,12 +49,12 @@ def balance(rpc: RPC = Depends(get_rpc)):
     return rpc.balance()
 
 
-@router.get('/count', response_model=Count, tags=['info'])
+@router.get('/count', tags=['info'])
 def count(rpc: RPC = Depends(get_rpc)):
     return rpc.open_num()
 
 
-@router.get('/statistics', response_model=Profit, tags=['info'])
+@router.get('/statistics', tags=['info'])
 def statistics(rpc: RPC = Depends(get_rpc)):
     '''
     整体面板统计信息
@@ -84,11 +84,6 @@ def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depen
     return rpc.get_orders(status, limit, offset, with_total, order_by_id=True)
 
 
-@router.get('/show_config', response_model=ShowConfig, tags=['info'])
-def show_config(rpc: Optional[RPC] = Depends(get_rpc)):
-    return AppConfig.get_pub()
-
-
 # /forcebuy is deprecated with short addition. use /forceentry instead
 @router.post('/forceenter', response_model=ForceEnterResponse, tags=['trading'])
 async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
@@ -109,29 +104,17 @@ def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
     return rpc.force_exit(payload.tradeid)
 
 
-@router.get('/blacklist', response_model=BlacklistResponse, tags=['info', 'pairlist'])
-def blacklist(rpc: RPC = Depends(get_rpc)):
-    return rpc.blacklist()
+@router.get('/pairlist', tags=['info', 'pairlist'])
+def pairlist(rpc: RPC = Depends(get_rpc)):
+    return rpc.pairlist()
 
 
-@router.post('/blacklist', response_model=BlacklistResponse, tags=['info', 'pairlist'])
-def blacklist_post(payload: BlacklistPayload, rpc: RPC = Depends(get_rpc)):
-    return rpc.blacklist(payload.blacklist)
+@router.post('/pairlist', tags=['info', 'pairlist'])
+async def set_pairlist(payload: SetPairsPayload, rpc: RPC = Depends(get_rpc)):
+    return await rpc.set_pairs(payload.for_white, payload.adds or [], payload.deletes or [])
 
 
-@router.delete('/blacklist', response_model=BlacklistResponse, tags=['info', 'pairlist'])
-def blacklist_delete(pairs: List[str] = Query([]), rpc: RPC = Depends(get_rpc)):
-    """Provide a list of pairs to delete from the blacklist"""
-
-    return rpc.blacklist_delete(pairs)
-
-
-@router.get('/whitelist', response_model=WhitelistResponse, tags=['info', 'pairlist'])
-def whitelist(rpc: RPC = Depends(get_rpc)):
-    return rpc.whitelist()
-
-
-@router.get('/logs', response_model=Logs, tags=['info'])
+@router.get('/logs', tags=['info'])
 def logs(limit: Optional[int] = None):
     return RPC.get_logs(limit)
 
@@ -139,6 +122,14 @@ def logs(limit: Optional[int] = None):
 @router.post('/delay_entry', tags=['botcontrol'])
 def delay_entry(rpc: RPC = Depends(get_rpc), delay_secs: int = Body(..., embed=True)):
     return rpc.set_allow_trade_after(delay_secs)
+
+
+@router.get('/config', tags=['info'])
+def show_config():
+    import yaml
+    config = AppConfig.get_pub()
+    content = yaml.safe_dump(config, indent=4, allow_unicode=True)
+    return dict(data=config, content=content)
 
 
 @router.post('/reload_config', response_model=StatusMsg, tags=['botcontrol'])
@@ -179,44 +170,6 @@ def get_stgy_code(strategy: str):
         'strategy': stgy_cls.__name__,
         'data': stgy_cls.__source__,
     }
-
-
-@router.get('/available_pairs', response_model=AvailablePairs, tags=['candle data'])
-def list_available_pairs(timeframe: Optional[str] = None, stake_currency: Optional[str] = None,
-                         candletype: Optional[str] = None):
-    from banbot.util.misc import groupby
-    config = AppConfig.get()
-    sess = db.session
-    info_fts = []
-    if timeframe:
-        info_fts.append(KInfo.timeframe == timeframe)
-    rows = sess.query(KInfo.sid, KInfo.timeframe).filter(*info_fts).all()
-    # 记录所有sid可用的时间周期
-    sid_tf_rows = [(r.sid, r.timeframe) for r in rows]
-    sid_tf_map = groupby(sid_tf_rows, lambda x: x[0])
-    sid_tf_map = {k: [t[1] for t in v] for k, v in sid_tf_map.items()}
-    allow_sids = {p[0] for p in sid_tf_rows}
-    all_pairs = ExSymbol.search('')
-    all_pairs = [p for p in all_pairs if p.id in allow_sids]
-
-    if stake_currency:
-        all_pairs = [p for p in all_pairs if p.symbol.endswith(stake_currency)]
-    if not candletype:
-        candletype = config['market_type']
-    exg_name = config['exchange']['name']
-    all_pairs = [p for p in all_pairs if p.market == candletype and p.exchange == exg_name]
-
-    all_pairs = sorted(all_pairs, key=lambda x: x.symbol)
-
-    pairs = list({x.symbol for x in all_pairs})
-    gp_map = {p.symbol: sid_tf_map.get(p.id) for p in all_pairs}
-    pair_tflist = [gp_map.get(p, []) for p in pairs]
-    result = {
-        'length': len(pairs),
-        'pairs': pairs,
-        'pair_interval': pair_tflist,
-    }
-    return result
 
 
 @router.get('/bot_info', tags=['info'])

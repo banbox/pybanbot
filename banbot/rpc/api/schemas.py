@@ -3,13 +3,9 @@
 # File  : schemas.py
 # Author: anyongjin
 # Date  : 2023/9/6
-from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Union, Iterable
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, RootModel, SerializeAsAny
-
-from banbot.config.consts import DATETIME_PRINT_FORMAT
-from banbot.types.exg_types import ValidExchangesType
+from pydantic import BaseModel, RootModel
 
 
 class ExchangeModePayloadMixin(BaseModel):
@@ -55,45 +51,11 @@ class Balances(BaseModel):
     total: float
 
 
-class Count(BaseModel):
-    current: int
-    max: int
-    total_stake: float
-
-
 class PerformanceEntry(BaseModel):
     pair: str
     profit_sum: float
     profit_pct: float
     close_num: int
-
-
-class Profit(BaseModel):
-    profit_closed_percent_mean: float
-    profit_closed_ratio_mean: float
-    profit_closed_percent_sum: float
-    profit_closed_ratio_sum: float
-    profit_all_percent_mean: float
-    profit_all_ratio_mean: float
-    profit_all_percent_sum: float
-    profit_all_ratio_sum: float
-    trade_count: int
-    closed_trade_count: int
-    first_trade_timestamp: Optional[int]
-    latest_trade_timestamp: Optional[int]
-    avg_duration: str
-    best_pair: Optional[str]
-    best_pair_profit_ratio: float
-    winning_trades: int
-    losing_trades: int
-    profit_factor: float
-    winrate: float
-    expectancy: float
-    expectancy_ratio: float
-    max_drawdown: float
-    max_drawdown_abs: float
-    trading_volume: Optional[float] = None
-    bot_start_timestamp: int
 
 
 class TagStat(BaseModel):
@@ -106,41 +68,6 @@ class TagStat(BaseModel):
 class Stats(BaseModel):
     exit_reasons: List[TagStat]
     durations: Dict[str, Optional[float]]
-
-
-class ShowConfig(BaseModel):
-    name: str
-    env: str
-    run_mode: str
-    leverage: int
-    limit_vol_secs: int
-    market_type: str
-    max_market_rate: float
-    odbook_ttl: int
-    order_type: str
-    prefire: bool
-    refill_margin: bool
-    take_over_stgy: str
-    stake_currency: List[str]
-    stake_amount: float
-    max_open_orders: Optional[int] = None
-    wallet_amounts: Dict[str, float]
-    fatal_stop: Dict[str, float]
-    fatal_stop_hours: Optional[float] = None
-    timerange: Optional[Any]
-    run_timeframes: Optional[List[str]]
-    watch_jobs: Optional[Dict[str, List[str]]]
-    run_policy: List[Dict[str, Any]]
-    pairs: List[str]
-    paircfg: Dict[str, Any]
-    pairlists: List[Dict[str, Any]]
-    exchange: Dict[str, Any]
-    data_dir: Optional[str]
-    database: Optional[Dict[str, Any]] = None
-    redis_url: Optional[str] = None
-    api_server: Optional[Dict[str, Any]]
-    rpc_channels: Optional[Dict[str, Any]]
-    webhook: Optional[Dict[str, Any]]
 
 
 class OrderSchema(BaseModel):
@@ -204,9 +131,10 @@ class InoutOrderResponse(BaseModel):
 ForceEnterResponse = RootModel[Union[InoutOrderSchema, StatusMsg]]
 
 
-class Logs(BaseModel):
-    log_count: int
-    logs: List[List]
+class SetPairsPayload(BaseModel):
+    for_white: bool
+    adds: Optional[List[str]] = None
+    deletes: Optional[List[str]] = None
 
 
 class ForceEnterPayload(BaseModel):
@@ -224,78 +152,3 @@ class ForceExitPayload(BaseModel):
     ordertype: Optional[str] = None
     amount: Optional[float] = None
 
-
-class BlacklistPayload(BaseModel):
-    blacklist: List[str]
-
-
-class BlacklistResponse(BaseModel):
-    blacklist: List[str]
-    errors: Dict
-    method: List[str]
-
-
-class WhitelistResponse(BaseModel):
-    whitelist: List[str]
-    method: List[str]
-
-
-class DeleteTrade(BaseModel):
-    cancel_order_count: int
-    result: str
-    result_msg: str
-    trade_id: int
-
-
-class ExchangeListResponse(BaseModel):
-    exchanges: List[ValidExchangesType]
-
-
-class PairListResponse(BaseModel):
-    name: str
-    description: str
-    is_pairlist_generator: bool
-    params: Dict[str, Any]
-
-
-class PairListsResponse(BaseModel):
-    pairlists: List[PairListResponse]
-
-
-class PairListsPayload(ExchangeModePayloadMixin, BaseModel):
-    pairlists: List[Dict[str, Any]]
-    blacklist: List[str]
-    stake_currency: str
-
-
-class AvailablePairs(BaseModel):
-    length: int
-    pairs: List[str]
-    pair_interval: List[List[str]]
-
-
-class PairHistory(BaseModel):
-    strategy: str
-    pair: str
-    timeframe: str
-    timeframe_ms: int
-    columns: List[str]
-    data: SerializeAsAny[List[Any]]
-    length: int
-    buy_signals: int
-    sell_signals: int
-    enter_long_signals: int
-    exit_long_signals: int
-    enter_short_signals: int
-    exit_short_signals: int
-    last_analyzed: datetime
-    last_analyzed_ts: int
-    data_start_ts: int
-    data_start: str
-    data_stop: str
-    data_stop_ts: int
-    # TODO[pydantic]: The following keys were removed: `json_encoders`.
-    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
-    model_config = ConfigDict(json_encoders={
-        datetime: lambda v: v.strftime(DATETIME_PRINT_FORMAT),
-    })

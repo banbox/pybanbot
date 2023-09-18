@@ -88,9 +88,9 @@ class RPC:
     def open_num(self):
         open_ods = InOutOrder.open_orders()
         return dict(
-            current=len(open_ods),
-            max=self.bot.order_mgr.max_open_orders,
-            total_stake=sum(od.enter_cost for od in open_ods)
+            open_num=len(open_ods),
+            max_num=self.bot.order_mgr.max_open_orders,
+            total_cost=sum(od.enter_cost for od in open_ods)
         )
 
     def pair_performance(self):
@@ -189,6 +189,10 @@ class RPC:
             'max_drawdown_abs': abs_max_drawdown,
             'trading_volume': trading_volume,
             'bot_start_timestamp': BotGlobal.start_at,
+            'run_tfs': [p[0] for p in BotGlobal.run_tf_secs],
+            'exchange': BotGlobal.exg_name,
+            'market': BotGlobal.market_type,
+            'pairs': BotGlobal.pairs
         }
 
     def stats(self) -> Dict[str, Any]:
@@ -378,47 +382,47 @@ class RPC:
         od[0].force_exit()
         return {'result': f'Created exit order for trade {trade_id}.'}
 
-    def blacklist(self, add: Optional[List[str]] = None) -> Dict:
+    def pairlist(self) -> Dict:
         """ Returns the currently active blacklist"""
-        errors = {}
-        if add:
-            valid_keys = set(self.bot.exchange.get_markets().keys())
-            old_list = set(self.bot.pair_mgr.blacklist)
-            for pair in add:
-                if pair not in valid_keys:
-                    errors[pair] = f'Pair {pair} is not a valid symbol.'
-                    continue
-                if pair in old_list:
-                    self.bot.pair_mgr.blacklist.append(pair)
-                else:
-                    errors[pair] = f'Pair {pair} already in pairlist.'
 
         res = {'method': self.bot.pair_mgr.name_list,
                'blacklist': self.bot.pair_mgr.blacklist,
-               'errors': errors}
-        return res
-
-    def blacklist_delete(self, delete: List[str]) -> Dict:
-        """ Removes pairs from currently active blacklist """
-        errors = {}
-        old_list = set(self.bot.pair_mgr.blacklist)
-        for pair in delete:
-            if pair in old_list:
-                self.bot.pair_mgr.blacklist.remove(pair)
-            else:
-                errors[pair] = {
-                    'error_msg': f"Pair {pair} is not in the current blacklist."
-                }
-        resp = self.blacklist()
-        resp['errors'] = errors
-        return resp
-
-    def whitelist(self) -> Dict:
-        """ Returns the currently active whitelist"""
-        res = {'method': self.bot.pair_mgr.name_list,
-               'whitelist': self.bot.pair_mgr.whitelist
+               'whitelist': self.bot.pair_mgr.whitelist,
                }
         return res
+
+    async def set_pairs(self, for_white: bool, adds: List[str], deletes: List[str]) -> Dict:
+        '''
+        手动设置交易对。增加或减少。
+        '''
+        errors = {}
+        target = self.bot.pair_mgr.whitelist if for_white else self.bot.pair_mgr.blacklist
+        init_list = set(target)
+        if adds:
+            valid_keys = set(self.bot.exchange.get_markets().keys())
+            old_list = set(target)
+            for pair in adds:
+                if pair not in valid_keys:
+                    errors[pair] = f'Pair {pair} is not a valid symbol.'
+                    continue
+                if pair not in old_list:
+                    target.append(pair)
+                else:
+                    errors[pair] = f'Pair {pair} already in pairlist.'
+        if deletes:
+            old_list = set(target)
+            for pair in deletes:
+                if pair in old_list:
+                    target.remove(pair)
+                else:
+                    errors[pair] = {
+                        'error_msg': f"Pair {pair} is not in the current blacklist."
+                    }
+        if for_white:
+            asyncio.run_coroutine_threadsafe(self.bot.add_del_pairs(init_list), self.bot.loop)
+        resp = self.pairlist()
+        resp['errors'] = errors
+        return resp
 
     @staticmethod
     def get_logs(limit: Optional[int]) -> Dict[str, Any]:
@@ -427,17 +431,15 @@ class RPC:
             buffer = bufferHandler.buffer[-limit:]
         else:
             buffer = bufferHandler.buffer
-        records = [[btime.to_datestr(r.created),
-                   r.created * 1000, r.name, r.levelname,
+        records = [[int(r.created * 1000), r.name, r.levelname,
                    r.message + ('\n' + r.exc_text if r.exc_text else '')]
                    for r in buffer]
 
         # Log format:
         # [logtime-formatted, logepoch, logger-name, loglevel, message \n + exception]
-        # e.g. ["2020-08-27 11:35:01", 1598520901097.9397,
-        #       "freqtrade.worker", "INFO", "Starting worker develop"]
+        # e.g. [1598520901097, "freqtrade.worker", "INFO", "Starting worker develop"]
 
-        return {'log_count': len(records), 'logs': records}
+        return {'logs': records}
 
     def set_allow_trade_after(self, cost_secs: int) -> Dict[str, int]:
         """

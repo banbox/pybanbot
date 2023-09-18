@@ -24,6 +24,7 @@ class LiveTrader(Trader):
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
+        self.loop = None
 
     def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = NotifyType.ENTRY if is_enter else NotifyType.EXIT
@@ -79,6 +80,7 @@ class LiveTrader(Trader):
 
     async def run(self):
         self.start_heartbeat_check(3)
+        self.loop = asyncio.get_running_loop()
         # 初始化
         await self.init()
         # 启动restapi
@@ -125,10 +127,15 @@ class LiveTrader(Trader):
         logger.info("start refreshing symbols")
         old_symbols = set(self.pair_mgr.symbols)
         await self.pair_mgr.refresh_pairlist()
-        now_symbols = self.pair_mgr.symbols
+        await self.add_del_pairs(old_symbols)
+
+    async def add_del_pairs(self, old_symbols: Set[str]):
+        now_symbols = set(self.pair_mgr.symbols)
+        BotGlobal.pairs = now_symbols
         await self.wallets.init(now_symbols)
-        # 移除已删除的交易对
         del_symbols = list(old_symbols.difference(now_symbols))
+        add_symbols = list(now_symbols.difference(old_symbols))
+        # 移除已删除的交易对
         if del_symbols:
             logger.info(f"remove symbols: {del_symbols}")
             await self.exchange.cancel_open_orders(del_symbols)
@@ -137,8 +144,13 @@ class LiveTrader(Trader):
             logger.info(f'exit orders: {exit_ods}')
             await self.data_mgr.unsub_pairs(del_symbols)
         # 处理新增的交易对
-        add_symbols = list(set(now_symbols).difference(old_symbols))
         if add_symbols:
+            calc_keys = [s for s in add_symbols if s not in self.pair_mgr.pair_tfscores]
+            if calc_keys:
+                # 如果是rpc添加的，这里需要计算tfscores
+                from banbot.symbols.tfscaler import calc_symboltf_scales
+                tfscores = await calc_symboltf_scales(self.exchange, calc_keys)
+                self.pair_mgr.pair_tfscores.update(**tfscores)
             logger.info(f"listen new symbols: {add_symbols}")
             pair_tfs = self._load_strategies(add_symbols, self.pair_mgr.pair_tfscores)
             await self.data_mgr.sub_warm_pairs(pair_tfs)
