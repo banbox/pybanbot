@@ -426,7 +426,8 @@ class InOutOrder(BaseDbModel):
              flat_sub: bool = False):
         from banbot.util.misc import add_dict_prefix
         result = super().dict(only, skips)
-        result['enter_cost'] = self.enter.filled * self.enter.average
+        in_price = self.enter.average or self.enter.price or self.init_price
+        result['enter_cost'] = (self.enter.filled or self.enter.amount) * in_price
         if self.infos:
             result.update(**self.infos)
         if self.exit:

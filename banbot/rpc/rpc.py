@@ -219,7 +219,7 @@ class RPC:
         for tag, item in exit_reasons.items():
             item['tag'] = tag
             tag_list.append(item)
-        tag_list = sorted(tag_list, key=lambda x: x['name'])
+        tag_list = sorted(tag_list, key=lambda x: x['tag'])
         return {'exit_reasons': tag_list, 'durations': durations}
 
     def timeunit_profit(self, timescale: int, timeunit: str = 'days') -> List[Dict]:
