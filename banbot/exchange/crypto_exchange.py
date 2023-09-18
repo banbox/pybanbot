@@ -101,7 +101,7 @@ def _create_exchange(module, override_map: dict, cfg: dict, exg_name: str = None
 
 
 def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
-        -> Tuple[ccxt.Exchange, ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
+        -> Tuple[ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
     exg_cfg = AppConfig.get_exchange(cfg, exg_name)
     exg_name = exg_cfg['name']
     has_proxy = bool(exg_cfg.get('proxies'))
@@ -111,10 +111,10 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
         os.environ['WS_PROXY'] = exg_cfg['proxies']['http']
         os.environ['WSS_PROXY'] = exg_cfg['proxies']['http']
         logger.warning("[PROXY] %s", exg_cfg['proxies'])
-    exchange = _create_exchange(ccxt, api_overrides, cfg, exg_name, market_type)
+    # exchange = _create_exchange(ccxt, api_overrides, cfg, exg_name, market_type)
     exchange_async = _create_exchange(ccxt_async, asy_overrides, cfg, exg_name, market_type)
     if not with_ws:
-        return exchange, exchange_async, None
+        return exchange_async, None
     run_env = cfg["env"]
     if market_type == 'future':
         exg_name = exg_fut_map.get(exg_name) or exg_name
@@ -129,7 +129,7 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
         exchange_ws.set_sandbox_mode(True)
     if has_proxy:
         exchange_ws.aiohttp_proxy = exg_cfg['proxies']['http']
-    return exchange, exchange_async, exchange_ws
+    return exchange_async, exchange_ws
 
 
 def _copy_markets(exg_src, exg_dst):
@@ -230,7 +230,7 @@ class CryptoExchange:
 
     def __init__(self, config: dict, exg_name: str = None, market_type: str = None):
         self.config = config
-        self.api, self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
+        self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
         self.exg_config = AppConfig.get_exchange(config, exg_name)
         self.name = self.exg_config['name']
         self.bot_name = config.get('name', 'noname')
@@ -263,20 +263,25 @@ class CryptoExchange:
         if btime.utctime() - self.markets_at < 1800:
             logger.warning('load_markets too freq, skip')
             return
-        restore_ts = _restore_markets(self.api_async, self.market_dir)
-        markets = self.api_async.markets or []
-        # 市场信息非Prod模式7天有效，Prod模式1天有效
-        exp_secs = 604800 if btime.run_mode != RunMode.PROD else 86400
-        if btime.utctime() - restore_ts > exp_secs:
-            # 非实时模式，缓存的交易对7天有效
-            if restore_ts:
+        load_new = False
+        if btime.run_mode in btime.LIVE_MODES:
+            load_new = True
+        else:
+            restore_ts = _restore_markets(self.api_async, self.market_dir)
+            exp_secs = 604800
+            if btime.utctime() - restore_ts > exp_secs:
+                load_new = True
                 logger.warning('exchange markets expired, renew...')
+        if load_new:
+            # 实时模式，或缓存的交易所信息过期
             markets = await self.api_async.load_markets(True)
+            await self.api_ws.load_markets(True)
             _save_markets(self.api_async, self.market_dir)
-        self.api_ws.markets_by_id = self.api_async.markets_by_id
-        _copy_markets(self.api_async, self.api_ws)
-        _copy_markets(self.api_async, self.api)
-        logger.info('%d markets loaded for %s', len(markets), self.api.name)
+        else:
+            markets = self.api_async.markets or []
+            self.api_ws.markets_by_id = self.api_async.markets_by_id
+            _copy_markets(self.api_async, self.api_ws)
+        logger.info('%d markets loaded for %s', len(markets), self.api_async.name)
         if not self.markets:
             # 首次加载，输出统计的交易对信息
             from banbot.exchange.exchange_utils import text_markets
@@ -288,7 +293,7 @@ class CryptoExchange:
         '''
         传入BTCUSDT，不带/
         '''
-        return self.api.market(symbol_id)
+        return self.api_async.market(symbol_id)
 
     def exchange_has(self, endpoint: str) -> bool:
         """
@@ -572,9 +577,9 @@ class CryptoExchange:
         :return:
         '''
         from banbot.data.tools import build_ohlcvc
-        if (not force_sub or timeframe == '1s') and timeframe in self.api.timeframes:
+        if (not force_sub or timeframe == '1s') and timeframe in self.api_async.timeframes:
             return await self.api_async.fetch_ohlcv(pair, timeframe, since=since, limit=limit)
-        sub_tf, sub_tf_secs = max_sub_timeframe(self.api.timeframes.keys(), timeframe, force_sub)
+        sub_tf, sub_tf_secs = max_sub_timeframe(self.api_async.timeframes.keys(), timeframe, force_sub)
         cur_tf_secs = tf_to_secs(timeframe)
         if not limit:
             sub_arr = await self.api_async.fetch_ohlcv(pair, sub_tf, since=since)

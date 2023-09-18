@@ -63,10 +63,11 @@ async def test_ccxt_future():
 
 async def test_watch_mark_prices():
     AppConfig.init_by_args()
-    config = AppConfig.get()
     exchange = get_exchange()
-    res = await exchange.watch_mark_prices()
-    logger.info(f'mark price: {res}')
+    await exchange.load_markets()
+    while True:
+        res = await exchange.watch_mark_prices()
+        logger.info(f'mark price: {len(res)}')
 
 
 if __name__ == '__main__':
