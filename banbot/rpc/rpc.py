@@ -170,11 +170,11 @@ class RPC:
         return {
             'profit_closed_percent_mean': profit_pct_closed_avg * 100,
             'profit_closed_mean': profit_closed_mean,
-            'profit_closed_percent_sum': profit_closed_sum / total_cost_closed * 100,
+            'profit_closed_percent_sum': profit_closed_sum / total_cost_closed * 100 if total_cost_closed else 0,
             'profit_closed_sum': profit_closed_sum,
             'profit_all_percent_mean': profit_pct_all_avg * 100,
             'profit_all_mean': profit_all_mean,
-            'profit_all_percent_sum': profit_all_sum / total_cost * 100,
+            'profit_all_percent_sum': profit_all_sum / total_cost * 100 if total_cost else 0,
             'profit_all_sum': profit_all_sum,
             'trade_count': len(orders),
             'closed_trade_count': closed_num,
