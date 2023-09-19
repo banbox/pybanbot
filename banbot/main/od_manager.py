@@ -1236,6 +1236,8 @@ class LiveOrderManager(OrderManager):
                     else:
                         logger.exception('consume order exception: %s', job)
                 self.order_q.task_done()
+                if BotGlobal.state == BotState.STOPPED and not self.order_q.qsize():
+                    break
             except Exception:
                 logger.exception("consume order_q error")
 
@@ -1364,8 +1366,10 @@ class LiveOrderManager(OrderManager):
             MarketPrice.set_new_price(item['symbol'], item['markPrice'])
 
     async def cleanup(self):
-        with db():
-            exit_ods = self.exit_open_orders(dict(tag='bot_stop'), 0, is_force=True, od_dir='both')
-            if exit_ods:
-                logger.info('exit %d open trades', len(exit_ods))
+        if btime.run_mode not in btime.LIVE_MODES:
+            # 实盘模式和实时模拟时，停止机器人不退出订单
+            with db():
+                exit_ods = self.exit_open_orders(dict(tag='bot_stop'), 0, is_force=True, od_dir='both')
+                if exit_ods:
+                    logger.info('exit %d open trades', len(exit_ods))
         await self.order_q.join()

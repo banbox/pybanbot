@@ -307,11 +307,11 @@ class InOutOrder(BaseDbModel):
             # 期货市场，手续费以定价币计算
             get_amount = self.enter.filled
             fee_cost = ent_quote_amount * ent_fee_rate
-            if self.status == InOutStatus.FullExit:
+            if self.status == InOutStatus.FullExit and self.exit:
                 fee_cost += get_amount * price * self.exit.fee
         else:
             get_amount = self.enter.filled * (1 - ent_fee_rate)  # 入场后的数量
-            if self.status == InOutStatus.FullExit:
+            if self.status == InOutStatus.FullExit and self.exit:
                 # 已完全退出
                 get_amount *= (1 - self.exit.fee)  # 出场后的数量
             fee_cost = 0
@@ -434,7 +434,7 @@ class InOutOrder(BaseDbModel):
             result['enter_cost'] = self.enter_cost
         if self.infos:
             result.update(**self.infos)
-        if self.exit:
+        if not self.exit:
             result['duration'] = 0
         else:
             result['duration'] = round(self.exit.create_at - self.enter.create_at) / 1000

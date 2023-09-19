@@ -116,16 +116,15 @@ class RPC:
             profit_pct = od.profit_rate or 0.0
             if profit_val > best_rate:
                 best_pair, best_rate = od.symbol, profit_pct
-            if od.status < InOutStatus.FullExit:
-                if profit_val >= 0:
-                    winning_trades += 1
-                    winning_profit += profit_val
-                else:
-                    losing_trades += 1
-                    losing_profit -= profit_val
+            if profit_val >= 0:
+                winning_trades += 1
+                winning_profit += profit_val
             else:
+                losing_trades += 1
+                losing_profit -= profit_val
+            profit_all.append(profit_val)
+            if od.status == InOutStatus.FullExit:
                 profit_closed.append(profit_val)
-                profit_all.append(profit_val)
                 done_ts = od.exit_at or od.enter_at
                 day_ts.append(done_ts // 1000 // secs_day)
 
@@ -177,7 +176,7 @@ class RPC:
             'latest_trade_timestamp': last_ms,
             'avg_duration': str(timedelta(seconds=sum(durations) / num)).split('.')[0],
             'best_pair': best_pair,
-            'best_pair_profit_ratio': best_rate,
+            'best_pair_profit_pct': best_rate,
             'winning_trades': winning_trades,
             'losing_trades': losing_trades,
             'profit_factor': profit_factor,
