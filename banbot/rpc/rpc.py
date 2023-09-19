@@ -108,7 +108,6 @@ class RPC:
         winning_profit = 0.0
         losing_profit = 0.0
         best_pair, best_rate = None, 0
-        total_cost = 0
 
         for od in orders:
             if od.exit_at:
@@ -126,9 +125,9 @@ class RPC:
                     losing_profit -= profit_val
             else:
                 profit_closed.append(profit_val)
-            profit_all.append(profit_val)
-            day_ts.append(od.exit_at // 1000 // secs_day)
-            total_cost += od.enter_cost_real
+                profit_all.append(profit_val)
+                done_ts = od.exit_at or od.enter_at
+                day_ts.append(done_ts // 1000 // secs_day)
 
         closed_num = len(profit_closed)
         profit_closed_sum = sum(profit_closed) if closed_num else 0.

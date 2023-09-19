@@ -6,3 +6,7 @@
 
 class OperateError(Exception):
     pass
+
+
+class NetError(Exception):
+    pass

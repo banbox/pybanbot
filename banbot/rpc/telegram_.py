@@ -3,8 +3,10 @@
 # File  : telegram_.py
 # Author: anyongjin
 # Date  : 2023/9/10
+import telegram.error
 from telegram import Bot
 from banbot.rpc.webhook import *
+from banbot.types import NetError
 
 
 class Telegram(Webhook):
@@ -25,6 +27,10 @@ class Telegram(Webhook):
 
     async def _do_send_msg(self, msg_list: List[dict]) -> int:
         merge_text = '\n\n'.join([msg['content'] for msg in msg_list])
-        await self.bot.send_message(self.channel_id, text=merge_text, disable_web_page_preview=self.no_preview,
-                                    message_thread_id=self.topic_id, reply_to_message_id=self.reply_to)
+
+        try:
+            await self.bot.send_message(self.channel_id, text=merge_text, disable_web_page_preview=self.no_preview,
+                                        message_thread_id=self.topic_id, reply_to_message_id=self.reply_to)
+        except telegram.error.NetworkError as e:
+            raise NetError from e
         return len(msg_list)

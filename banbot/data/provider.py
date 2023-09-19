@@ -69,7 +69,8 @@ class DataProvider:
         for hold in self.holders:
             if hold.pair == pair:
                 return hold.states[0].latest
-        return MarketPrice.get(pair)
+        cur_price = MarketPrice.get(pair)
+        return [btime.utcstamp(), cur_price, cur_price, cur_price, cur_price, 1]
 
 
 class HistDataProvider(DataProvider):

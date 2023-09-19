@@ -7,6 +7,7 @@ import asyncio
 from banbot.config import Config
 from banbot.storage.common import *
 from banbot.util.common import *
+from banbot.types import NetError
 
 
 class NotifyType:
@@ -160,6 +161,11 @@ class Webhook:
                     return 0
                 sent_num += cur_sent
                 msg_list = msg_list[cur_sent:]  # 去除已发送的
+            except NetError as e:
+                if attempts > self._retries:
+                    logger.error(f'net error, {attempts} retry fail, {e}')
+                else:
+                    logger.warning(f'net error,start {attempts + 1} retrying')
             except Exception as exc:
                 logger.exception("Could not call webhook url. Exception: %s", exc)
         return sent_num
