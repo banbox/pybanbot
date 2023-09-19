@@ -1180,7 +1180,10 @@ class LiveOrderManager(OrderManager):
         if not od.enter.amount:
             if not od.quote_cost:
                 raise ValueError(f'quote_cost is required to calc enter_amount')
-            od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
+            try:
+                od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
+            except Exception:
+                logger.error(f'pres_amount for order fail: {od.dict()}')
         await self._create_exg_order(od, True)
 
     async def _exec_order_exit(self, od: InOutOrder):
