@@ -116,16 +116,16 @@ class RPC:
             profit_val = od.profit or 0.0
             profit_pct = od.profit_rate or 0.0
             profit_pct_all.append(profit_pct)
-            if profit_val > best_rate:
-                best_pair, best_rate = od.symbol, profit_pct
-            if profit_val >= 0:
-                winning_trades += 1
-                winning_profit += profit_val
-            else:
-                losing_trades += 1
-                losing_profit -= profit_val
             profit_all.append(profit_val)
             if od.status == InOutStatus.FullExit:
+                if profit_val > best_rate:
+                    best_pair, best_rate = od.symbol, profit_pct
+                if profit_val >= 0:
+                    winning_trades += 1
+                    winning_profit += profit_val
+                else:
+                    losing_trades += 1
+                    losing_profit -= profit_val
                 profit_closed.append(profit_val)
                 profit_pct_closed.append(profit_pct)
                 total_cost_closed += od.enter_cost
