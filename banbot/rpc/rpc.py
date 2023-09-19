@@ -99,21 +99,23 @@ class RPC:
     def dash_statistics(self):
         orders = InOutOrder.get_orders()
 
-        profit_all = []
+        profit_all, profit_pct_all = [], []
         day_ts = []
-        profit_closed = []
+        profit_closed, profit_pct_closed = [], []
         durations = []
         winning_trades = 0
         losing_trades = 0
         winning_profit = 0.0
         losing_profit = 0.0
         best_pair, best_rate = None, 0
+        total_cost_closed = 0
 
         for od in orders:
-            if od.exit_at:
-                durations.append((od.exit_at - od.enter_at) / 1000)
+            cur_ms = od.exit_at or btime.utcstamp()
+            durations.append((cur_ms - od.enter_at) / 1000)
             profit_val = od.profit or 0.0
             profit_pct = od.profit_rate or 0.0
+            profit_pct_all.append(profit_pct)
             if profit_val > best_rate:
                 best_pair, best_rate = od.symbol, profit_pct
             if profit_val >= 0:
@@ -125,6 +127,8 @@ class RPC:
             profit_all.append(profit_val)
             if od.status == InOutStatus.FullExit:
                 profit_closed.append(profit_val)
+                profit_pct_closed.append(profit_pct)
+                total_cost_closed += od.enter_cost
                 done_ts = od.exit_at or od.enter_at
                 day_ts.append(done_ts // 1000 // secs_day)
 
@@ -138,7 +142,7 @@ class RPC:
 
         # 计算初始余额
         init_balance = self._wallet.fiat_value() - profit_all_sum
-        trading_volume = sum(od.enter_cost for od in orders)
+        total_cost = sum(od.enter_cost for od in orders)
 
         profit_factor = winning_profit / abs(losing_profit) if losing_profit else float('inf')
         winrate = (winning_trades / closed_num) if closed_num > 0 else 0
@@ -161,20 +165,22 @@ class RPC:
         first_ms = orders[0].enter_at if orders else None
         last_ms = orders[-1].enter_at if orders else None
         num = float(len(durations) or 1)
+        profit_pct_closed_avg = sum(profit_pct_closed) / len(profit_pct_closed) if profit_pct_closed else 0
+        profit_pct_all_avg = sum(profit_pct_all) / len(profit_pct_all) if profit_pct_all else 0
         return {
-            'profit_closed_percent_mean': round(profit_closed_mean * 100, 2),
-            'profit_closed_ratio_mean': profit_closed_mean,
-            'profit_closed_percent_sum': round(profit_closed_sum * 100, 2),
-            'profit_closed_ratio_sum': profit_closed_sum,
-            'profit_all_percent_mean': round(profit_all_mean * 100, 2),
-            'profit_all_ratio_mean': profit_all_mean,
-            'profit_all_percent_sum': round(profit_all_sum * 100, 2),
-            'profit_all_ratio_sum': profit_all_sum,
+            'profit_closed_percent_mean': profit_pct_closed_avg * 100,
+            'profit_closed_mean': profit_closed_mean,
+            'profit_closed_percent_sum': profit_closed_sum / total_cost_closed * 100,
+            'profit_closed_sum': profit_closed_sum,
+            'profit_all_percent_mean': profit_pct_all_avg * 100,
+            'profit_all_mean': profit_all_mean,
+            'profit_all_percent_sum': profit_all_sum / total_cost * 100,
+            'profit_all_sum': profit_all_sum,
             'trade_count': len(orders),
             'closed_trade_count': closed_num,
             'first_trade_timestamp': first_ms,
             'latest_trade_timestamp': last_ms,
-            'avg_duration': str(timedelta(seconds=sum(durations) / num)).split('.')[0],
+            'avg_duration': sum(durations) / num,
             'best_pair': best_pair,
             'best_pair_profit_pct': best_rate,
             'winning_trades': winning_trades,
@@ -185,7 +191,7 @@ class RPC:
             'expectancy_ratio': expectancy_ratio,
             'max_drawdown': max_drawdown,
             'max_drawdown_abs': abs_max_drawdown,
-            'trading_volume': trading_volume,
+            'total_cost': total_cost,
             'bot_start_timestamp': BotGlobal.start_at,
             'run_tfs': [p[0] for p in BotGlobal.run_tf_secs],
             'exchange': BotGlobal.exg_name,
