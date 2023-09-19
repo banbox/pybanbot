@@ -427,7 +427,11 @@ class InOutOrder(BaseDbModel):
         from banbot.util.misc import add_dict_prefix
         result = super().dict(only, skips)
         in_price = self.enter.average or self.enter.price or self.init_price
-        result['enter_cost'] = (self.enter.filled or self.enter.amount) * in_price
+        in_amount = self.enter.filled or self.enter.amount
+        if in_amount:
+            result['enter_cost'] = in_amount * in_price
+        else:
+            result['enter_cost'] = self.enter_cost
         if self.infos:
             result.update(**self.infos)
         if self.exit:
@@ -500,7 +504,8 @@ class InOutOrder(BaseDbModel):
             gp_items = list(gp)
             profit_sum = sum(od.profit for od in gp_items)
             amount_sum = sum(od.enter_cost_real for od in gp_items)
-            all_pairs.remove(key)
+            if key in all_pairs:
+                all_pairs.remove(key)
             result.append(dict(
                 pair=key,
                 profit_sum=profit_sum,
