@@ -235,7 +235,8 @@ class OrderManager(metaclass=SingletonArg):
     def update_by_bar(self, row):
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
-        op_orders = InOutOrder.open_orders()
+        exs, _ = get_cur_symbol()
+        op_orders = InOutOrder.open_orders(pairs=exs.symbol)
         # 更新订单利润
         close_price = float(row[ccol])
         for od in op_orders:
