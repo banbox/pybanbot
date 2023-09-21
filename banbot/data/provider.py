@@ -194,9 +194,9 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             for hold in new_holds:
                 sub_tf = hold.states[0].timeframe
                 since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
-                watch_jobs.append(WatchParam(self.exg_name, hold.pair, market, sub_tf, since))
+                watch_jobs.append(WatchParam(hold.pair, sub_tf, since))
             # 发送消息给爬虫，实时抓取数据
-            await self.watch_klines(*watch_jobs)
+            await self.watch_klines(self.exg_name, market, *watch_jobs)
 
     async def unsub_pairs(self, pairs: List[str]):
         '''
@@ -206,8 +206,8 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         if not removed:
             return
         market = self.config['market_type']
-        jobs = [WatchParam(self.exg_name, market, hold.pair) for hold in removed]
-        await self.unwatch_klines(*jobs)
+        pairs = [hold.pair for hold in removed]
+        await self.unwatch_klines(self.exg_name, market, pairs)
 
     @classmethod
     def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],
@@ -240,3 +240,9 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             hold.wait_bar = None
             return
         hold.wait_bar = last_bar
+
+    @classmethod
+    async def run(cls):
+        if not cls._obj:
+            raise RuntimeError(f'{cls.__name__} not initialized!')
+        await cls._obj.run_forever('bot')

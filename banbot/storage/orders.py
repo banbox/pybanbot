@@ -10,7 +10,6 @@ from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
 from banbot.util.misc import del_dict_prefix
-from banbot.util.redis_helper import AsyncRedis
 from banbot.util import btime
 from banbot.storage.common import BotGlobal
 
@@ -97,10 +96,6 @@ class Order(BaseDbModel):
                         side='buy', filled=0, create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
-
-    def lock(self):
-        redis = AsyncRedis()
-        return redis.lock(f'order_{self.id}', with_conn=True)
 
     def __str__(self):
         if not self.amount:

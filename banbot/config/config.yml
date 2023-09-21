@@ -94,7 +94,7 @@ data_dir: E:\trade\ban_data  # 保存和读取数据的目录
 database:  # 数据库配置
   retention: all
   url: postgresql://postgres:123@[127.0.0.1]:5432/bantd
-redis_url: redis://127.0.0.1:6379/0
+spider_addr: 127.0.0.1:6789
 api_server:  # 启用此项后，可通过rest api访问和控制机器人；尽量不要暴露到公网
   enabled: false
   listen_ip_address: "127.0.0.1"  # 绑定地址，0.0.0.0表示暴露到公网

@@ -764,7 +764,7 @@ class LiveOrderManager(OrderManager):
 
         return buy_price, sell_price
 
-    async def _consume_unmatchs(self, sub_od: Order):
+    def _consume_unmatchs(self, sub_od: Order):
         for trade in list(self.unmatch_trades.values()):
             if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
                 continue
@@ -773,7 +773,7 @@ class LiveOrderManager(OrderManager):
             if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
             logger.info('exec unmatch trade: %s', trade)
-            await self._update_order(sub_od, trade)
+            self._update_order(sub_od, trade)
 
     def _check_new_trades(self, trades: List[dict]):
         if not trades:
@@ -829,21 +829,20 @@ class LiveOrderManager(OrderManager):
             self._finish_order(od)
         return True
 
-    async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
+    def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
-        async with sub_od.lock():
-            if sub_od.order_id:
-                # 如修改订单价格，order_id会变化
-                del self.exg_orders[(od.symbol, sub_od.order_id)]
-            sub_od.order_id = order["id"]
-            exg_key = od.symbol, sub_od.order_id
-            self.exg_orders[exg_key] = sub_od.id
-            logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
-            new_num, old_num = self._check_new_trades(order['trades'])
-            if new_num or self.market_type != 'spot':
-                # 期货市场未返回trades
-                self._update_order_res(od, is_enter, order)
-        await self._consume_unmatchs(sub_od)
+        if sub_od.order_id:
+            # 如修改订单价格，order_id会变化
+            del self.exg_orders[(od.symbol, sub_od.order_id)]
+        sub_od.order_id = order["id"]
+        exg_key = od.symbol, sub_od.order_id
+        self.exg_orders[exg_key] = sub_od.id
+        logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
+        new_num, old_num = self._check_new_trades(order['trades'])
+        if new_num or self.market_type != 'spot':
+            # 期货市场未返回trades
+            self._update_order_res(od, is_enter, order)
+        self._consume_unmatchs(sub_od)
         db.session.commit()
 
     def _finish_order(self, od: InOutOrder):
@@ -912,7 +911,7 @@ class LiveOrderManager(OrderManager):
         order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
-            await self._update_subod_by_ccxtres(od, is_enter, order)
+            self._update_subod_by_ccxtres(od, is_enter, order)
             if is_enter:
                 if od.get_info('stoploss_price'):
                     await self._edit_trigger_od(od, 'stoploss_')
@@ -991,12 +990,11 @@ class LiveOrderManager(OrderManager):
             self._finish_order(inout_od)
         self._fire(inout_od, od.enter)
 
-    async def _update_order(self, od: Order, data: dict):
-        async with od.lock():
-            if self.name.find('binance') >= 0:
-                self._update_bnb_order(od, data)
-            else:
-                raise ValueError(f'unsupport exchange to update order: {self.name}')
+    def _update_order(self, od: Order, data: dict):
+        if self.name.find('binance') >= 0:
+            self._update_bnb_order(od, data)
+        else:
+            raise ValueError(f'unsupport exchange to update order: {self.name}')
 
     @loop_forever
     async def listen_orders_forever(self):
@@ -1022,11 +1020,11 @@ class LiveOrderManager(OrderManager):
                     self.unmatch_trades[trade_key] = data
                     continue
                 sub_od = sess.query(Order).get(self.exg_orders[od_key])
-                await self._update_order(sub_od, data)
+                self._update_order(sub_od, data)
                 related_ods.add(sub_od)
                 sess.commit()
             for sub_od in related_ods:
-                await self._consume_unmatchs(sub_od)
+                self._consume_unmatchs(sub_od)
             sess.commit()
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
@@ -1193,7 +1191,7 @@ class LiveOrderManager(OrderManager):
             if od.enter.order_id:
                 try:
                     res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
-                    await self._update_subod_by_ccxtres(od, True, res)
+                    self._update_subod_by_ccxtres(od, True, res)
                 except ccxt.OrderNotFound:
                     pass
             if not od.enter.filled:
@@ -1263,7 +1261,7 @@ class LiveOrderManager(OrderManager):
             else:
                 res = await self.exchange.edit_limit_order(sub_od.order_id, od.symbol, sub_od.side,
                                                            left_amount, price)
-            await self._update_subod_by_ccxtres(od, is_enter, res)
+            self._update_subod_by_ccxtres(od, is_enter, res)
         except ccxt.InvalidOrder as e:
             logger.exception('edit invalid order: %s, %s', e, od)
 

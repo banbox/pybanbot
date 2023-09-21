@@ -25,7 +25,8 @@ def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, 
     return result
 
 
-def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=None, ohlcvs=None, with_count=True):
+def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=None, ohlcvs=None, with_count=True,
+                 in_tf_msecs: int = 0):
     '''
     从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
     :param details: 子OHLC列表。[[t,o,h,l,c,v,cnt], ...]
@@ -34,6 +35,7 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
     :param since:
     :param ohlcvs: 已有的待更新数组
     :param with_count: 是否添加交易数量
+    :param in_tf_msecs: 传入的蜡烛的间隔。未提供时计算
     :return:
     '''
     ms = tf_secs * 1000
@@ -63,8 +65,9 @@ def build_ohlcvc(details: List[Tuple], tf_secs: int, prefire: float = 0., since=
     last_finish = False
     if len(raw_ts) >= 2:
         # 至少有2个，判断最后一个bar是否结束：假定details中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
-        ts_interval = raw_ts[-1] - raw_ts[-2]
-        finish_ts = (raw_ts[-1] + ts_interval + off_ms) // ms * ms
+        in_tf_msecs = raw_ts[-1] - raw_ts[-2]
+    if in_tf_msecs:
+        finish_ts = (raw_ts[-1] + in_tf_msecs + off_ms) // ms * ms
         last_finish = finish_ts > ohlcvs[-1][0]
     return ohlcvs, last_finish
 

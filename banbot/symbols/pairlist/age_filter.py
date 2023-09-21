@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/17
 from banbot.symbols.pairlist.base import *
-from banbot.util.cache import *
+from banbot.data.cache import *
 
 
 class AgeFilter(PairList):

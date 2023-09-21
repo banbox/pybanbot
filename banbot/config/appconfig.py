@@ -218,8 +218,6 @@ class AppConfig(metaclass=Singleton):
                     continue
                 credit_keys = [k for k in item if k.startswith('credit_')]
                 [item.pop(k) for k in credit_keys]
-        if 'redis_url' in config:
-            del config['redis_url']
         if 'database' in config:
             del config['database']
         if 'timerange' in config:

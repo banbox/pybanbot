@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/2/28
 
-from banbot.data.wacther import KlineLiveConsumer, WatchParam, RedisChannel, PairTFCache, Watcher
+from banbot.data.wacther import KlineLiveConsumer, WatchParam, PairTFCache, Watcher
 from banbot.data.feeder import DataFeeder, DBDataFeeder, LiveDataFeader
 from banbot.data.provider import DataFeeder, DBDataFeeder, LiveDataFeader
 from banbot.data.toolbox import fill_holes, sync_timeframes, correct_ohlcvs, purge_kline_un
