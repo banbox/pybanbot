@@ -179,7 +179,7 @@ class KlineLiveConsumer(ClientIO):
             ohlcvs, last_finish = ohlc_arr, True
         if ohlcvs:
             logger.debug('finish ohlcv: %s %s', msg_key, ohlcvs)
-            self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, fetch_tfsecs, fetch_tfsecs)
+            self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, job.tf_secs, job.tf_secs)
         return True
 
     @classmethod
