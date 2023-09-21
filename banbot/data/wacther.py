@@ -84,12 +84,18 @@ class KlineLiveConsumer(ClientIO):
         self.realtime = realtime
         self.prefix = 'uohlcv' if realtime else 'ohlcv'
         self.listens[self.prefix] = self.on_spider_bar
+        self._inits: List[Tuple[str, Any]] = []
+
+    async def init_conn(self):
+        for item in self._inits:
+            await self.write_msg(*item)
 
     async def connect(self):
         if self.writer and self.reader:
             return
         try:
             await super().connect()
+            await self.init_conn()
             logger.info(f'spider connected at {self.remote}')
         except Exception:
             allow_start = self.config.get('with_spider')
@@ -114,6 +120,7 @@ class KlineLiveConsumer(ClientIO):
                 await asyncio.sleep(0.3)
                 try:
                     await super().connect()
+                    await self.init_conn()
                     break
                 except Exception:
                     pass
@@ -135,6 +142,10 @@ class KlineLiveConsumer(ClientIO):
         await self.write_msg('subscribe', tags)
         args = (exg_name, market_type, pairs)
         await self.write_msg('watch_pairs', args)
+        self._inits.extend([
+            ('subscribe', tags),
+            ('watch_pairs', args)
+        ])
 
     async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str]):
         tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
@@ -142,8 +153,10 @@ class KlineLiveConsumer(ClientIO):
             if p in self.jobs:
                 del self.jobs[p]
         await self.write_msg('unsubscribe', tags)
-        args = (exg_name, market_type, pairs)
-        await self.write_msg('unwatch_pairs', args)
+        # 其他端可能还需要此数据，这里不能直接取消。
+        # TODO: spider端应保留引用计数，没有客户端需要的才可删除
+        # args = (exg_name, market_type, pairs)
+        # await self.write_msg('unwatch_pairs', args)
 
     async def on_spider_bar(self, msg_key: str, msg_data):
         logger.debug('receive ohlcv: %s %s', msg_key, msg_data)
