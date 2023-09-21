@@ -72,7 +72,7 @@ class PTFJob:
                 for stg in stg_list:
                     stg_ver[stg.__name__] = str(stg.version)
         items = [f'{name}:{ver}' for name, ver in stg_ver.items()]
-        stg_text = '|'.join(sorted(items))
+        stg_text = BotGlobal.bot_name + ('|'.join(sorted(items)))
         md5 = hashlib.md5()
         md5.update(stg_text.encode())
         return str(md5.hexdigest())
@@ -135,7 +135,7 @@ class StrategyResolver(IResolver):
                     if skip_num:
                         logger.warning(f'{skip_num} pairs skipped by {stg_name}, as max_num: {max_num} reached')
                     break
-        # 记录此次任务的策略哈希值：策略名+版本进行哈希
+        # 记录此次任务的策略哈希值：机器人名称+策略名+版本进行哈希
         BotGlobal.stg_hash = PTFJob.strategy_hash()
         # 记录涉及的所有运行周期
         if not run_tfs:

@@ -135,14 +135,16 @@ class LiveTrader(Trader):
         await self.wallets.init(now_symbols)
         del_symbols = list(old_symbols.difference(now_symbols))
         add_symbols = list(now_symbols.difference(old_symbols))
-        # 移除已删除的交易对
+        # 检查删除的交易对是否有订单，有则添加回去
         if del_symbols:
-            logger.info(f"remove symbols: {del_symbols}")
-            await self.exchange.cancel_open_orders(del_symbols)
-            ext_dic = dict(tag=ExitTags.pair_del)
-            exit_ods = self.order_mgr.exit_open_orders(ext_dic, pairs=del_symbols, od_dir='both', is_force=True)
-            logger.info(f'exit orders: {exit_ods}')
-            await self.data_mgr.unsub_pairs(del_symbols)
+            open_ods = InOutOrder.open_orders(pairs=del_symbols)
+            for od in open_ods:
+                if od.symbol in del_symbols:
+                    del_symbols.remove(od.symbol)
+                    self.pair_mgr.symbols.append(od.symbol)
+            if del_symbols:
+                logger.info(f"remove symbols: {del_symbols}")
+                await self.data_mgr.unsub_pairs(del_symbols)
         # 处理新增的交易对
         if add_symbols:
             calc_keys = [s for s in add_symbols if s not in self.pair_mgr.pair_tfscores]
