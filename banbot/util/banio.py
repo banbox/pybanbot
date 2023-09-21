@@ -110,6 +110,12 @@ class BanConn:
                     await run_async(handle_fn, *call_args)
                 except Exception:
                     logger.exception(f'{name} handle msg err: {self.remote}: {data}')
+        except asyncio.IncompleteReadError:
+            self.reader = None
+            self.writer = None
+            logger.error(f'read {name} IncompleteReadError, sleep 3s and retry...')
+            await asyncio.sleep(3)
+            await self.run_forever(name)
         except Exception:
             logger.exception(f'{name} handle remote msg error')
 
