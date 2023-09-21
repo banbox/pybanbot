@@ -239,6 +239,7 @@ def get_logger(level=logging.INFO):
     # 使用UTC时间
     formatter.converter = time.gmtime
     low_handler = logging.StreamHandler(sys.stdout)
+    low_handler.set_name('stdout')
     low_handler.setLevel(level)
     low_handler.setFormatter(formatter)
     low_handler.addFilter(lambda r: r.levelno < logging.ERROR)
@@ -258,6 +259,15 @@ def set_log_notify(log: logging.Logger):
     notify_handler = NotifyHandler(logging.ERROR)
     notify_handler.setFormatter(logging.Formatter(fmt='%(message)s'))
     log.addHandler(notify_handler)
+
+
+def set_log_level(level: int):
+    inst = get_logger(level)
+    inst.setLevel(level)
+    for handler in inst.handlers:
+        if handler.name != 'stdout':
+            continue
+        handler.setLevel(level)
 
 
 logging.setLogRecordFactory(StrFormatLogRecord)

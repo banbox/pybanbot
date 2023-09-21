@@ -4,10 +4,11 @@
 # Author: anyongjin
 # Date  : 2023/4/1
 import asyncio
+import logging
 import sys
 
 from banbot.cmds.arguments import *
-from banbot.util.common import logger
+from banbot.util.common import logger, set_log_level
 
 
 def main(sysargv: Optional[List[str]] = None) -> None:
@@ -20,6 +21,9 @@ def main(sysargv: Optional[List[str]] = None) -> None:
     try:
         arguments = Arguments(sysargv)
         args = arguments.get_parsed_arg()
+        if args.get('debug'):
+            set_log_level(logging.DEBUG)
+            logger.debug('set logging level to DEBUG')
 
         # Call subcommand.
         if 'func' in args:
