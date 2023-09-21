@@ -78,8 +78,8 @@ class KlineLiveConsumer(ClientIO):
     _starting_spider = False
 
     def __init__(self, realtime=False):
-        config = AppConfig.get()
-        super(KlineLiveConsumer, self).__init__(config.get('spider_addr'))
+        self.config = AppConfig.get()
+        super(KlineLiveConsumer, self).__init__(self.config.get('spider_addr'))
         self.jobs: Dict[str, PairTFCache] = dict()
         self.realtime = realtime
         self.prefix = 'uohlcv' if realtime else 'ohlcv'
@@ -92,6 +92,12 @@ class KlineLiveConsumer(ClientIO):
             await super().connect()
             logger.info(f'spider connected at {self.remote}')
         except Exception:
+            allow_start = self.config.get('with_spider')
+            if not allow_start:
+                logger.info('spider not running, wait 5s and retry...')
+                await asyncio.sleep(5)
+                await self.connect()
+                return
             if self._starting_spider:
                 while self._starting_spider:
                     await asyncio.sleep(0.3)
