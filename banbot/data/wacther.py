@@ -126,18 +126,18 @@ class KlineLiveConsumer(ClientIO):
             if tfsecs < 60:
                 raise ValueError(f'spider not support {job.timeframe} currently')
             self.jobs[job.symbol] = PairTFCache(job.timeframe, tfsecs, job.since or 0)
-        await self.write('subscribe', tags)
+        await self.write_msg('subscribe', tags)
         args = (exg_name, market_type, pairs)
-        await self.write('watch_pairs', args)
+        await self.write_msg('watch_pairs', args)
 
     async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str]):
         tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
         for p in pairs:
             if p in self.jobs:
                 del self.jobs[p]
-        await self.write('unsubscribe', tags)
+        await self.write_msg('unsubscribe', tags)
         args = (exg_name, market_type, pairs)
-        await self.write('unwatch_pairs', args)
+        await self.write_msg('unwatch_pairs', args)
 
     async def on_spider_bar(self, msg_key: str, msg_data):
         logger.debug('receive ohlcv: %s %s', msg_key, msg_data)

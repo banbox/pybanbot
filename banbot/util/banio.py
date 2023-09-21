@@ -31,12 +31,15 @@ class BanConn:
     async def connect(self):
         raise NotImplementedError
 
-    async def write(self, msg_type: str, data: Any):
-        if not self.writer:
-            await self.connect()
+    async def write_msg(self, msg_type: str, data: Any):
         logger.debug('%s write: %s %s', self.remote, msg_type, data)
         dump_data = marshal.dumps((msg_type, data))
-        self.writer.write(dump_data)
+        return await self.write(dump_data)
+
+    async def write(self, data: bytes):
+        if not self.writer:
+            await self.connect()
+        self.writer.write(data)
         self.writer.write(line_end)
         await self.writer.drain()
 
@@ -149,14 +152,22 @@ class ServerIO:
         asyncio.create_task(conn.run_forever(self.name))
 
     async def broadcast(self, msg_type: str, data: Any):
+        dump_data = marshal.dumps((msg_type, data))
+        fail_conns = []
         for conn in self.conns:
             if msg_type not in conn.tags:
                 # logger.info(f'{conn.remote} skip msg: {msg_type}, {conn.tags}')
                 continue
             try:
-                await conn.write(msg_type, data)
+                await conn.write(dump_data)
+            except BrokenPipeError:
+                # 连接已断开
+                fail_conns.append(conn)
+                logger.info(f'conn {conn.remote} disconnected')
             except Exception:
                 logger.exception(f'send msg to client fail: {msg_type} {data}')
+        for conn in fail_conns:
+            self.conns.remove(conn)
 
     def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
         '''
