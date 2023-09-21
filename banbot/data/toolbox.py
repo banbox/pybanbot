@@ -94,7 +94,7 @@ def sync_timeframes():
     sid_ranges = KLine.load_kline_ranges()
     if not sid_ranges:
         return
-    logger.info('try sync timeframes for klines...')
+    logger.debug('try sync timeframes for klines...')
     sid_list = [(*k, *v) for k, v in sid_ranges.items()]
     sid_list = sorted(sid_list, key=lambda x: x[0])
     all_tf = set(map(lambda x: x.tf, KLine.agg_list))

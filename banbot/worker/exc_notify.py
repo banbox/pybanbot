@@ -4,11 +4,11 @@
 # Author: anyongjin
 # Date  : 2023/7/31
 import re
-import asyncio
 import datetime
 import sys
 
 from banbot.config import Config
+from banbot.data.cache import BanCache
 _re_err_stack = re.compile(r'^\s+File\s*"([^"]+)"')
 
 
@@ -25,17 +25,16 @@ def try_send_exc_notify(cache_key: str, content: str):
     尝试发送异常通知给管理员。
     如未限流，则立刻发送。如被限流，则记录数量
     '''
-    from banbot.util.redis_helper import SyncRedis
-    redis = SyncRedis()
+    from banbot.data.cache import BanCache
     # 对异常消息进行限流
-    wait_secs = redis.ttl(cache_key)
-    wait_num = redis.get(cache_key, 0) + 1
+    wait_secs = BanCache.ttl(cache_key)
+    wait_num = BanCache.get(cache_key, 0) + 1
     if wait_secs > 1:
         # 处于限流时间内，更新数量和最后的消息
-        redis.set(cache_key, wait_num, wait_secs)
-        redis.set(f'{cache_key}_text', content, wait_secs)
+        BanCache.set(cache_key, wait_num, wait_secs)
+        BanCache.set(f'{cache_key}_text', content, wait_secs)
         return
-    redis.set(cache_key, max(wait_num, 1), 5)
+    BanCache.set(cache_key, max(wait_num, 1), 5)
     # 1s后发送通知，避免此处直接发耗时较多。
     send_exc_notify_after(1, cache_key, content)
 
@@ -70,14 +69,12 @@ def send_exc_notify_after(secs: int, key: str, desp: str):
 
 
 def _send_exc_notify(key: str, desp: str):
-    from banbot.util.redis_helper import SyncRedis
-    redis = SyncRedis()
-    wait_num = redis.get(key)
+    wait_num = BanCache.get(key)
     if not wait_num:
         return
     # 180s后允许发送下一条日志
-    redis.set(key, 0, 180)
-    detail = redis.get(f'{key}_text') or desp
+    BanCache.set(key, 0, 180)
+    detail = BanCache.get(f'{key}_text') or desp
     do_send_exc_notify(key, detail, wait_num)
     # 启动下一次定时发送（如果期间没有数据，则不会发送）
     send_exc_notify_after(170, key, detail)

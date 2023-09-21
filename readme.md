@@ -4,7 +4,7 @@
 目前单个机器人只支持监听一个交易所的一个市场。如币安现货市场。
 
 # 运行交易机器人
-本项目依赖timescaledb和redis，故使用`docker compose`一键启动。  
+本项目依赖timescaledb，故使用`docker compose`一键启动。  
 [详细文档](doc/deploy_docker.md)
 
 # For 策略开发用户

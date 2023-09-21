@@ -11,26 +11,10 @@ services:
       ban_data_dir: /root/ban_data
       ban_stgy_dir: /root/ban-strategies
       ban_db_url: postgresql://postgres:vj459gfn23497gn23@[db]:5432/bantd
-      ban_redis_url: redis://:Uf6CVdsZ3Dc@redis:6379/0
     depends_on:
-      redis:
-        condition: service_healthy
-        restart: true
       db:
         condition: service_healthy
         restart: true
-  redis:
-    container_name: ban-redis
-    image: redis:7
-    volumes:
-      - /root/ban_data/redis.conf:/redis.conf
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'printf \"GET / HTTP/1.1\n\n\" > /dev/tcp/127.0.0.1/6379; exit $?;'"]
-      interval: 2s
-      timeout: 2s
-      retries: 5
   db:
     container_name: ban-db
     image: timescale/timescaledb:latest-pg15

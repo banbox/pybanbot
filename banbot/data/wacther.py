@@ -4,23 +4,35 @@
 # Author: anyongjin
 # Date  : 2023/4/30
 import asyncio
-import six
 from typing import *
-import re
 
 from banbot.storage import BotGlobal
 from banbot.util import btime
 from banbot.util.common import logger
+from banbot.util.banio import ClientIO
+from banbot.config import AppConfig
 from dataclasses import dataclass
+from banbot.exchange import tf_to_secs
+from banbot.data.tools import build_ohlcvc
 
 
 @dataclass
 class PairTFCache:
     timeframe: str
     tf_secs: int
-    next_ms: int = 0  # 下一个需要的13位时间戳。一半和wait_bar不应该同时使用
+    next_ms: int = 0  # 下一个需要的13位时间戳。一般和wait_bar不应该同时使用
     wait_bar: tuple = None  # 记录尚未完成的bar。已完成时应置为None
     latest: tuple = None  # 记录最新bar数据，可能未完成，可能已完成
+
+
+def get_finish_ohlcvs(job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool) -> List[Tuple]:
+    if not ohlcvs:
+        return ohlcvs
+    job.wait_bar = None
+    if not last_finish:
+        job.wait_bar = ohlcvs[-1]
+        ohlcvs = ohlcvs[:-1]
+    return ohlcvs
 
 
 class Watcher:
@@ -49,168 +61,107 @@ class Watcher:
                 logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)
 
 
-class RedisChannel:
-    '''
-    通过redis进行多进程通信的通道。
-    '''
-    _obj: Optional['RedisChannel'] = None
-
-    def __init__(self):
-        RedisChannel._obj = self
-        from banbot.util.redis_helper import AsyncRedis
-        self.redis = AsyncRedis()
-        self.conn = self.redis.pubsub()
-        self.listeners: List[Tuple[Union[str, re.Pattern], Callable]] = []
-
-    @classmethod
-    async def subscribe(cls, matcher: Union[str, re.Pattern], handler: Callable):
-        if not cls._obj:
-            raise ValueError('RedisChannel not start')
-        listeners = cls._obj.listeners
-        for i in range(len(listeners)):
-            ptn, func = listeners[i]
-            if ptn == matcher:
-                if handler == func:
-                    return
-                listeners.pop(i)
-                break
-        listeners.append((matcher, handler))
-        if isinstance(matcher, six.string_types):
-            await cls._obj.conn.subscribe(matcher)
-
-    @classmethod
-    def unsubscribe(cls, matcher: Union[str, re.Pattern]):
-        if not cls._obj:
-            raise ValueError('RedisChannel not start')
-        listeners = cls._obj.listeners
-        for i in range(len(listeners)):
-            ptn, func = listeners[i]
-            if ptn == matcher:
-                listeners.pop(i)
-                break
-
-    @classmethod
-    async def call(cls, remote: str, action: str, data, timeout: int = 10, raise_dead: bool = True):
-        '''
-        调用远程过程调用。通过Redis的SubPub机制。
-        发送一次消息，监听一次，收到返回消息后取消监听
-        '''
-        import time
-        if not cls._obj:
-            raise ValueError('RedisChannel not start')
-        time_start = time.monotonic()
-        if not await cls._obj.redis.get(remote):
-            if raise_dead:
-                raise ValueError(f'{remote} is dead, call {action}: {data} fail')
-            return
-        future = asyncio.get_running_loop().create_future()
-
-        def call_back(msg_key: str, msg_data):
-            if not future.done():
-                future.set_result((msg_key, msg_data))
-
-        reply_key = f'{action}_{data}'
-        await cls.subscribe(reply_key, call_back)
-        await cls._obj.conn.subscribe(reply_key)
-        await cls._obj.redis.publish(action, data)
-        ret_data = None
-        try:
-            ret_key, ret_data = await asyncio.wait_for(future, timeout=timeout)
-            cls.unsubscribe(reply_key)
-        except asyncio.TimeoutError:
-            logger.warning(f'wait redis channel complete timeout: {action} {data} {timeout}')
-        cost_ts = time.monotonic() - time_start
-        logger.info(f'cost {cost_ts} s for {data}, return: {ret_data}')
-        return ret_data
-
-    @classmethod
-    async def run(cls):
-        import orjson
-        assert cls._obj, '`RedisChannel` is not initialized yet!'
-        logger.info(f'run RedisChannel ...')
-        # 监听个假的，防止立刻退出
-        await cls._obj.conn.subscribe('fake')
-        async for msg in cls._obj.conn.listen():
-            if msg['type'] != 'message':
-                continue
-            try:
-                msg_key = msg['channel'].decode()
-                msg_data = msg['data'].decode()
-                try:
-                    msg_data = orjson.loads(msg_data)
-                except Exception:
-                    pass
-                handle_func = None
-                for key, func in cls._obj.listeners:
-                    if isinstance(key, re.Pattern):
-                        if key.fullmatch(msg_key):
-                            handle_func = func
-                            break
-                    elif key == msg_key:
-                        handle_func = func
-                        break
-                if handle_func:
-                    ret_data = handle_func(msg_key, msg_data)
-                    if ret_data and len(ret_data) == 2:
-                        await cls._obj.redis.publish(ret_data[0], ret_data[1])
-                    elif ret_data:
-                        logger.info(f'invalid ret data from {handle_func}: {ret_data}')
-                else:
-                    logger.info(f'unhandle redis channel msg: {msg_key}')
-            except Exception:
-                logger.exception(f'handle RedisChannel msg error: {msg}')
-
 @dataclass
 class WatchParam:
-    exchange: str
     symbol: str
-    market: str
-    timeframe: str = None
+    timeframe: str
     since: int = None
 
 
-class KlineLiveConsumer(RedisChannel):
+class KlineLiveConsumer(ClientIO):
     '''
     这是通用的从爬虫端监听K线数据的消费者端。
     用于：
     机器人的实时数据反馈：LiveDataProvider
     网站端实时K线推送：KlineMonitor
     '''
+    _starting_spider = False
 
-    def __init__(self):
-        super(KlineLiveConsumer, self).__init__()
-        self.listeners.append((re.compile(r'^ohlcv_.*'), self._handle_ohlcv))
+    def __init__(self, realtime=False):
+        config = AppConfig.get()
+        super(KlineLiveConsumer, self).__init__(config.get('spider_addr'))
+        self.jobs: Dict[str, PairTFCache] = dict()
+        self.realtime = realtime
+        self.prefix = 'uohlcv' if realtime else 'ohlcv'
+        self.listens[self.prefix] = self.on_spider_bar
 
-    async def watch_klines(self, *jobs: WatchParam):
-        from banbot.data.spider import LiveSpider, SpiderJob
-        job_list = []
+    async def connect(self):
+        if self.writer and self.reader:
+            return
+        try:
+            await super().connect()
+            logger.info(f'spider connected at {self.remote}')
+        except Exception:
+            if self._starting_spider:
+                while self._starting_spider:
+                    await asyncio.sleep(0.3)
+                await self.connect()
+                return
+            logger.info('spider not running, starting...')
+            self._starting_spider = True
+            import multiprocessing
+            from banbot.data.spider import run_spider_prc
+            prc = multiprocessing.Process(target=run_spider_prc, daemon=True)
+            prc.start()
+            start_ts = btime.time()
+            while btime.time() - start_ts < 10:
+                await asyncio.sleep(0.3)
+                try:
+                    await super().connect()
+                    break
+                except Exception:
+                    pass
+            self._starting_spider = False
+            if not self.writer:
+                raise RuntimeError('wait spider timeout')
+            logger.info(f'spider connected at {self.remote}')
+
+    async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
+        pairs = [job.symbol for job in jobs]
+        tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
         for job in jobs:
-            args = [job.exchange, job.symbol, job.market, job.timeframe, job.since]
-            job_list.append(SpiderJob('watch_ohlcv', *args))
-            key = f'ohlcv_{job.exchange}_{job.market}_{job.symbol}'
-            await self.conn.subscribe(key)
-        # 发送消息给爬虫，实时抓取数据
-        await LiveSpider.send(*job_list)
+            if job.symbol in self.jobs:
+                continue
+            tfsecs = tf_to_secs(job.timeframe)
+            if tfsecs < 60:
+                raise ValueError(f'spider not support {job.timeframe} currently')
+            self.jobs[job.symbol] = PairTFCache(job.timeframe, tfsecs, job.since or 0)
+        await self.write('subscribe', tags)
+        args = (exg_name, market_type, pairs)
+        await self.write('watch_pairs', args)
 
-    async def unwatch_klines(self, *jobs: WatchParam):
-        from banbot.data.spider import LiveSpider, SpiderJob
-        cache_key, symbol_list = (None, None), []
-        for job in jobs:
-            await self.conn.unsubscribe(f'ohlcv_{job.exchange}_{job.market}_{job.symbol}')
-            cur_key = job.exchange, job.market
-            if symbol_list and cache_key != cur_key:
-                await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
-                symbol_list = []
-            cache_key = cur_key
-            symbol_list.append(job.symbol)
-        if symbol_list:
-            await LiveSpider.send(SpiderJob('unwatch_pairs', cache_key[0], cache_key[1], symbol_list))
+    async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str]):
+        tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
+        for p in pairs:
+            if p in self.jobs:
+                del self.jobs[p]
+        await self.write('unsubscribe', tags)
+        args = (exg_name, market_type, pairs)
+        await self.write('unwatch_pairs', args)
 
-    @classmethod
-    def _handle_ohlcv(cls, msg_key: str, msg_data):
+    async def on_spider_bar(self, msg_key: str, msg_data):
+        logger.debug('receive ohlcv: %s %s', msg_key, msg_data)
         _, exg_name, market, pair = msg_key.split('_')
-        ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
-        cls._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
+        if pair not in self.jobs:
+            return False
+        if self.realtime:
+            ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
+            self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
+            return True
+        ohlc_arr, fetch_tfsecs = msg_data
+        job = self.jobs[pair]
+        if fetch_tfsecs < job.tf_secs:
+            old_ohlcvs = [job.wait_bar] if job.wait_bar else []
+            # 和旧的bar_row合并更新，判断是否有完成的bar
+            in_msecs = fetch_tfsecs * 1000
+            ohlcvs, last_finish = build_ohlcvc(ohlc_arr, job.tf_secs, ohlcvs=old_ohlcvs, in_tf_msecs=in_msecs)
+            ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
+        else:
+            ohlcvs, last_finish = ohlc_arr, True
+        if ohlcvs:
+            logger.debug('finish ohlcv: %s %s', msg_key, ohlcvs)
+            self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, fetch_tfsecs, fetch_tfsecs)
+        return True
 
     @classmethod
     def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,

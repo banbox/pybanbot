@@ -257,7 +257,7 @@ class LiveDataFeader(DBDataFeeder):
     实盘模式：订阅此交易对时间周期的新数据，被唤起时执行回调。
     支持返回预热数据。每个策略+交易对全程单独预热，不可交叉预热，避免btime被污染。
 
-    通过redis检查此交易对是否已在监听刷新，如没有则发消息给爬虫监听。
+    检查此交易对是否已在spider监听刷新，如没有则发消息给爬虫监听。
     '''
 
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, market: str = None):

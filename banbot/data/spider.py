@@ -3,19 +3,16 @@
 # File  : spider.py
 # Author: anyongjin
 # Date  : 2023/4/25
-import asyncio
 import os.path
-import time
 
-import orjson
 from asyncio import Queue
 
-from banbot.config.appconfig import AppConfig
 from banbot.data.tools import *
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
-from banbot.util.redis_helper import AsyncRedis
 from banbot.storage import KLine, DisContiError
+from banbot.util.banio import ServerIO, BanConn
+from banbot.data.cache import BanCache
 
 
 def get_check_interval(tf_secs: int) -> float:
@@ -137,16 +134,6 @@ class MinerJob(PairTFCache):
         return save_tf, check_intv
 
 
-def get_finish_ohlcvs(job: PairTFCache, ohlcvs: List[Tuple], last_finish: bool) -> List[Tuple]:
-    if not ohlcvs:
-        return ohlcvs
-    job.wait_bar = None
-    if not last_finish:
-        job.wait_bar = ohlcvs[-1]
-        ohlcvs = ohlcvs[:-1]
-    return ohlcvs
-
-
 class WebsocketWatcher:
     write_q = Queue(3000)  # 写入数据库的队列，逐个执行，避免写入并发过大出现异常
     init_sid: Set[int] = set()  # 不在此集合的，是初次写入，有遗漏，需要抓取缺失的bar
@@ -248,7 +235,8 @@ class TradesWatcher(WebsocketWatcher):
     每天190个期货币种会有100根针：价格突然超出正常范围，成交量未放大。
     故推荐直接监听ohlcv
     '''
-    def __init__(self, exg_name: str, market: str, pair: str):
+    def __init__(self, spider: 'LiveSpider', exg_name: str, market: str, pair: str):
+        self.spider = spider
         super(TradesWatcher, self).__init__(exg_name, market, pair)
         self.state_sec = PairTFCache('1s', 1)  # 用于实时归集通知
         self.state_save = PairTFCache('1m', 60)  # 用于数据库更新
@@ -266,16 +254,18 @@ class TradesWatcher(WebsocketWatcher):
         ohlcvs_sml = ohlcvs_sml[:-1]  # 完成的秒级ohlcv
         if not ohlcvs_sml:
             return
-        sre_data = orjson.dumps((ohlcvs_sml, pub_tf_secs, pub_tf_secs))
-        async with AsyncRedis() as redis:
-            pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
-            await redis.publish(pub_key, sre_data)
+        # 发送实时的未完成数据
+        pub_key = f'uohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+        await self.spider.broadcast(pub_key, (ohlcvs_sml, pub_tf_secs, pub_tf_secs))
         # 更新1m级别bar，写入数据库
         ohlcv_old = [self.state_save.wait_bar] if self.state_save.wait_bar else []
         ohlcvs_save, is_finish = build_ohlcvc(ohlcvs_sml, pub_tf_secs, ohlcvs=ohlcv_old)
         ohlcvs_save = get_finish_ohlcvs(self.state_save, ohlcvs_save, is_finish)
         if not ohlcvs_save:
             return
+        # 发送已完成数据
+        pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+        await self.spider.broadcast(pub_key, (ohlcvs_save, self.state_save.tf_secs))
         logger.info(f'ws ohlcv: {self.pair} {ohlcvs_save}')
         self.write_q.put_nowait((self.get_sid(), ohlcvs_save, self.state_save.timeframe, True))
 
@@ -287,7 +277,8 @@ class OhlcvWatcher(WebsocketWatcher):
 
     目前仅支持插入期货。
     '''
-    def __init__(self, exg_name: str, market: str, pair: str):
+    def __init__(self, spider: 'LiveSpider', exg_name: str, market: str, pair: str):
+        self.spider = spider
         super(OhlcvWatcher, self).__init__(exg_name, market, pair)
         ws_tf = '1m' if market == 'future' else '1s'
         self.state_ws = PairTFCache(ws_tf, tf_to_secs(ws_tf))  # 用于实时归集通知
@@ -301,10 +292,9 @@ class OhlcvWatcher(WebsocketWatcher):
         cur_ts = btime.utctime()
         if cur_ts - self.notify_ts >= 0.9:
             self.notify_ts = cur_ts
-            sre_data = orjson.dumps((ohlcvs_sml, self.state_ws.tf_secs, 1))
-            async with AsyncRedis() as redis:
-                pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
-                await redis.publish(pub_key, sre_data)
+            # 发送实时的未完成数据
+            pub_key = f'uohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+            await self.spider.broadcast(pub_key, (ohlcvs_sml, self.state_ws.tf_secs, 1))
         finish_bars: list = ohlcvs_sml[:-1]
         cur_bar = ohlcvs_sml[-1]
         if not self.pbar:
@@ -314,6 +304,9 @@ class OhlcvWatcher(WebsocketWatcher):
                 finish_bars.append(self.pbar)
             self.pbar = cur_bar
         if finish_bars:
+            # 发送已完成数据
+            pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
+            await self.spider.broadcast(pub_key, (finish_bars, self.state_ws.tf_secs))
             self.write_q.put_nowait((self.get_sid(), finish_bars, self.state_ws.timeframe, False))
 
 
@@ -323,42 +316,38 @@ class LiveMiner:
     交易对实时数据更新，仅用于实盘。仅针对1m及以上维度。
     一个LiveMiner对应一个交易所的一个市场。处理此交易所市场下所有数据的监听
     '''
-    def __init__(self, exg_name: str, market: str):
+    def __init__(self, spider: 'LiveSpider', exg_name: str, market: str, timeframe: str = '1m'):
+        self.spider = spider
         self.exchange = get_exchange(exg_name, market)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
         self.socks: Dict[str, OhlcvWatcher] = dict()
+        self.timeframe = timeframe
+        self.tf_msecs = tf_to_secs(self.timeframe) * 1000
 
-    def sub_pair(self, pair: str, timeframe: str, since: int = None):
-        tf_msecs = tf_to_secs(timeframe) * 1000
-        if tf_msecs <= 60000:
+    async def sub_pair(self, pair: str):
+        if self.tf_msecs <= 60000:
             # 1m及以下周期的ohlcv，通过websoc获取
             if pair in self.socks:
                 return
-            logger.info(f'start ws for {pair}/{timeframe}')
-            self.socks[pair] = OhlcvWatcher(self.exchange.name, self.exchange.market_type, pair)
+            logger.info(f'start ws for {pair}/{self.timeframe}')
+            self.socks[pair] = OhlcvWatcher(self.spider, self.exchange.name, self.exchange.market_type, pair)
             asyncio.create_task(self.socks[pair].run())
             return
-        logger.info(f'loop fetch for {pair}/{timeframe}')
-        save_tf, check_intv = MinerJob.get_tf_intv(timeframe)
+        if pair in self.jobs:
+            return
+        logger.info(f'loop fetch for {pair}/{self.timeframe}')
+        save_tf, check_intv = MinerJob.get_tf_intv(self.timeframe)
         if self.exchange.market_type == 'future':
             # 期货市场最低维度是1m
             check_intv = max(check_intv, 60.)
-        job = self.jobs.get(pair)
-        if job and job.timeframe == save_tf:
-            fmt_args = [self.exchange.name, pair, job.check_intv, check_intv]
-            if job.check_intv <= check_intv:
-                logger.info('miner %s/%s  %.1f, skip: %.1f', *fmt_args)
-            else:
-                job.check_intv = check_intv
-                logger.info('miner %s/%s check_intv %.1f -> %.1f', *fmt_args)
-        else:
-            job = MinerJob(pair, save_tf, check_intv, since)
-            # 将since改为所属bar的开始，避免第一个bar数据不完整
-            job.since = job.since // tf_msecs * tf_msecs
-            self.jobs[pair] = job
-            fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
-            logger.info('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
+        since = await self._init_symbol(pair)
+        job = MinerJob(pair, save_tf, check_intv, since)
+        # 将since改为所属bar的开始，避免第一个bar数据不完整
+        job.since = job.since // self.tf_msecs * self.tf_msecs
+        self.jobs[pair] = job
+        fmt_args = [self.exchange.name, pair, check_intv, job.fetch_tf, since]
+        logger.info('miner sub %s/%s check_intv %.1f, fetch_tf: %s, since: %d', *fmt_args)
 
     async def run(self):
         while True:
@@ -410,12 +399,10 @@ class LiveMiner:
                 sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
                 ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
                 KLine.insert(sid, job.timeframe, ohlcvs)
-            # 发布小间隔数据到redis订阅方
+            # 发布小间隔数据到订阅方
             measure.start_for('send_pub')
-            sre_data = orjson.dumps((ohlcvs_sml, job.fetch_tfsecs, job.check_intv))
-            async with AsyncRedis() as redis:
-                pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
-                await redis.publish(pub_key, sre_data)
+            pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
+            await self.spider.broadcast(pub_key, (ohlcvs_sml, job.fetch_tfsecs))
             if do_print:
                 measure.print_all()
         except (ccxt.NetworkError, ccxt.BadRequest):
@@ -423,66 +410,60 @@ class LiveMiner:
         except Exception:
             logger.exception(f'spider exception: {job.pair} {job.fetch_tf} {job.tf_secs} {job.since}')
 
+    async def _init_symbol(self, symbol: str) -> int:
+        '''
+        初始化币对，如果前面遗漏蜡烛太多，下载必要的数据
+        '''
+        prefetch = 1000
+        save_tf, tf_secs = '1m', 60
+        tf_msecs = tf_to_secs(save_tf) * 1000
+        cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
+        start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
+        exs = ExSymbol.get(self.exchange.name, self.exchange.market_type, symbol)
+        _, end_ms = KLine.query_range(exs.id, save_tf)
+        if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
+            # 当缺失数据超过30个时，才执行批量下载
+            await download_to_db(self.exchange, exs, save_tf, start_ms, cur_ms)
+            end_ms = cur_ms
+        return end_ms
 
-class SpiderJob:
-    def __init__(self, action: str, *args, **kwargs):
-        self.action = action
-        self.args = args
-        self.kwargs = kwargs
 
-    def dumps(self) -> bytes:
-        data = dict(action=self.action, args=self.args, kwargs=self.kwargs)
-        return orjson.dumps(data)
-
-
-class LiveSpider(RedisChannel):
-    _key = 'spider'
-    _job_key = 'spiderjobs'
-
+class LiveSpider(ServerIO):
     '''
     实时数据爬虫；仅用于实盘。负责：实时K线、订单簿等公共数据监听
     历史数据下载请直接调用对应方法，效率更高。
     '''
+    obj: Optional['LiveSpider'] = None
+
     def __init__(self):
-        super(LiveSpider, self).__init__()
+        config = AppConfig.get()
+        super(LiveSpider, self).__init__(config.get('spider_addr'), 'spider')
         self.miners: Dict[str, LiveMiner] = dict()
+        LiveSpider.obj = self
 
-        def call_self(msg_key, msg_data):
-            asyncio.create_task(self._run_job(msg_data))
-        self.listeners.append((self._key, call_self))
+    def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
+        conn = BanConn(reader, writer)
+        conn.listens.update(
+            watch_pairs=self.watch_pairs,
+            unwatch_pairs=self.unwatch_pairs,
+            get_cache=self.get_cache
+        )
+        return conn
 
-    async def _run_job(self, params: dict):
-        action, args, kwargs = params['action'], params['args'], params['kwargs']
-        try:
-            from banbot.storage import db
-            with db():
-                if hasattr(self, action):
-                    await getattr(self, action)(*args, **kwargs)
-                else:
-                    logger.error(f'unknown spider job: {params}')
-                    return
-        except Exception:
-            logger.exception(f'run spider job error: {params}')
-
-    async def _heartbeat(self):
-        while True:
-            await self.redis.set(self._key, expire_time=5)
-            await asyncio.sleep(4)
-
-    async def watch_ohlcv(self, exg_name: str, pair: str, market: str, timeframe: str, since: Optional[int] = None):
+    async def watch_pairs(self, data):
+        exg_name, market, pairs = data
         cache_key = f'{exg_name}:{market}'
         miner = self.miners.get(cache_key)
         if not miner:
-            miner = LiveMiner(exg_name, market)
+            miner = LiveMiner(self, exg_name, market)
             self.miners[cache_key] = miner
             asyncio.create_task(miner.run())
             logger.info(f'start miner for {exg_name}.{market}')
-        if pair not in miner.jobs and pair not in miner.socks and not since:
-            # 新监听的币，且未指定开始时间戳，则初始化获取时间戳
-            since = await self._init_symbol(exg_name, market, pair, timeframe)
-        miner.sub_pair(pair, timeframe, since)
+        for pair in pairs:
+            await miner.sub_pair(pair)
 
-    async def unwatch_pairs(self, exg_name: str, market: str, pairs: List[str]):
+    async def unwatch_pairs(self, data):
+        exg_name, market, pairs = data
         cache_key = f'{exg_name}:{market}'
         miner = self.miners.get(cache_key)
         if not miner or not pairs:
@@ -492,107 +473,30 @@ class LiveSpider(RedisChannel):
                 continue
             del miner.jobs[p]
 
-    async def _init_symbol(self, exg_name: str, market_type: str, symbol: str, timeframe: str) -> int:
-        '''
-        初始化币对，如果前面遗漏蜡烛太多，下载必要的数据
-        '''
-        prefetch = 1000
-        exchange = get_exchange(exg_name, market_type)
-        min_save_tf, min_tf_secs = '1m', 60
-        save_tf = min_save_tf
-        tf_secs = tf_to_secs(timeframe)
-        if tf_secs > min_tf_secs:
-            save_tf = KLine.get_down_tf(timeframe)
-        tf_msecs = tf_to_secs(save_tf) * 1000
-        cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
-        start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
-        exs = ExSymbol.get(exg_name, market_type, symbol)
-        _, end_ms = KLine.query_range(exs.id, save_tf)
-        if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
-            # 当缺失数据超过30个时，才执行批量下载
-            await download_to_db(exchange, exs, save_tf, start_ms, cur_ms)
-            end_ms = cur_ms
-        return end_ms
-
-    async def _init_exg_market(self, exg_name: str, market_type: str):
-        '''
-        从redis获取给定交易所、给定市场下，需要抓取的币对
-        '''
-        key = f'{self._job_key}_{exg_name}_{market_type}'
-        pairs: dict = await self.redis.hgetall(key)
-        if not pairs:
-            return
-        logger.info(f'init {exg_name}.{market_type} with {len(pairs)} symbols: {pairs}')
-        prev_tip, completes = time.monotonic(), []
-        i = -1
-        for symbol, timeframe in pairs.items():
-            i += 1
-            if time.monotonic() - prev_tip > 5:
-                logger.info(f'[{i}/{len(pairs)}] complete {len(completes)}: {completes}')
-                prev_tip, completes = time.monotonic(), []
-            await self.watch_ohlcv(exg_name, symbol, market_type, timeframe)
-            completes.append(symbol)
-        logger.info(f'ALL {len(pairs)} symbols listening for {exg_name}.{market_type}')
-
-    async def init_pairs(self):
-        '''
-        从redis获取需要抓取的比对，检查上次时间，如果缺失蜡烛太多，则进行预下载
-        # 检查需要监听的交易对历史数据，先批量下载缺失的数据，然后再监听，逐个处理。
-        # 这里只需要指定下载前面1K个，如果中间缺失过多，会自动全部下载
-        '''
-        space_keys = await self.redis.list_keys(self._job_key + '*')
-        exg_markets = [k.split('_')[1:] for k in space_keys]
-        exg_markets = sorted(exg_markets, key=lambda x: x[0])
-        from itertools import groupby
-        gps = groupby(exg_markets, key=lambda x: x[0])
-        for key, gp in gps:
-            gp_data = list(gp)
-            for exg_name, market in gp_data:
-                await self._init_exg_market(exg_name, market)
+    def get_cache(self, data):
+        return BanCache.get(data)
 
     @classmethod
     async def run_spider(cls):
         from banbot.data.toolbox import sync_timeframes, purge_kline_un
-        redis = AsyncRedis()
-        if await redis.get(cls._key):
-            return
-        async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
-            if await redis.get(cls._key):
-                return
-            from banbot.storage import db
-            spider = LiveSpider()
-            asyncio.create_task(spider._heartbeat())
+        from banbot.storage import db
+        spider = LiveSpider()
 
         with db():
             logger.info('[spider] sync timeframe ranges ...')
             sync_timeframes()
             purge_kline_un()
-            logger.info('[spider] init exchange, markets...')
-            await spider.init_pairs()
         while True:
             try:
                 logger.info('[spider] wait job ...')
-                await spider.conn.subscribe(spider._key)
-                await spider.run()
+                await spider.run_forever()
             except Exception:
                 logger.exception('spider listen fail, rebooting...')
             await asyncio.sleep(1)
             logger.info('try restart spider...')
 
-    @classmethod
-    async def send(cls, *job_list: SpiderJob):
-        '''
-        发送命令到爬虫。不等待执行完成；发送成功即返回。
-        '''
-        redis = AsyncRedis()
-        if not await redis.get(cls._key):
-            logger.error(f'spider not started, {len(job_list)} job cached')
-            return
-        for job in job_list:
-            await redis.publish(cls._key, job.dumps())
 
-
-async def run_spider_forever(args: dict):
+async def run_spider_forever(args: dict = None):
     '''
     此函数仅用于从命令行启动
     '''
@@ -604,3 +508,10 @@ async def run_spider_forever(args: dict):
     asyncio.create_task(WebsocketWatcher.run_consumers(5))
     await LiveSpider.run_spider()
     # await TopChange.clear()
+
+
+def run_spider_prc():
+    '''
+    此方法仅用于子进程中启动爬虫
+    '''
+    asyncio.run(run_spider_forever())

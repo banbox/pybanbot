@@ -6,7 +6,6 @@
 
 # 开发环境配置
 [安装时序数据库timescaledb](doc/timescale.md)  
-redis: linux可直接安装，windows可通过docker安装。  
 安装miniconda，选择python 3.10或3.11
 
 # 数据抓取和维护

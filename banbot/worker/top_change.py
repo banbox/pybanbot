@@ -3,26 +3,18 @@
 # File  : top_change.py
 # Author: anyongjin
 # Date  : 2023/7/1
-import asyncio
-
-import orjson
-
 from banbot.data.tools import *
 from banbot.storage import *
 from banbot.storage.base import sa
+from banbot.data.cache import BanCache
 
 
 class TopChange:
-    _key = 'top_change'
-    _obj: Optional['TopChange'] = None
 
     def __init__(self, config: Config):
         self.config = config
         self.exg_name = self.config['exchange']['name']
         self.market = config['market_type']
-        from banbot.util.redis_helper import AsyncRedis
-        self.redis = AsyncRedis()
-        TopChange._obj = self
 
     def calculate(self, start_ts: float, stop_ts: float) -> List[Tuple[int, str, float, float, float, float, float]]:
         '''
@@ -73,7 +65,7 @@ where exchange=:exchange and market=:market;'''
 
     async def run(self):
         from banbot.exchange.exchange_utils import secs_day
-        asyncio.create_task(self._heartbeat())
+        from banbot.data.spider import LiveSpider
         interval, delay = 60, 10
         cache_key = f'topchg_{self.exg_name}_{self.market}'
         logger.info(f'run {cache_key}')
@@ -89,52 +81,25 @@ where exchange=:exchange and market=:market;'''
                 with db():
                     data = self.calculate(start_ts, next_run)
                 # 计算价格一分钟是上涨还是下跌
-                old_bytes = await self.redis.get(cache_key)
-                if old_bytes:
-                    old_data = orjson.loads(old_bytes)
+                old_data = BanCache.get(cache_key)
+                if old_data:
                     old_map = {r[0]: r for r in old_data}
                     for i, r in enumerate(data):
                         old_r = old_map.get(r[0])
                         if not old_r:
                             continue
                         data[i] = (*r[:-1], r[2] - old_r[2])
-                await self.redis.set(cache_key, orjson.dumps(data), interval * 2)
+                BanCache.set(cache_key, data, interval * 2)
+                if LiveSpider.obj:
+                    await LiveSpider.obj.broadcast(cache_key, data)
             except Exception:
                 logger.exception(f'update {cache_key} error')
-
-    async def _heartbeat(self):
-        while True:
-            await self.redis.set(self._key, expire_time=5)
-            await asyncio.sleep(4)
-
-    @classmethod
-    def get_cache(cls, exg_name: str, market: str) -> List[tuple]:
-        from banbot.util.redis_helper import SyncRedis
-        redis = SyncRedis()
-        bytes_data = redis.get(f'topchg_{exg_name}_{market}')
-        if not bytes_data:
-            return []
-        return orjson.loads(bytes_data)
 
     @classmethod
     async def start(cls):
         logger.info('start topchg updator')
-        from banbot.util.redis_helper import AsyncRedis
-        redis = AsyncRedis()
-        if await redis.get(cls._key):
-            # 已有monitor启动正在监听
-            logger.info('topchg updator is living , skip')
-            return
-        async with redis.lock(cls._key, acquire_timeout=5, lock_timeout=4):
-            if not await redis.get(cls._key):
-                from banbot.storage.base import init_db, db
-                from banbot.config import AppConfig
-                init_db()
-                worker = TopChange(AppConfig.get())
-                asyncio.create_task(worker.run())
-
-    @classmethod
-    async def clear(cls):
-        if not cls._obj:
-            return
-        await cls._obj.redis.close()
+        from banbot.storage.base import init_db
+        from banbot.config import AppConfig
+        init_db()
+        worker = TopChange(AppConfig.get())
+        asyncio.create_task(worker.run())
