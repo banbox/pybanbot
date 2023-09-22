@@ -442,7 +442,7 @@ class LiveSpider(ServerIO):
         LiveSpider.obj = self
 
     def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
-        conn = BanConn(reader, writer)
+        conn = BanConn(reader, writer, reconnect=False)
         conn.listens.update(
             watch_pairs=self.watch_pairs,
             unwatch_pairs=self.unwatch_pairs,

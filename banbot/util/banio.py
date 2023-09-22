@@ -18,7 +18,7 @@ class BanConn:
     [服务器端]可从此类继承，实现成员函数处理不同的消息。
     '''
     def __init__(self, reader: Optional[asyncio.StreamReader] = None,
-                 writer: Optional[asyncio.StreamWriter] = None):
+                 writer: Optional[asyncio.StreamWriter] = None, reconnect: bool = True):
         self.reader: Optional[asyncio.StreamReader] = reader
         self.writer: Optional[asyncio.StreamWriter] = writer
         self.tags = set()
@@ -27,6 +27,7 @@ class BanConn:
         if writer:
             self.remote = writer.get_extra_info('peername')
         self.listens: Dict[str, Callable] = dict()
+        self.reconnect = reconnect
 
     async def connect(self):
         raise NotImplementedError
@@ -116,6 +117,10 @@ class BanConn:
         except asyncio.IncompleteReadError:
             self.reader = None
             self.writer = None
+            if not self.reconnect:
+                # 不尝试重新连接，退出
+                logger.error(f'remote {name} IncompleteReadError, remove conn')
+                return
             logger.error(f'read {name} IncompleteReadError, sleep 3s and retry...')
             await asyncio.sleep(3)
             await self.run_forever(name)
@@ -155,6 +160,10 @@ class ServerIO:
         dump_data = marshal.dumps((msg_type, data))
         fail_conns = []
         for conn in self.conns:
+            if not conn.writer:
+                # 连接已关闭
+                fail_conns.append(conn)
+                continue
             if msg_type not in conn.tags:
                 # logger.info(f'{conn.remote} skip msg: {msg_type}, {conn.tags}')
                 continue
@@ -165,6 +174,7 @@ class ServerIO:
                 fail_conns.append(conn)
                 logger.info(f'conn {conn.remote} disconnected')
             except Exception:
+                fail_conns.append(conn)
                 logger.exception(f'send msg to client fail: {msg_type} {data}')
         for conn in fail_conns:
             self.conns.remove(conn)
@@ -173,7 +183,7 @@ class ServerIO:
         '''
         如果需要自定义逻辑处理消息请求，请重写此方法，替换BanConn的get_handle_func方法
         '''
-        return BanConn(reader, writer)
+        return BanConn(reader, writer, reconnect=False)
 
 
 class ClientIO(BanConn):
