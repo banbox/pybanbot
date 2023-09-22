@@ -198,7 +198,9 @@ class ClientIO(BanConn):
         self.port = int(port)
 
     async def connect(self):
+        logger.debug('connecting: %s:%s', self.host, self.port)
         self.reader, self.writer = await asyncio.open_connection(self.host, self.port)
+        logger.debug('connected: %s:%s', self.host, self.port)
         self.remote = self.writer.get_extra_info('peername')
         await self.read()
         '收到服务器第一个消息后认为服务器就绪，不管消息是什么'

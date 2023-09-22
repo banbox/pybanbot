@@ -9,10 +9,10 @@ import time
 import psutil
 from datetime import datetime, timedelta, timezone, date
 from dateutil.relativedelta import relativedelta
-from dateutil.tz import tzlocal
 from banbot.storage.common import *
 from banbot.config.consts import *
-from banbot.storage import db, sa, InOutOrder, InOutStatus, get_db_orders, BotTask, get_order_filters
+from banbot.storage import (db, sa, InOutOrder, InOutStatus, get_db_orders, BotTask, get_order_filters,
+                            ExitTags, EnterTags)
 from banbot.data.metrics import *
 from banbot.util import btime
 from banbot.main.addons import MarketPrice
@@ -317,74 +317,79 @@ class RPC:
             raise RPCException(
                 f'Wrong pair selected. Only pairs with stake-currency {cur_quote} allowed.')
 
-    async def force_entry(self, pair: str, price: Optional[float], *,
-                         order_type: Optional[str] = None,
-                         order_side: Optional[str] = 'long',
-                         stake_amount: Optional[float] = None,
-                         enter_tag: Optional[str] = 'force_entry',
-                         leverage: Optional[float] = None) -> Optional[dict]:
+    async def force_entry(self, pair: str, price: Optional[float],
+                          order_type: Optional[str] = None,
+                          side: Optional[str] = 'long',
+                          enter_cost: Optional[float] = None,
+                          enter_tag: Optional[str] = 'force_entry',
+                          leverage: Optional[float] = None,
+                          strategy: Optional[str] = None,
+                          stoploss_price: Optional[float] = None) -> Optional[dict]:
         """
         Handler for forcebuy <asset> <price>
         Buys a pair trade at the given or current price
         """
         from banbot.strategy import BaseStrategy  # 放到顶层会导致循环引用
         from banbot.compute import TempContext
-        self._force_entry_validations(pair, order_side)
+        self._force_entry_validations(pair, side)
 
         open_ods = InOutOrder.open_orders(pairs=pair)
         if len(open_ods) >= self.bot.order_mgr.max_open_orders:
             raise RPCException("Maximum number of trades is reached.")
 
         enter_dic = dict(
-            tag=enter_tag,
-            short=order_side == 'short',
-            leverage=leverage,
+            tag=enter_tag or EnterTags.user_open,
+            short=side == 'short',
+            leverage=leverage or self._config.get('leverage'),
             enter_price=price,
             enter_order_type=order_type,
+            stoploss_price=stoploss_price
         )
 
-        if not stake_amount:
-            stake_amount = BaseStrategy.custom_cost(enter_dic)
-        enter_dic['legal_cost'] = stake_amount
+        if not enter_cost:
+            enter_cost = BaseStrategy.custom_cost(enter_dic)
+        enter_dic['legal_cost'] = enter_cost
 
         # execute buy
-        job = next((p for p in BotGlobal.stg_symbol_tfs if p[1] == pair), None)
+        job = next((p for p in BotGlobal.stg_symbol_tfs
+                    if p[1] == pair and (not strategy or p[0] == strategy)), None)
         watch_pairs = {p[1] for p in BotGlobal.stg_symbol_tfs}
         if not job:
-            raise RPCException(f'{pair} is not managed by bot, valid: {watch_pairs}')
+            raise RPCException(f'{pair}/{strategy} is not managed by bot, valid: {watch_pairs}')
         timeframe = job[2]
         pair_tf = f'{self.bot.exchange.name}_{self.bot.exchange.market_type}_{pair}_{timeframe}'
         with TempContext(pair_tf):
             ctx = get_context(pair_tf)
-            od = self.bot.order_mgr.enter_order(ctx, job[0], enter_dic)
-            if od:
-                start = time.time()
-                sess = db.session
-                while time.time() - start < 10:
-                    od = InOutOrder.get(sess, od.id)
-                    if not od.enter.order_id and not od.exit_tag and not od.exit:
-                        await asyncio.sleep(1)
-                        continue
-                    break
-                return od.dict(flat_sub=True)
-        raise RPCException(f'Failed to enter position for {pair}.')
+            od = self.bot.order_mgr.enter_order(ctx, job[0], enter_dic, do_check=False)
+            start = time.time()
+            sess = db.session
+            while time.time() - start < 10:
+                od = InOutOrder.get(sess, od.id)
+                if not od.enter.order_id and not od.exit_tag and not od.exit:
+                    await asyncio.sleep(1)
+                    sess.commit()
+                    continue
+                break
+            return od.dict(flat_sub=True)
 
-    def force_exit(self, trade_id: str) -> Dict[str, str]:
+    def force_exit(self, order_id: str) -> dict:
         """
         Handler for forceexit <id>.
         Sells the given trade at current price
         """
-        if trade_id == 'all':
+        tag = ExitTags.user_exit
+        tag_msg = '用户通过管理面板取消'
+        if order_id == 'all':
             open_ods = InOutOrder.open_orders()
             for od in open_ods:
-                od.force_exit()
-            return {'result': 'Created exit orders for all open trades.'}
+                od.force_exit(tag, tag_msg)
+            return dict(close_num=len(open_ods))
 
-        od = get_db_orders(BotTask.cur_id, filters=[InOutOrder.id == int(trade_id)])
+        od = get_db_orders(BotTask.cur_id, filters=[InOutOrder.id == int(order_id)])
         if not od:
             raise RPCException('invalid argument')
-        od[0].force_exit()
-        return {'result': f'Created exit order for trade {trade_id}.'}
+        od[0].force_exit(tag, tag_msg)
+        return dict(close_num=1)
 
     def pairlist(self) -> Dict:
         """ Returns the currently active blacklist"""

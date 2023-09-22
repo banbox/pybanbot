@@ -85,23 +85,22 @@ def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depen
 
 
 # /forcebuy is deprecated with short addition. use /forceentry instead
-@router.post('/forceenter', response_model=ForceEnterResponse, tags=['trading'])
+@router.post('/forceenter', tags=['trading'])
 async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
-    od = await rpc.force_entry(payload.pair, payload.price, order_side=payload.side,
-                               order_type=payload.ordertype, stake_amount=payload.stakeamount,
-                               enter_tag=payload.entry_tag, leverage=payload.leverage)
-
-    if od:
-        return ForceEnterResponse.model_validate(od)
-    else:
-        return ForceEnterResponse.model_validate(
-            {"status": f"Error entering {payload.side} trade for pair {payload.pair}."})
+    try:
+        return await rpc.force_entry(payload.pair, payload.price, side=payload.side,
+                                     order_type=payload.order_type, enter_cost=payload.enter_cost,
+                                     enter_tag=payload.enter_tag, leverage=payload.leverage,
+                                     strategy=payload.strategy, stoploss_price=payload.stoploss_price)
+    except Exception as e:
+        logger.exception(f'user open order fail: {payload}')
+        return dict(code=400, msg=str(e))
 
 
 # /forcesell is deprecated with short addition. use /forceexit instead
-@router.post('/forceexit', response_model=ResultMsg, tags=['trading'])
+@router.post('/forceexit', tags=['trading'])
 def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
-    return rpc.force_exit(payload.tradeid)
+    return rpc.force_exit(payload.order_id)
 
 
 @router.get('/pairlist', tags=['info', 'pairlist'])

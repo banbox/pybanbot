@@ -80,7 +80,7 @@ class WalletsLocal:
             # 差额在近似允许范围内，扣除实际值
             real_cost = src_amount
         else:
-            return 0
+            raise ValueError(f'wallet {symbol} balance {src_amount:.5f} < {amount:.5f}')
         # logger.info(f'cost_ava wallet {key}.{symbol} {wallet.available} - {real_cost}')
         wallet.available -= real_cost
         wallet.pendings[od_key] = real_cost
@@ -154,6 +154,7 @@ class WalletsLocal:
     def enter_od(self, exs: ExSymbol, sigin: dict, od_key: str, after_ts=0):
         '''
         实盘和模拟都执行，实盘时可防止过度消费
+        如果余额不足，会发出异常
         '''
         is_short = sigin.get('short')
         legal_cost = sigin.pop('legal_cost')
@@ -167,9 +168,6 @@ class WalletsLocal:
                 legal_cost /= sigin['leverage']
             quote_cost = self.get_amount_by_legal(exs.quote_code, legal_cost)
             quote_cost = self.cost_ava(od_key, exs.quote_code, quote_cost, after_ts=after_ts)
-            if not quote_cost:
-                logger.debug('wallet %s empty: %f', exs.symbol, quote_cost)
-                return 0
             quote_margin = quote_cost  # 计算名义数量
             if is_future:
                 quote_margin *= sigin['leverage']

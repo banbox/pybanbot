@@ -30,6 +30,9 @@ class InOutStatus:
 
 class EnterTags:
     third = 'third'
+    '第三方开单，不确定'
+    user_open = 'user_open'
+    '用户主动开单'
 
 
 class ExitTags:
@@ -66,7 +69,7 @@ class Order(BaseDbModel):
     inout_id = Column(sa.Integer)
     symbol = Column(sa.String(50))
     enter = Column(sa.Boolean, default=False)
-    order_type = Column(sa.String(50), default='limit')
+    order_type = Column(sa.String(50))
     order_id = Column(sa.String(164))  # 交易所订单ID，如修改订单会变化，记录最新的值
     side = Column(sa.String(10))
     'buy/sell'
@@ -88,7 +91,7 @@ class Order(BaseDbModel):
     @orm.reconstructor
     def __init__(self, **kwargs):
         from banbot.storage import BotTask
-        if self.order_type:
+        if self.order_type or self.id:
             # 从数据库读取映射对象。这里不用设置，否则会覆盖数据库的值
             data = dict()
         else:
@@ -385,28 +388,29 @@ class InOutOrder(BaseDbModel):
             self.set_info(status_msg=status_msg)
         self.save()
 
-    def force_exit(self, status_msg: str = None):
+    def force_exit(self, tag: str = None, status_msg: str = None):
         '''
         强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
         '''
         from banbot.main.od_manager import LiveOrderManager, LocalOrderManager
+        if not tag:
+            tag = ExitTags.force_exit
         if status_msg:
             self.set_info(status_msg=status_msg)
+        exit_dic = dict(tag=tag, order_type='market')
         if self.exit:
             if btime.prod_mode():
                 # 实盘模式，提交到交易所平仓
-                price_rate = 100 if self.short else 0.01
-                new_price = (self.exit.price or self.enter.price) * price_rate
                 self.exit_tag = None
-                LiveOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit), new_price)
+                LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
                 # 模拟模式，从订单管理器平仓
                 LocalOrderManager.obj.force_exit(self)
         else:
             if btime.prod_mode():
-                LiveOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit))
+                LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
-                LocalOrderManager.obj.exit_order(self, dict(tag=ExitTags.force_exit))
+                LocalOrderManager.obj.exit_order(self, exit_dic)
         db.session.commit()
 
     def detach(self, sess: SqlSession):
@@ -522,7 +526,7 @@ class InOutOrder(BaseDbModel):
             op_od = sess.query(InOutOrder).get(od_id)
             if not op_od:
                 return op_od
-            ex_ods = sess.query(Order).filter(Order.inout_id == od_id).all()
+            ex_ods = list(sess.query(Order).filter(Order.inout_id == od_id).all())
             op_od.enter = next((o for o in ex_ods if o.enter), None)
             op_od.exit = next((o for o in ex_ods if not o.enter), None)
             return op_od

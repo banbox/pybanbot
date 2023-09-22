@@ -3,11 +3,8 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
-import copy
 from asyncio import Queue
 from collections import OrderedDict
-
-import ccxt
 
 from banbot.data.provider import *
 from banbot.main.wallets import CryptoWallet, WalletsLocal
@@ -114,7 +111,10 @@ class OrderManager(metaclass=SingletonArg):
                     open_ods = InOutOrder.open_orders()
                     if len(open_ods) < self.max_open_orders:
                         for stg_name, sigin in enters:
-                            enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                            try:
+                                enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                            except Exception as e:
+                                logger.warning(f'enter fail: {e} {stg_name} {sigin}')
                 else:
                     logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
             if exits:
@@ -153,20 +153,17 @@ class OrderManager(metaclass=SingletonArg):
                 raise ValueError(f'`short` is required from `on_entry` in market: {self.market_type}')
         elif self.market_type == 'spot' and sigin.get('short'):
             # 现货市场，忽略做空单
-            return
+            raise ValueError('short order unavaiable in spot market')
         exs, timeframe = get_cur_symbol(ctx)
         if do_check and (not btime.allow_order_enter(ctx) or not self.allow_pair(exs.symbol)):
-            logger.debug('pair %s enter not allowed', exs.symbol)
-            return
+            raise RuntimeError('pair %s enter not allowed' % exs.symbol)
         tag = sigin.pop('tag')
         if 'leverage' not in sigin and self.market_type == 'future':
             sigin['leverage'] = self.leverage
         ent_side = 'short' if sigin.get('short') else 'long'
         od_key = f'{exs.symbol}|{strategy}|{ent_side}|{tag}|{btime.time_ms()}'
+        # 如果余额不足会发出异常
         legal_cost = self.wallets.enter_od(exs, sigin, od_key, self.last_ts)
-        if not legal_cost:
-            # 余额不足
-            return
         od = InOutOrder(
             **sigin,
             sid=exs.id,
@@ -831,7 +828,7 @@ class LiveOrderManager(OrderManager):
 
     def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
-        if sub_od.order_id:
+        if sub_od.order_id and (od.symbol, sub_od.order_id) in self.exg_orders:
             # 如修改订单价格，order_id会变化
             del self.exg_orders[(od.symbol, sub_od.order_id)]
         sub_od.order_id = order["id"]
@@ -933,7 +930,7 @@ class LiveOrderManager(OrderManager):
             od.save()
         elif action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
-            # logger.info(f'edit push: {od} {tg_price}')
+            logger.debug('edit push: %s %s', od, tg_price)
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     def _update_bnb_order(self, od: Order, data: dict):
@@ -1208,40 +1205,43 @@ class LiveOrderManager(OrderManager):
 
     async def consume_queue(self):
         while True:
+            job: OrderJob = await self.order_q.get()
+            await self.exec_od_job(job)
+            self.order_q.task_done()
+            if BotGlobal.state == BotState.STOPPED and not self.order_q.qsize():
+                break
+
+    async def exec_od_job(self, job: OrderJob):
+        try:
+            od: Optional[InOutOrder] = None
             try:
-                job: OrderJob = await self.order_q.get()
-                od: Optional[InOutOrder] = None
-                try:
+                with db():
+                    sess = db.session
+                    od = InOutOrder.get(sess, job.od_id)
+                    if job.action == OrderJob.ACT_ENTER:
+                        await self._exec_order_enter(od)
+                    elif job.action == OrderJob.ACT_EXIT:
+                        await self._exec_order_exit(od)
+                    elif job.action == OrderJob.ACT_EDITTG:
+                        await self._edit_trigger_od(od, job.data)
+                    else:
+                        logger.error(f'unsupport order job type: {job.action}')
+                    sess.commit()
+            except Exception as e:
+                if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
+                    err_msg = str(e)
                     with db():
-                        sess = db.session
                         od = InOutOrder.get(sess, job.od_id)
                         if job.action == OrderJob.ACT_ENTER:
-                            await self._exec_order_enter(od)
-                        elif job.action == OrderJob.ACT_EXIT:
-                            await self._exec_order_exit(od)
-                        elif job.action == OrderJob.ACT_EDITTG:
-                            await self._edit_trigger_od(od, job.data)
+                            od.force_exit(status_msg=err_msg)
                         else:
-                            logger.error(f'unsupport order job type: {job.action}')
-                        sess.commit()
-                except Exception as e:
-                    if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
-                        err_msg = str(e)
-                        with db():
-                            od = InOutOrder.get(sess, job.od_id)
-                            if job.action == OrderJob.ACT_ENTER:
-                                od.force_exit(status_msg=err_msg)
-                            else:
-                                # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
-                                od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                        logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
-                    else:
-                        logger.exception('consume order exception: %s', job)
-                self.order_q.task_done()
-                if BotGlobal.state == BotState.STOPPED and not self.order_q.qsize():
-                    break
-            except Exception:
-                logger.exception("consume order_q error")
+                            # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
+                            od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                    logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
+                else:
+                    logger.exception('consume order exception: %s', job)
+        except Exception:
+            logger.exception("consume order_q error")
 
     async def edit_pending_order(self, od: InOutOrder, is_enter: bool, price: float):
         sub_od = od.enter if is_enter else od.exit

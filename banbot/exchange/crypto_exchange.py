@@ -657,6 +657,7 @@ class CryptoExchange:
             raise RuntimeError(f'create_order is unavaiable in {btime.run_mode}')
         if self.name == 'binance':
             params['clientOrderId'] = f'{self.bot_name}_{random.randint(0, 999999)}'
+        logger.debug('create exg order, %s %s %s %s %s %s', symbol, od_type, side, amount, price, params)
         return await self.api_async.create_order(symbol, od_type, side, amount, price, params)
 
     async def set_leverage(self, leverage: int, symbol: str, params={}):
