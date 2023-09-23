@@ -200,18 +200,33 @@ class OrderManager(metaclass=SingletonArg):
                 if not is_force:
                     continue
                 # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
-            if self.exit_order(od, copy.copy(sigout), price):
-                result.append(od)
+            try:
+                res_od = self.exit_order(od, copy.copy(sigout), price)
+                if res_od:
+                    result.append(res_od)
+            except Exception as e:
+                logger.error(f'exit order fail: {e} {od}')
         return result
 
     def exit_order(self, od: InOutOrder, sigout: dict, price: Optional[float] = None) -> Optional[InOutOrder]:
         if od.exit_tag:
             return
+        exit_amt = sigout.get('amount')
+        if exit_amt:
+            exit_rate = exit_amt / (od.enter.amount * (1 - od.enter.fee))
+            if exit_rate < 0.99:
+                # 要退出的部分不足99%，分割出一个小订单，用于退出。
+                part = od.cut_part(exit_amt)
+                # 这里part的key和原始的一样，所以part作为src_key
+                tgt_key, src_key = od.key, part.key
+                exs = ExSymbol.get_by_id(od.sid)
+                self.wallets.cut_part(src_key, tgt_key, exs.base_code, (1 - exit_rate))
+                self.wallets.cut_part(src_key, tgt_key, exs.quote_code, (1 - exit_rate))
+                return self.exit_order(part, sigout, price)
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
-        get_amount = od.enter.filled * (1 - od.enter.fee)  # 扣除手续费后才是实际得到的
-        self.wallets.exit_od(od, get_amount, self.last_ts)
-        od.update_exit(**sigout, price=price, amount=get_amount)
+        od.update_exit(**sigout, price=price)
+        self.wallets.exit_od(od, od.exit.amount, self.last_ts)
         od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od, od.exit_tag)
@@ -344,8 +359,8 @@ class LocalOrderManager(OrderManager):
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
             affect_num = self.fill_pending_orders(exs.symbol, timeframe, row)
-            # if affect_num:
-            #     logger.info(f"wallets: {self.wallets}")
+            if affect_num:
+                logger.debug("wallets: %s", self.wallets)
 
     def force_exit(self, od: InOutOrder, tag: Optional[str] = None, price: float = None):
         if not tag:
@@ -454,10 +469,10 @@ class LocalOrderManager(OrderManager):
         '''
         if btime.prod_mode():
             raise RuntimeError('fill_pending_orders unavaiable in PROD mode')
-        op_orders = InOutOrder.open_orders()
+        op_orders = InOutOrder.open_orders(pairs=symbol)
         affect_num = 0
         for od in op_orders:
-            if symbol and od.symbol != symbol or timeframe and od.timeframe != timeframe:
+            if timeframe and od.timeframe != timeframe:
                 continue
             price = self._sim_market_price(od.symbol, od.timeframe, candle)
             if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:

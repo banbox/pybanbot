@@ -80,21 +80,18 @@ class BaseStrategy:
         获取仓位大小，返回基于基准金额的倍数。
         '''
         symbol = symbol_tf.get().split('_')[2]
-        if btime.prod_mode():
-            # 实盘模式，从订单计算仓位
-            open_ods = InOutOrder.open_orders(self.name, symbol)
-            if enter_tag:
-                open_ods = [od for od in open_ods if od.enter_tag == enter_tag]
-            if side and side != 'both':
-                is_short = side == 'short'
-                open_ods = [od for od in open_ods if od.short == is_short]
-            if open_ods:
-                legal_cost = sum(od.enter_cost for od in open_ods)
-            else:
-                legal_cost = 0
+        # 从订单成本计算仓位
+        open_ods = InOutOrder.open_orders(self.name, symbol)
+        if enter_tag:
+            open_ods = [od for od in open_ods if od.enter_tag == enter_tag]
+        if side and side != 'both':
+            is_short = side == 'short'
+            open_ods = [od for od in open_ods if od.short == is_short]
+        if open_ods:
+            legal_cost = sum(od.enter_cost for od in open_ods)
         else:
-            legal_cost = WalletsLocal.obj.position(symbol, self.name, side, enter_tag)
-        return legal_cost / self.base_cost
+            legal_cost = 0
+        return legal_cost / self.get_stake_amount()
 
     def init_third_od(self, od: InOutOrder):
         pass
@@ -117,16 +114,20 @@ class BaseStrategy:
         return self.__class__.__name__
 
     @classmethod
+    def get_stake_amount(cls):
+        if not cls.stake_amount:
+            cls.stake_amount = AppConfig.get().get('stake_amount', 1000)
+        return cls.stake_amount
+
+    @classmethod
     def custom_cost(cls, sigin: dict) -> float:
         '''
         返回自定义的此次订单花费金额（基于法定币，如USDT、RMB）
         :param sigin:
         :return:
         '''
-        if not cls.stake_amount:
-            cls.stake_amount = AppConfig.get().get('stake_amount', 1000)
         rate = sigin.get('cost_rate', 1)
-        return cls.stake_amount * rate
+        return cls.get_stake_amount() * rate
 
     @classmethod
     def pick_timeframe(cls, exg_name: str, symbol: str, tfscores: List[Tuple[str, float]]) -> Optional[str]:

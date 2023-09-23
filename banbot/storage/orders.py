@@ -88,6 +88,31 @@ class Order(BaseDbModel):
     update_at = Column(sa.BIGINT)
     '13位，上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新'
 
+    def cut_part(self, cut_rate: float, fill=True) -> 'Order':
+        part = Order(task_id=self.task_id, symbol=self.symbol, enter=self.enter,
+                     order_type=self.order_type, order_id=self.order_id, side=self.side,
+                     create_at=self.create_at, price=self.price, average=self.average,
+                     amount=self.amount * cut_rate, fee=self.fee, fee_type=self.fee_type,
+                     update_at=self.update_at)
+        self.amount -= part.amount
+        if fill and self.filled:
+            if self.filled <= part.amount:
+                part.filled = self.filled
+                self.filled = 0
+            else:
+                part.filled = part.amount
+                self.filled -= part.amount
+        elif self.filled > self.amount:
+            part.filled = self.filled - self.amount
+            self.filled = self.amount
+        if part.filled >= part.amount:
+            part.status = OrderStatus.Close
+        elif part.filled:
+            part.status = OrderStatus.PartOk
+        else:
+            part.status = OrderStatus.Init
+        return part
+
     @orm.reconstructor
     def __init__(self, **kwargs):
         from banbot.storage import BotTask
@@ -320,6 +345,32 @@ class InOutOrder(BaseDbModel):
         if self.leverage:
             ent_quote_amount /= self.leverage
         self.profit_rate = self.profit / ent_quote_amount
+
+    def cut_part(self, enter_amt: float, exit_amt: float = 0) -> 'InOutOrder':
+        '''
+        从当前订单分割出一个小的InOutOrder，解决买入一次，需要分多次卖出的问题。
+        '''
+        enter_rate = enter_amt / self.enter_amount
+        exit_rate = exit_amt / self.exit.amount if self.exit else 0
+        part = InOutOrder(task_id=self.task_id, symbol=self.symbol, sid=self.sid, timeframe=self.timeframe,
+                          short=self.short, status=self.status, enter_tag=self.enter_tag, init_price=self.init_price,
+                          quote_cost=self.quote_cost * enter_rate, leverage=self.leverage, enter_at=self.enter_at,
+                          strategy=self.strategy, stg_ver=self.stg_ver, info=self.info)
+        self.enter_at += 1  # 原来订单的enter_at需要+1，防止和拆分的子订单冲突。
+        self.quote_cost -= part.quote_cost
+        part_enter = self.enter.cut_part(enter_rate)
+        part_enter.inout_id = part.id
+        part.enter = part_enter
+        if not exit_rate and self.exit and self.exit.amount > self.enter.amount:
+            exit_rate = (self.exit.amount - self.enter.amount) / self.exit.amount
+        if exit_rate:
+            part.exit_at = self.exit_at
+            part.exit_tag = self.exit_tag
+            part_exit = self.exit.cut_part(exit_rate)
+            part_exit.inout_id = part.id
+            part.exit = part_exit
+        part.save()
+        return part
 
     def _save_to_db(self):
         sess = db.session

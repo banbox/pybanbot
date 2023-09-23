@@ -398,6 +398,10 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     sess = db.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
     exs_list = sess.query(ExSymbol).filter(*fts).all()
+    if len(symbols) < len(exs_list):
+        keep_pairs = {s.symbol for s in exs_list}
+        del_pairs = set(symbols).difference(keep_pairs)
+        logger.warning(f'{len(del_pairs)} pairs removed in bulk_ohlcv_do, as not in exsymbol: {del_pairs}')
     for rid in range(0, len(exs_list), MAX_CONC_OHLCV):
         # 批量下载，提升效率
         batch = exs_list[rid: rid + MAX_CONC_OHLCV]

@@ -118,8 +118,11 @@ class WalletsLocal:
         '''
         self.update_at = btime.time()
         src, tgt = self.data.get(src_key), self.data.get(tgt_key)
-        if not src or not tgt:
+        if not src:
             return False
+        if not tgt:
+            tgt = ItemWallet()
+            self.data[tgt_key] = tgt
         pending_amt = src.pendings.get(od_key, 0)
         if not pending_amt:
             return False
@@ -248,6 +251,19 @@ class WalletsLocal:
             quote_amount = exit_price * sub_od.amount * (1 - sub_od.fee)
             self.confirm_pending(od.key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
 
+    def cut_part(self, src_key: str, tgt_key: str, symbol: str, rate: float):
+        item = self.data.get(symbol)
+        if not item:
+            return
+        if src_key in item.pendings:
+            cut_amt = item.pendings[src_key] * rate
+            item.pendings[tgt_key] = cut_amt
+            item.pendings[src_key] -= cut_amt
+        if src_key in item.frozens:
+            cut_amt = item.frozens[src_key] * rate
+            item.frozens[tgt_key] = cut_amt
+            item.frozens[src_key] -= cut_amt
+
     def update_ods(self, od_list: List[InOutOrder]):
         '''
         更新订单。目前只针对期货合约订单，需要更新合约订单的保证金比率。
@@ -326,7 +342,7 @@ class WalletsLocal:
         for key, amount in amt_list:
             if key.startswith(prefix):
                 continue
-            ent_side, tag, ent_at = key.split(':')[2:]
+            ent_side, tag, ent_at = key.split('|')[2:]
             if side and side != ent_side:
                 continue
             if enter_tag and enter_tag != tag:
@@ -340,7 +356,8 @@ class WalletsLocal:
         '''
         prefix = f'{symbol}|{strategy}|'
         base_s, quote_s = split_symbol(symbol)
-        base_amount = self._position(self.data.get(base_s), prefix, side, enter_tag)
+        base_item = self.data.get(base_s)
+        base_amount = base_item.available if base_item else 0
         quote_amount = self._position(self.data.get(quote_s), prefix, side, enter_tag)
         legal_cost = 0
         if base_amount:

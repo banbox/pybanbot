@@ -113,7 +113,8 @@ class HistDataProvider(DataProvider):
                 btime.cur_timestamp = bar_time / 1000
                 feeder()
                 self._update_bar()
-            self.pbar.close()
+            if self.pbar:
+                self.pbar.close()
         except Exception:
             logger.exception('loop data main fail')
 
