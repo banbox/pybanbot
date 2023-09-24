@@ -124,7 +124,6 @@ class Order(BaseDbModel):
                         side='buy', filled=0, create_at=btime.time(), update_at=btime.time())
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
-        logger.info(f'crete sub order {self.order_type}, from args: {kwargs}')
 
     def __str__(self):
         if not self.amount:

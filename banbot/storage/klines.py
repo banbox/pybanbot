@@ -462,7 +462,9 @@ group by 1'''
         return len(rows)
 
     @classmethod
-    def pause_compress(cls, tbl_list: List[str]) -> List[int]:
+    def pause_compress(cls, tbl_list: List[str] = None) -> List[int]:
+        if not tbl_list:
+            tbl_list = [t.tbl for t in KLine.agg_list]
         sess = db.session
         result = []
         for tbl in tbl_list:

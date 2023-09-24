@@ -15,11 +15,14 @@ from banbot.config import AppConfig
 
 async def test_get_ohlcv():
     from banbot.storage import KLine
-    exs = ExSymbol.get('binance', 'future', 'BTC/USDT:USDT')
+    exs = ExSymbol.get('binance', 'future', 'STMX/USDT:USDT')
     tf_msecs = tf_to_secs('1d') * 1000
     stop_ms = btime.utcstamp()
     start_ms = stop_ms - tf_msecs * 100
-    ohlcv_arr = KLine.query(exs, '1d', start_ms, stop_ms)
+    timeframe = '1m'
+    # timeframe, start_ms, stop_ms = '5m', 1695315300000, 1695405300000
+    ohlcv_arr = KLine.query(exs, timeframe, start_ms, stop_ms)
+    # print(len(ohlcv_arr))
     for bar in ohlcv_arr:
         print(bar)
     # print(ohlcv_arr)

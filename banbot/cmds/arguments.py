@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Callable
 
 from banbot.cmds.cli_options import *
 
-ARGS_COMMON = ["config", "logfile", "data_dir", "no_db", "debug"]
+ARGS_COMMON = ["config", "logfile", "data_dir", "no_db", "debug", "nocompress"]
 
 
 class Arguments:

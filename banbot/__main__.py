@@ -28,10 +28,22 @@ def main(sysargv: Optional[List[str]] = None) -> None:
         # Call subcommand.
         if 'func' in args:
             run_func = args['func']
+            nocompress = args.get('nocompress')
+            prs_res = None
+            if nocompress:
+                from banbot.storage import KLine, db
+                from banbot.storage.base import init_db
+                init_db()
+                with db():
+                    prs_res = KLine.pause_compress()
             if asyncio.iscoroutinefunction(run_func):
                 return_code = asyncio.run(run_func(args))
             else:
                 return_code = run_func(args)
+            if nocompress and prs_res:
+                from banbot.storage import KLine, db
+                with db():
+                    KLine.restore_compress(prs_res)
         else:
             # No subcommand was issued.
             raise RuntimeError(
