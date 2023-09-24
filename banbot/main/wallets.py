@@ -16,6 +16,7 @@ from banbot.storage import InOutOrder, ExSymbol, split_symbol
 from banbot.main.addons import *
 from banbot.util import btime
 from banbot.util.common import logger
+from banbot.types import LackOfCash
 
 
 @dataclass
@@ -80,7 +81,7 @@ class WalletsLocal:
             # 差额在近似允许范围内，扣除实际值
             real_cost = src_amount
         else:
-            raise ValueError(f'wallet {symbol} balance {src_amount:.5f} < {amount:.5f}')
+            raise LackOfCash(f'wallet {symbol} balance {src_amount:.5f} < {amount:.5f}')
         # logger.info(f'cost_ava wallet {key}.{symbol} {wallet.available} - {real_cost}')
         wallet.available -= real_cost
         wallet.pendings[od_key] = real_cost

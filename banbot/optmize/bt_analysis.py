@@ -88,7 +88,7 @@ def dump_orders(task_id: int, out_dir: str):
             enter_tag=iod.enter_tag,
         )
         enter_cost = 0
-        if iod.enter:
+        if iod.enter and iod.enter.price and iod.enter.amount:
             enter_cost = iod.enter.price * iod.enter.amount
             if iod.leverage and iod.leverage > 1:
                 enter_cost /= iod.leverage

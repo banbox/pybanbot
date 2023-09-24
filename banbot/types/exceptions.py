@@ -10,3 +10,7 @@ class OperateError(Exception):
 
 class NetError(Exception):
     pass
+
+
+class LackOfCash(Exception):
+    pass

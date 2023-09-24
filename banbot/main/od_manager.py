@@ -113,6 +113,9 @@ class OrderManager(metaclass=SingletonArg):
                         for stg_name, sigin in enters:
                             try:
                                 enter_ods.append(self.enter_order(ctx, stg_name, sigin, do_check=False))
+                            except LackOfCash as e:
+                                logger.warning(f'enter fail, lack of cash: {e} {stg_name} {sigin}')
+                                self.on_lack_of_cash()
                             except Exception as e:
                                 logger.warning(f'enter fail: {e} {stg_name} {sigin}')
                 else:
@@ -259,6 +262,9 @@ class OrderManager(metaclass=SingletonArg):
             for od in bomb_ods:
                 self.exit_order(od, dict(tag='bomb'), price=close_price)
 
+    def on_lack_of_cash(self):
+        pass
+
     def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Tuple[Dict[int, dict], list]:
         result = dict()
         exs, _ = get_cur_symbol()
@@ -351,6 +357,7 @@ class LocalOrderManager(OrderManager):
                  callback: Callable):
         super(LocalOrderManager, self).__init__(config, wallets, data_hd, callback)
         LocalOrderManager.obj = self
+        self.stake_currency = config.get('stake_currency') or []
         self.exchange = exchange
         self.network_cost = 3.  # 模拟网络延迟
 
@@ -361,6 +368,22 @@ class LocalOrderManager(OrderManager):
             affect_num = self.fill_pending_orders(exs.symbol, timeframe, row)
             if affect_num:
                 logger.debug("wallets: %s", self.wallets)
+
+    def on_lack_of_cash(self):
+        lack_num = 0
+        for currency in self.stake_currency:
+            fiat_val = self.wallets.fiat_value(currency)
+            if fiat_val < MIN_STAKE_AMOUNT:
+                lack_num += 1
+        if lack_num < len(self.stake_currency):
+            logger.debug('%s/%s sybol lack %s', lack_num, len(self.stake_currency), self.wallets.data)
+            return
+        open_num = len(InOutOrder.open_orders())
+        if open_num == 0:
+            # 如果余额不足，且没有打开的订单，则终止回测
+            BotGlobal.state = BotState.STOPPED
+        else:
+            logger.info('%s open orders , dont stop', open_num)
 
     def force_exit(self, od: InOutOrder, tag: Optional[str] = None, price: float = None):
         if not tag:
@@ -378,7 +401,14 @@ class LocalOrderManager(OrderManager):
             if od.short and od.leverage == 1:
                 # 现货空单，必须给定数量
                 raise ValueError('`enter_amount` is require for short order')
-            sub_od.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / enter_price)
+            ent_amount = od.quote_cost / enter_price
+            try:
+                sub_od.amount = self.exchange.pres_amount(od.symbol, ent_amount)
+            except ccxt.InvalidOrder as e:
+                err_msg = f'{od} pres enter amount fail: {od.quote_cost} {ent_amount} : {e}'
+                logger.warning(err_msg)
+                od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                return
         ctx = self.get_context(od)
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:

@@ -84,6 +84,8 @@ class VolumePairList(PairList):
                     item['quoteVolume'] = np.sum(quote_vol[-self.backperiod:])
                 res_list.append(item)
             down_args = dict(limit=self.backperiod)
+            if not BotGlobal.live_mode:
+                down_args['start_ms'] = self.config['timerange'].startts * 1000
             await bulk_ohlcv_do(self.exchange, pairlist, self.backtf, down_args, kline_cb)
         else:
             # Tickers mode - filter based on incoming pairlist.
