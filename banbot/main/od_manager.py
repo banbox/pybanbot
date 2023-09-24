@@ -1047,7 +1047,10 @@ class LiveOrderManager(OrderManager):
         '''
         尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
         '''
-        ava_amount = iod.enter_amount if not iod.exit else iod.exit.amount - iod.exit.filled
+        if iod.exit and iod.exit.amount:
+            ava_amount = iod.exit.amount - iod.exit.filled
+        else:
+            ava_amount = iod.enter_amount
         if filled >= ava_amount:
             fill_amt = ava_amount
             exit_status = OrderStatus.Close
