@@ -432,7 +432,7 @@ class CrossLog(metaclass=MetaStateVar):
 
 def Cross(obj1: Union[SeriesVar, float], obj2: Union[SeriesVar, float]) -> int:
     '''
-    计算最近一次交叉的距离。
+    计算最近一次交叉的距离。如果两个都变化，则两个都必须是序列。或者一个是常数一个是序列
     返回值：正数上穿，负数下穿，0表示未知或重合；abs(ret) - 1表示交叉点与当前bar的距离
     '''
     if not isinstance(obj1, SeriesVar) and not isinstance(obj2, SeriesVar):

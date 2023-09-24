@@ -8,6 +8,8 @@
 函数式调用，传入序列变量，自动追踪历史结果。
 按序号取值，res[0]表示当前值，res[1]表示前一个。。。
 '''
+import numpy as np
+
 from banbot.compute.ctx import *
 from banbot.util.num_utils import *
 
@@ -279,4 +281,42 @@ def TD(obj: SeriesVar):
     else:
         res_val = step
     return res_obj.append(res_val)
+
+
+def ADX(high: SeriesVar, low: SeriesVar, close: SeriesVar, period: int):
+    '''
+    ADX 平均趋向指标。参考TradingView的社区ADX指标。与tdlib略有不同
+    '''
+    dm_h = high[0] - high[1]
+    dm_l = low[1] - low[0]
+    plus_DM = dm_h if dm_h > dm_l and dm_h > 0 else 0
+    minus_DM = dm_l if dm_l > dm_h and dm_l > 0 else 0
+    tr = TR(high, low, close)
+    dmh: SeriesVar = SeriesVar(close.key + f'_dmh{period}')
+    dml: SeriesVar = SeriesVar(close.key + f'_dml{period}')
+    dmh_sm: SeriesVar = SeriesVar(close.key + f'_dmhs{period}')
+    dml_sm: SeriesVar = SeriesVar(close.key + f'_dmls{period}')
+    tr_sm: SeriesVar = SeriesVar(tr.key + f'_sm{period}')
+    dx: SeriesVar = SeriesVar(close.key + f'_dx{period}')
+    adx: SeriesVar = SeriesVar(close.key + f'_adx{period}')
+    dmh.append(plus_DM)
+    dml.append(minus_DM)
+    if len(dmh) <= period + 1:
+        if len(dmh) <= period:
+            dmh_sm.append(np.nan)
+            dml_sm.append(np.nan)
+            tr_sm.append(np.nan)
+            dx.append(np.nan)
+            return adx.append((np.nan, np.nan, np.nan))
+        dmh_sm.append(sum(dmh.val))
+        dml_sm.append(sum(dml.val))
+        tr_sm.append(sum(tr.val[1:]))
+    else:
+        dmh_sm.append(dmh_sm[0] * (1 - 1 / period) + dmh[0])
+        dml_sm.append(dml_sm[0] * (1 - 1 / period) + dml[0])
+        tr_sm.append(tr_sm[0] * (1 - 1 / period) + tr[0])
+    plus = 100 * dmh_sm[0] / tr_sm[0]
+    minus = 100 * dml_sm[0] / tr_sm[0]
+    dx.append(abs(plus - minus) / (plus + minus) * 100)
+    return adx.append((SMA(dx, period)[0], plus, minus))
 

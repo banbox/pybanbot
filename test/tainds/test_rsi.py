@@ -200,3 +200,10 @@ def test_bband():
     assert_arr_equal(my_up, sta_up)
     assert_arr_equal(sta_up, ta_up)
 
+
+def test_adx():
+    ta.set_compatibility(1)
+    period = 14
+    ta_res = ta.ADX(high_arr, low_arr, close_arr, timeperiod=period)
+    sta_res = calc_state_func(lambda: sta.ADX(Bar.high, Bar.close, Bar.close, period))[0]
+    print_tares(None, sta_res, ta_res)

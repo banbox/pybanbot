@@ -13,9 +13,20 @@ from banbot.storage.base import init_db, db
 from banbot.config import AppConfig
 
 
+async def test_get_ohlcv():
+    from banbot.storage import KLine
+    exs = ExSymbol.get('binance', 'future', 'BTC/USDT:USDT')
+    tf_msecs = tf_to_secs('1d') * 1000
+    stop_ms = btime.utcstamp()
+    start_ms = stop_ms - tf_msecs * 100
+    ohlcv_arr = KLine.query(exs, '1d', start_ms, stop_ms)
+    for bar in ohlcv_arr:
+        print(bar)
+    # print(ohlcv_arr)
+
+
 async def test_down():
     from banbot.exchange.crypto_exchange import get_exchange
-    from banbot.storage import KLine
     exg = get_exchange('binance', 'future')
     symbol, timeframe = 'BTC/USDT:USDT', '1m'
     tf_msecs = tf_to_secs(timeframe) * 1000
@@ -351,4 +362,4 @@ if __name__ == '__main__':
     with db():
         # test_kline_insert()
         # analyze_trade_agg('BCH')
-        asyncio.run(test_get_kline())
+        asyncio.run(test_get_ohlcv())
