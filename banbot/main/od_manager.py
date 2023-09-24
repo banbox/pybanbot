@@ -503,7 +503,7 @@ class LiveOrderManager(OrderManager):
         self.unmatch_trades: Dict[str, dict] = dict()
         '未匹配交易，key: symbol, order_id；每个订单只保留一个未匹配交易，也只应该有一个'
         self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
-        self.od_type = config.get('order_type', 'limit')
+        self.od_type = config.get('order_type', 'market')
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
