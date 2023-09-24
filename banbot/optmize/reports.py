@@ -24,6 +24,31 @@ def _calc_winloss(df: pd.DataFrame):
     return f'{wins:>4}  {losses:>4}  {win_rate:>4}%'
 
 
+def text_pair_groups(df: pd.DataFrame):
+    col_key = 'symbol'
+    pairs = list(df[col_key].value_counts().items())
+    if len(pairs) <= 1:
+        # 单币种回测不显示按币种的收益
+        return ''
+    headers = ['Pair', 'Count', 'AvgProfit %', 'TotProfit %', 'SumProfit', 'Duration', 'WinLossRate']
+    hd_fmts = ['s', 'd', '.2f', '.2f', '.3f', '.2f', '.1f', 's']
+    data = []
+    for key, count in pairs:
+        result = df[df[col_key] == key]
+        profit_sum = result['profit'].sum()
+        profit_tot_pct = profit_sum * 100 * len(result) / result['enter_cost'].sum()
+        data.append([
+            key,
+            len(result),
+            result['profit_rate'].mean() * 100 if len(result) else 0.0,  # profit_mean
+            profit_tot_pct,
+            profit_sum,
+            _group_durations(result['duration'].tolist(), 3),
+            _calc_winloss(result)
+        ])
+    return tabulate(data, headers, 'orgtbl', hd_fmts, stralign='right')
+
+
 def text_order_tags(df: pd.DataFrame, tag_type: str):
     if not len(df):
         return ''
@@ -158,15 +183,17 @@ def text_day_profits(df: pd.DataFrame):
 def get_order_df() -> pd.DataFrame:
     from banbot.storage import InOutOrder
     his_orders = InOutOrder.his_orders()
-    data_list = []
-    for od in his_orders:
-        data_list.append(od.dict(flat_sub=True))
+    data_list = [od.dict(flat_sub=True) for od in his_orders]
     return pd.DataFrame(data_list)
 
 
 def print_backtest(result: dict):
     order_df = get_order_df()
     if len(order_df):
+        table = text_pair_groups(order_df)
+        if isinstance(table, str) and len(table) > 0:
+            print(' Pair Profits '.center(len(table.splitlines()[0]), '='))
+            print(table)
         table = text_day_profits(order_df)
         if isinstance(table, str) and len(table) > 0:
             print(' Day Profits '.center(len(table.splitlines()[0]), '='))
