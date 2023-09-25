@@ -286,7 +286,12 @@ class OhlcvWatcher(WebsocketWatcher):
         self.pbar = None  # 记录上一个bar用于判断是否完成
 
     async def try_update(self):
-        ohlcvs_sml = await self.exchange.watch_ohlcv(self.pair, self.state_ws.timeframe)
+        try:
+            ohlcvs_sml = await self.exchange.watch_ohlcv(self.pair, self.state_ws.timeframe)
+        except ccxt.BadSymbol:
+            logger.error(f'{self.pair} not in {self.exchange.name}.{self.exchange.market_type}, stop watch...')
+            self.running = False
+            return
         if not ohlcvs_sml:
             return
         cur_ts = btime.utctime()

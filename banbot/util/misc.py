@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Dict, Any
 _run_env = None
 
 
@@ -132,7 +132,7 @@ def deep_merge_dicts(source, destination, allow_null_overrides: bool = True):
     return destination
 
 
-def groupby(data, key: Callable):
+def groupby(data, key: Callable) -> Dict[Any, List]:
     '''
     对给定的数据进行分组。
     返回：[(key1, list1), ...]

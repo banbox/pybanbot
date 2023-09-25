@@ -114,14 +114,15 @@ class BanConn:
                     await run_async(handle_fn, *call_args)
                 except Exception:
                     logger.exception(f'{name} handle msg err: {self.remote}: {data}')
-        except asyncio.IncompleteReadError:
+        except (asyncio.IncompleteReadError, ConnectionResetError) as e:
             self.reader = None
             self.writer = None
+            err_type = type(e)
             if not self.reconnect:
                 # 不尝试重新连接，退出
-                logger.error(f'remote {name} IncompleteReadError, remove conn')
+                logger.error(f'remote {name} {err_type}, remove conn')
                 return
-            logger.error(f'read {name} IncompleteReadError, sleep 3s and retry...')
+            logger.error(f'read {name} {err_type}, sleep 3s and retry...')
             await asyncio.sleep(3)
             await self.run_forever(name)
         except Exception:
@@ -158,26 +159,27 @@ class ServerIO:
 
     async def broadcast(self, msg_type: str, data: Any):
         dump_data = marshal.dumps((msg_type, data))
-        fail_conns = []
+        fail_conns = set()
         for conn in self.conns:
             if not conn.writer:
                 # 连接已关闭
-                fail_conns.append(conn)
+                fail_conns.add(conn)
                 continue
             if msg_type not in conn.tags:
                 # logger.info(f'{conn.remote} skip msg: {msg_type}, {conn.tags}')
                 continue
             try:
                 await conn.write(dump_data)
-            except BrokenPipeError:
+            except (BrokenPipeError, ConnectionResetError):
                 # 连接已断开
-                fail_conns.append(conn)
+                fail_conns.add(conn)
                 logger.info(f'conn {conn.remote} disconnected')
-            except Exception:
-                fail_conns.append(conn)
-                logger.exception(f'send msg to client fail: {msg_type} {data}')
+            except Exception as e:
+                fail_conns.add(conn)
+                logger.exception(f'send msg to client fail: {msg_type} {data}: {type(e)}')
         for conn in fail_conns:
-            self.conns.remove(conn)
+            if conn in self.conns:
+                self.conns.remove(conn)
 
     def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
         '''
