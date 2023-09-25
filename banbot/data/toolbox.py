@@ -126,6 +126,7 @@ def _sync_kline_sid(sid: int, tf_list: List[Tuple[str, int, int, int]]):
     检查给定的sid，各个周期数据是否有不一致，尝试用低维度数据更新高维度数据
     '''
     sess = db.session
+    tf_list = [it for it in tf_list if it[2]]
     tf_map = {r[0]: i for i, r in enumerate(tf_list)}
     for agg_tbl in KLine.agg_list:
         if not agg_tbl.agg_from:
