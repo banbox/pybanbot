@@ -487,7 +487,7 @@ class InOutOrder(BaseDbModel):
         if not self.exit:
             result['duration'] = 0
         else:
-            result['duration'] = round(self.exit.create_at - self.enter.create_at) / 1000
+            result['duration'] = round(self.exit_at - self.enter_at) / 1000
         ent_data = self.enter.dict()
         if not flat_sub:
             result['enter'] = ent_data
@@ -650,7 +650,7 @@ def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str
     io_rows: List[InOutOrder] = query.all()
     io_ids = {row.id for row in io_rows}
     ex_filters = [Order.task_id == task_id, Order.inout_id.in_(io_ids)]
-    ex_ods = sess.query(Order).filter(*ex_filters).order_by(Order.inout_id).all()
+    ex_ods = sess.query(Order).filter(*ex_filters).all()
     ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
     ex_exits = {od.inout_id: od for od in ex_ods if not od.enter}
     for row in io_rows:
