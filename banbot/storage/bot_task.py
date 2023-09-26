@@ -8,9 +8,10 @@ from banbot.exchange.exchange_utils import tfsecs
 from banbot.storage.base import *
 from banbot.util import btime
 from banbot.storage.common import *
+from banbot.storage.extension import InfoPart
 
 
-class BotTask(BaseDbModel):
+class BotTask(BaseDbModel, InfoPart):
     __tablename__ = 'bottask'
 
     cur_id: ClassVar[int] = 0
@@ -22,6 +23,11 @@ class BotTask(BaseDbModel):
     create_at = Column(sa.DateTime)
     start_at = Column(sa.DateTime)
     stop_at = Column(sa.DateTime)
+
+    @orm.reconstructor
+    def __init__(self, **kwargs):
+        super().init_infos(self, kwargs)
+        super(BotTask, self).__init__(**kwargs)
 
     @classmethod
     def init(cls, start_at: Optional[float] = None):
@@ -79,3 +85,9 @@ class BotTask(BaseDbModel):
         sess.refresh(cls.obj)
         cls.obj.update_props(**kwargs)
         sess.commit()
+
+    def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None):
+        data = super().dict(only, skips)
+        data.update(**self.infos)
+        del data['info']
+        return data

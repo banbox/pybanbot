@@ -22,49 +22,26 @@ class BackTest(Trader):
         self.result = dict()
         self.stake_amount: float = config.get('stake_amount', 1000)
         self.quote_symbols: Set[str] = set(config.get('stake_currency') or [])
-        self._bar_listeners: List[Tuple[int, Callable]] = []
         self.max_open_orders = 1
         self.min_balance = 0
         self.max_balance = 0
-        self.first_data = True
         self.bar_count = 0
-        self.open_price = 0
-        self.close_price = 0
-        self.enter_list = []
         self.bar_assets = []
 
     def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
-        if self.first_data:
-            self.open_price = row[ocol]
-            self.result['pair'] = pair
-            self.result['timeframe'] = timeframe
-            self.result['date_from'] = btime.to_datestr(row[0])
-            self.result['ts_from'] = row[0]
-            self.first_data = False
-        else:
-            self.close_price = row[ccol]
-            self.result['date_to'] = row[0]
-            self.result['ts_to'] = row[0]
-        enter_list, exit_list = super(BackTest, self).on_data_feed(pair, timeframe, row)
+        super(BackTest, self).on_data_feed(pair, timeframe, row)
         # 更新总资产
         self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal()))
         # 更新最大最小余额
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
         self.max_balance = max(self.max_balance, quote_legal)
-        if enter_list:
-            pair_tf = f'{self.exchange.name}_{self.exchange.market_type}_{pair}_{timeframe}'
-            ctx = get_context(pair_tf)
-            price = to_pytypes(row[ccol])
-            enter_text = ','.join([str(v[1]) for v in enter_list])
-            self.enter_list.append((ctx[bar_num], enter_text, price))
 
     async def init(self):
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         self.min_balance = sys.maxsize
-        self.max_balance = 0
         with db():
             # 创建回测任务，记录相关周期
             BotTask.init()
@@ -79,16 +56,10 @@ class BackTest(Trader):
             self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id
         # 初始化钱包余额
-        wallet_amounts = self.config.get('wallet_amounts')
-        if wallet_amounts:
-            self.wallets.set_wallets(**wallet_amounts)
-        else:
-            quote_amounts = dict()
-            for pair in self.pair_mgr.symbols:
-                base_s, quote_s = pair.split('/')
-                quote_s = quote_s.split(':')[0]
-                quote_amounts[quote_s] = self.stake_amount * 10
-            self.wallets.set_wallets(**quote_amounts)
+        wallets = self.config.get('wallet_amounts')
+        if not wallets:
+            raise ValueError('wallet_amounts is required for backtesting...')
+        self.wallets.set_wallets(**wallets)
         self.result['start_balance'] = self.order_mgr.get_legal_value()
 
     async def run(self):
@@ -117,25 +88,23 @@ class BackTest(Trader):
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
 
     def _calc_result_done(self):
+        start_balance = self.result['start_balance']
+        task = BotTask.obj
+        task.set_info(start_balance=start_balance, stake_amount=self.stake_amount)
         self.result['bar_assets'] = self.bar_assets
         # 更新最大最小余额
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
         self.max_balance = max(self.max_balance, quote_legal)
-        # 输出入场信号
-        if self.enter_list:
-            enter_ids, enter_tags, enter_prices = list(zip(*self.enter_list))
-        else:
-            enter_ids, enter_tags, enter_prices = [], [], []
-        self.result['enters'] = dict(ids=enter_ids, tags=enter_tags, valy=enter_prices)
         quote_s = 'TUSD'
-        self.result['date_to'] = btime.to_datestr(self.result['date_to'])
+        timerange = self.config['timerange']
+        self.result['date_from'] = btime.to_datestr(timerange.startts)
+        self.result['date_to'] = btime.to_datestr(timerange.stopts)
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
         his_orders = InOutOrder.his_orders()
         self.result['orders_num'] = len(his_orders)
         fin_balance = self.wallets.get(quote_s).available
-        start_balance = self.result['start_balance']
         self.result['final_balance'] = f"{fin_balance:.3f} {quote_s}"
         abs_profit = sum(od.profit for od in his_orders) if his_orders else 0
         self.result['start_balance'] = f"{start_balance:.3f} {quote_s}"
@@ -162,6 +131,5 @@ class BackTest(Trader):
             self.result['worst_trade'] = "None"
         self.result['min_balance'] = f'{self.min_balance:.3f} {quote_s}'
         self.result['max_balance'] = f'{self.max_balance:.3f} {quote_s}'
-        self.result['market_change'] = f"{(self.close_price / self.open_price - 1) * 100: .2f}%"
 
 

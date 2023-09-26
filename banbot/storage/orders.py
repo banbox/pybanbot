@@ -12,6 +12,7 @@ from banbot.storage.base import *
 from banbot.util.misc import del_dict_prefix
 from banbot.util import btime
 from banbot.storage.common import BotGlobal
+from banbot.storage.extension import InfoPart
 
 
 class OrderStatus:
@@ -133,7 +134,7 @@ class Order(BaseDbModel):
         return f'{self.side} {(self.amount or 0):.5f}[{fill_pct}%] at {self.price}'
 
 
-class InOutOrder(BaseDbModel):
+class InOutOrder(BaseDbModel, InfoPart):
     '''
     策略逻辑订单（包含入场、出场两个Order）
     为避免过度复杂，不支持市价单按定价金额买入（需按基准产品数量买入）
@@ -177,27 +178,18 @@ class InOutOrder(BaseDbModel):
     stg_ver = Column(sa.Integer, default=0)
     profit_rate = Column(sa.Float, default=0)
     profit = Column(sa.Float, default=0)
-    info = Column(sa.String(1024))
 
     @orm.reconstructor
     def __init__(self, **kwargs):
         self.enter: Optional[Order] = None
         self.exit: Optional[Order] = None
         self.margin_ratio = 0  # 合约的保证金比率
-        db_keys = set(self.__table__.columns.keys())
-        tmp_keys = {k for k in kwargs if k not in db_keys and not k.startswith('enter_') and not k.startswith('exit_')}
-        self.infos: Dict = {k: kwargs.pop(k) for k in tmp_keys}
-        if self.id:
+        from_db = super().init_infos(self, kwargs)
+        if from_db:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
             super(InOutOrder, self).__init__(**kwargs)
-            if self.info:
-                # 数据库初始化的必然只包含列名，这里可以直接覆盖
-                self.infos: Dict = json.loads(self.info)
             return
         # 仅针对新创建的订单执行下面初始化
-        if self.infos:
-            # 自行实例化的对象，忽略info参数
-            kwargs['info'] = json.dumps(self.infos)
         from banbot.storage import BotTask
         from banbot.strategy.resolver import get_strategy
         data = dict(status=InOutStatus.Init, profit_rate=0, profit=0, task_id=BotTask.cur_id, leverage=1)
@@ -406,18 +398,6 @@ class InOutOrder(BaseDbModel):
             self._save_to_db()
         return self
 
-    def get_info(self, key: str, def_val=None):
-        if not self.infos:
-            if self.info:
-                self.infos: Dict = json.loads(self.info)
-            else:
-                return def_val
-        return self.infos.get(key, def_val)
-
-    def set_info(self, **kwargs):
-        self.infos.update(kwargs)
-        self.info = json.dumps(self.infos)
-
     def local_exit(self, tag: str, price: float = None, status_msg: str = None):
         '''
         在本地强制退出订单。这里不涉及钱包更新，钱包需要自行更新。
@@ -487,6 +467,7 @@ class InOutOrder(BaseDbModel):
             result['enter_cost'] = self.enter_cost
         if self.infos:
             result.update(**self.infos)
+        del result['info']
         if not self.exit:
             result['duration'] = 0
         else:

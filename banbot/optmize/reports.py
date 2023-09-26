@@ -92,7 +92,6 @@ def text_bt_metrics(data: dict):
         ('Worst trade', data['worst_trade']),
         ('Min balance', data['min_balance']),
         ('max_balance', data['max_balance']),
-        ('Market change', data['market_change'])
     ]
     return tabulate(records, headers, 'orgtbl')
 

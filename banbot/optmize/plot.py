@@ -277,19 +277,3 @@ def plot_fin(org_df: DataFrame, inds: Optional[List[Union[dict, str]]] = None, r
 
     app.run_server(mode=show_mode, height=height + 50)
 
-
-async def run_test():
-    from banbot.storage.base import init_db, db
-    from banbot.optmize.bt_analysis import BTAnalysis, order_plot_ind
-    init_db(db_url='postgresql://postgres:123@[127.0.0.1]:5432/bantd')
-    with db():
-        backtest_dir = r'E:\trade\ban_data\backtest'
-        btres = await BTAnalysis.load(backtest_dir)
-        df = btres.load_df(start_ms=1681689600000, stop_ms=1681776000000)
-        df['date'] = pd.to_datetime(df['date'], utc=True, unit='ms')
-        od_ind = order_plot_ind(10)
-    plot_fin(df, [od_ind], view_width=200)
-
-
-if __name__ == '__main__':
-    asyncio.run(run_test())
