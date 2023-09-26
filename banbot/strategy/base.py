@@ -3,9 +3,7 @@
 # File  : BaseTipper.py
 # Author: anyongjin
 # Date  : 2023/3/1
-import random
 from banbot.strategy.common import *
-from banbot.main.wallets import WalletsLocal
 from banbot.rpc import Notify, NotifyType  # noqa
 
 
@@ -16,8 +14,6 @@ class BaseStrategy:
     '''
     run_timeframes = []
     '指定运行周期，从里面计算最小符合分数的周期，不提供尝试使用config.json中run_timeframes或Kline.agg_list'
-    paintFields: Dict[str, str] = dict()
-    '要绘制显示到K线图的字段列表[key, plotType]'
     params = []
     '传入参数'
     warmup_num = 600
@@ -25,8 +21,6 @@ class BaseStrategy:
     nofee_tfscore = 0.6
     max_fee = 0.002
     stop_loss = 0.05
-    skip_exit_on_enter = True
-    skip_enter_on_exit = True
     stake_amount = 0
     '每笔下单金额基数'
     version = 1
@@ -34,9 +28,15 @@ class BaseStrategy:
 
     def __init__(self, config: dict):
         self.config = config
-        self.state = dict()  # 仅在当前bar生效的临时缓存
+        self.state = dict()
+        '仅在当前bar生效的临时缓存'
         self._state_fn = dict()
-        self.bar_signals: Dict[str, float] = dict()  # 当前bar产生的信号及其价格
+        self.bar_signals: Dict[str, float] = dict()
+        '当前bar产生的信号及其价格'
+        self.entrys: List[dict] = []
+        '策略创建的入场信号'
+        self.exits: List[dict] = []
+        '策略创建的出场信号'
         self.calc_num = 0
 
     def _calc_state(self, key: str, *args, **kwargs):
@@ -50,27 +50,117 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
+        self.entrys = []
+        self.exits = []
         self.state = dict()
         self.bar_signals = dict()
         self.calc_num += 1
 
-    def on_entry(self, arr: np.ndarray) -> Optional[dict]:
+    def open_order(self, tag: str,
+                   short: bool = False,
+                   price: float = None,
+                   cost_rate: float = 1.,
+                   legal_cost: float = None,
+                   leverage: int = None,
+                   order_type: str = None,
+                   amount: float = None,
+                   stoploss: float = None,
+                   takeprofit: float = None,
+                   **kwargs):
         '''
-        时间升序，最近的是最后一个
-        :param arr:
-        :return: InOutOrder的属性。额外：tag,short,legal_cost,cost_rate, stoploss_price, takeprofit_price
+        打开一个订单。默认开多。如需开空short=False
+        :param tag: 入场信号
+        :param short: 是否做空，默认False
+        :param price: 入场价格，仅当指定order_type=limit时有效
+        :param cost_rate: 开仓倍率、默认按配置1倍。用于计算legal_cost
+        :param legal_cost: 花费法币金额。指定时忽略cost_rate
+        :param leverage: 杠杆倍数。为空时使用默认配置的杠杆
+        :param order_type: 订单类型：limit, market
+        :param amount: 入场标的数量，由legal_cost和price计算
+        :param stoploss: 止损价格，不为空时在交易所提交一个止损单
+        :param takeprofit: 止盈价格，不为空时在交易所提交一个止盈单。
         '''
-        pass
+        od_args = dict(tag=tag, short=short, **kwargs)
+        if leverage:
+            od_args['leverage'] = leverage
+        if order_type:
+            od_args['enter_order_type'] = order_type
+            if order_type != 'market':
+                od_args['enter_price'] = price
+        if amount:
+            od_args['enter_amount'] = amount
+        else:
+            if legal_cost:
+                od_args['legal_cost'] = legal_cost
+            else:
+                od_args['cost_rate'] = cost_rate
+                od_args['legal_cost'] = self.custom_cost(od_args)
+        if stoploss:
+            od_args['stoploss_price'] = stoploss
+        if takeprofit:
+            od_args['takeprofit_price'] = takeprofit
+        self.entrys.append(od_args)
 
-    def on_exit(self, arr: np.ndarray) -> Optional[dict]:
+    def close_orders(self, tag: str,
+                     short: bool = False,
+                     price: float = None,
+                     exit_rate: float = 1.,
+                     order_type: str = None,
+                     amount: float = None,
+                     enter_tag: str = None,
+                     order_id: int = None
+                     ):
         '''
-        检查是否有退出信号。
-        :return: Order的属性，额外：tag, short
+        退出若干订单。默认平多。如需平空short=True
+        :param tag: 退出原因
+        :param short: 是否平空，默认否
+        :param price: 退出价格，仅当order_type=limit时有效
+        :param exit_rate: 退出比率，默认100%即所有订单全部退出
+        :param order_type: 订单类型，默认按配置文件指定的订单类型
+        :param amount: 要退出的标的数量。指定时exit_rate无效
+        :param enter_tag: 只退出入场信号为enter_tag的订单
+        :param order_id: 只退出指定订单
         '''
-        pass
+        exit_args = dict(tag=tag, short=short)
+        if amount:
+            exit_args['amount'] = amount
+        elif exit_rate < 1:
+            exit_args['exit_rate'] = exit_rate
+        if order_type:
+            exit_args['order_type'] = order_type
+            if order_type != 'market':
+                exit_args['price'] = price
+        if enter_tag:
+            exit_args['enter_tag'] = enter_tag
+        if order_id:
+            exit_args['order_id'] = order_id
+        self.exits.append(exit_args)
 
-    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[dict]:
+    def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[bool]:
         return None
+
+    def check_custom_exits(self, pair_arr: np.ndarray) -> List[Tuple[InOutOrder, str]]:
+        exs, _ = get_cur_symbol()
+        op_orders = InOutOrder.open_orders(self.name, exs.symbol)
+        if not op_orders:
+            return []
+        # 调用策略的自定义退出判断
+        edit_ods = []
+        for od in op_orders:
+            if not od.can_close():
+                continue
+            sl_price = od.get_info('stoploss_price')
+            tp_price = od.get_info('takeprofit_price')
+            sigout = self.custom_exit(pair_arr, od)
+            if not sigout:
+                # 检查是否需要修改条件单
+                new_sl_price = od.get_info('stoploss_price')
+                new_tp_price = od.get_info('takeprofit_price')
+                if new_sl_price != sl_price:
+                    edit_ods.append((od, 'stoploss_'))
+                if new_tp_price != tp_price:
+                    edit_ods.append((od, 'takeprofit_'))
+        return edit_ods
 
     def on_bot_stop(self):
         pass
@@ -141,48 +231,3 @@ class BaseStrategy:
         for tf, score in tfscores:
             if score >= min_score:
                 return tf
-
-    @classmethod
-    def paint(cls, name: str, points: List[OlayPoint], paneId: str = 'candle_pane', mode: str = 'normal',
-              lock: bool = True, groupId='ban_stg', styles: dict = None, visible: bool = True,
-              zLevel: int = 1000, extendData=None, ):
-        '''
-        绘制内容到K线图上
-        :param name: 覆盖物名称: arc, circle, line, polygon, rect, text, rectText, segment, simpleTag, ...
-        :param points: 定位覆盖物的点
-        :param paneId: 所属子图，默认candle_pane是主K线图
-        :param mode: `normal`，`weak_magnet`，`strong_magnet`
-        :param lock: 是否锁定，不触发事件，默认锁定
-        :param groupId: 分组ID
-        :param styles: 样式配置字典，参考：https://klinecharts.com/guide/styles.html 中 "overlay:"，会自动包装name属性
-        :param visible: 是否可见，默认true
-        :param zLevel: 显示层级，越大显示越上面
-        :param extendData: 扩展数据
-        '''
-        from banbot.storage import Overlay
-        exs, timeframe = get_cur_symbol()
-        if styles:
-            styles = dict(name=styles)
-        olay_data = dict(
-            id=f'{cls.__name__}_{cls.version}_{name}_{bar_num.get()}_{random.randrange(100, 999)}',
-            name=name,
-            points=[p.dict() for p in points],
-            paneId=paneId,
-            mode=mode,
-            lock=lock,
-            groupId=groupId,
-            styles=styles,
-            visible=visible,
-            zLevel=zLevel,
-            extendData=extendData
-        )
-        Overlay.create(0, exs.id, timeframe, olay_data)
-
-    @classmethod
-    def draw_circle(cls, value: float, radius: int, paneId: str = 'candle_pane', mode: str = 'normal',
-              lock: bool = True, groupId='ban_stg', styles: dict = None, visible: bool = True,
-              zLevel: int = 1000, extendData=None, ):
-        bar_start, bar_stop = bar_time.get()
-        end_ms = bar_start + radius * (bar_stop - bar_start)
-        points = [OlayPoint(bar_start, value), OlayPoint(end_ms, value)]
-        cls.paint('circle', points, paneId, mode, lock, groupId, styles, visible, zLevel, extendData)

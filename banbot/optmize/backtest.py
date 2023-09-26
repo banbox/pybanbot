@@ -46,7 +46,7 @@ class BackTest(Trader):
             self.close_price = row[ccol]
             self.result['date_to'] = row[0]
             self.result['ts_to'] = row[0]
-        enter_list, exit_list, ext_tags = super(BackTest, self).on_data_feed(pair, timeframe, row)
+        enter_list, exit_list = super(BackTest, self).on_data_feed(pair, timeframe, row)
         # 更新总资产
         self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal()))
         # 更新最大最小余额

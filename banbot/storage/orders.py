@@ -274,6 +274,9 @@ class InOutOrder(BaseDbModel):
         return self.quote_cost / (self.enter.price or self.init_price)
 
     def can_close(self):
+        '''
+        订单正在退出、或刚入场需等到下个bar退出
+        '''
         if self.exit_tag:
             return False
         return self.elp_num_enter > 0

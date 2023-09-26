@@ -88,21 +88,19 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     def process_orders(self, pair_tf: str, enters: List[Tuple[str, dict]],
-                       exits: List[Tuple[str, dict]], exit_keys: Dict[int, dict],
-                       edit_triggers: List[Tuple[InOutOrder, str]])\
+                       exits: List[Tuple[str, dict]], edit_triggers: List[Tuple[InOutOrder, str]])\
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
         :param pair_tf: 交易对
         :param enters: [(strategy, enter_tag, cost), ...]
         :param exits: [(strategy, exit_tag), ...]
-        :param exit_keys: Dict(order_key, exit_tag)
         :param edit_triggers: 编辑止损止盈订单
         :return:
         '''
         sess = db.session
-        if enters or exits or exit_keys:
-            logger.debug('bar signals: %s %s %s', enters, exits, exit_keys)
+        if enters or exits:
+            logger.debug('bar signals: %s %s', enters, exits)
             ctx = get_context(pair_tf)
             exs, _ = get_cur_symbol(ctx)
             enter_ods, exit_ods = [], []
@@ -123,10 +121,6 @@ class OrderManager(metaclass=SingletonArg):
             if exits:
                 for stg_name, sigout in exits:
                     exit_ods.extend(self.exit_open_orders(sigout, None, stg_name, exs.symbol))
-            if exit_keys:
-                for od_id, sigout in exit_keys.items():
-                    od = InOutOrder.get(sess, od_id)
-                    exit_ods.append(self.exit_order(od, sigout))
         else:
             enter_ods, exit_ods = [], []
         if btime.run_mode in btime.LIVE_MODES:
@@ -153,7 +147,7 @@ class OrderManager(metaclass=SingletonArg):
             if self.market_type == 'spot':
                 sigin['short'] = False
             else:
-                raise ValueError(f'`short` is required from `on_entry` in market: {self.market_type}')
+                raise ValueError(f'`short` is required in market: {self.market_type}')
         elif self.market_type == 'spot' and sigin.get('short'):
             # 现货市场，忽略做空单
             raise ValueError('short order unavaiable in spot market')
@@ -187,24 +181,48 @@ class OrderManager(metaclass=SingletonArg):
 
     def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
                          pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None) -> List[InOutOrder]:
-        order_list = InOutOrder.open_orders(strategy, pairs)
+        is_exact = False
+        if 'order_id' in sigout:
+            is_exact = True
+            order_list = [InOutOrder.get(db.session, sigout.pop('order_id'))]
+        else:
+            order_list = InOutOrder.open_orders(strategy, pairs)
         result = []
-        if od_dir == 'both':
-            pass
-        elif od_dir == 'long' or sigout.get('short') == False:
-            order_list = [od for od in order_list if not od.short]
-        elif od_dir == 'short' or sigout.get('short'):
-            order_list = [od for od in order_list if od.short]
-        elif self.market_type != 'spot':
-            raise ValueError(f'`od_dir` is required in market: {self.market_type}')
+        if not is_exact:
+            # 精确指定退出订单ID时，忽略方向过滤
+            if od_dir == 'both':
+                pass
+            elif od_dir == 'long' or sigout.get('short') == False:
+                order_list = [od for od in order_list if not od.short]
+            elif od_dir == 'short' or sigout.get('short'):
+                order_list = [od for od in order_list if od.short]
+            elif self.market_type != 'spot':
+                raise ValueError(f'`od_dir` is required in market: {self.market_type}')
+        if 'enter_tag' in sigout:
+            enter_tag = sigout.pop('enter_tag')
+            order_list = [od for od in order_list if od.enter_tag == enter_tag]
+        if not is_force:
+            # 非强制退出，筛选可退出订单
+            order_list = [od for od in order_list if od.can_close()]
+        if not order_list:
+            return result
+        # 计算要退出的数量
+        all_amount = sum(od.enter_amount for od in order_list)
+        exit_amount = all_amount
+        if 'amount' in sigout:
+            exit_amount = sigout.pop('amount')
+        elif 'exit_rate' in sigout:
+            exit_amount = all_amount * sigout.pop('exit_rate')
         for od in order_list:
-            if not od.can_close():
-                # 订单正在退出、或刚入场需等到下个bar退出
-                if not is_force:
-                    continue
-                # 正在退出的exit_order不会处理，刚入场的交给exit_order退出
+            cur_ext_rate = exit_amount / od.enter_amount
+            if cur_ext_rate < 0.01:
+                break
             try:
-                res_od = self.exit_order(od, copy.copy(sigout), price)
+                exit_amount -= od.enter_amount
+                cur_out = copy.copy(sigout)
+                if cur_ext_rate < 0.99:
+                    cur_out['amount'] = od.enter_amount * cur_ext_rate
+                res_od = self.exit_order(od, cur_out, price)
                 if res_od:
                     result.append(res_od)
             except Exception as e:
@@ -228,7 +246,9 @@ class OrderManager(metaclass=SingletonArg):
                 return self.exit_order(part, sigout, price)
         od.exit_tag = sigout.pop('tag')
         od.exit_at = btime.time_ms()
-        od.update_exit(**sigout, price=price)
+        if price:
+            sigout['price'] = price
+        od.update_exit(**sigout)
         self.wallets.exit_od(od, od.exit.amount, self.last_ts)
         od.save()
         if btime.run_mode in LIVE_MODES:
@@ -264,32 +284,6 @@ class OrderManager(metaclass=SingletonArg):
 
     def on_lack_of_cash(self):
         pass
-
-    def calc_custom_exits(self, pair_arr: np.ndarray, strategy: BaseStrategy) -> Tuple[Dict[int, dict], list]:
-        result = dict()
-        exs, _ = get_cur_symbol()
-        op_orders = InOutOrder.open_orders(strategy.name, exs.symbol)
-        if not op_orders:
-            return result, []
-        # 调用策略的自定义退出判断
-        edit_ods = []
-        for od in op_orders:
-            sl_price = od.get_info('stoploss_price')
-            tp_price = od.get_info('takeprofit_price')
-            sigout = strategy.custom_exit(pair_arr, od)
-            if sigout:
-                if not od.can_close():
-                    continue
-                result[od.id] = sigout
-            else:
-                # 检查是否需要修改条件单
-                new_sl_price = od.get_info('stoploss_price')
-                new_tp_price = od.get_info('takeprofit_price')
-                if new_sl_price != sl_price:
-                    edit_ods.append((od, 'stoploss_'))
-                if new_tp_price != tp_price:
-                    edit_ods.append((od, 'takeprofit_'))
-        return result, edit_ods
 
     def check_fatal_stop(self):
         if self.disable_until >= btime.utcstamp():

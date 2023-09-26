@@ -77,33 +77,25 @@ class Trader:
             if not BotGlobal.is_warmup:
                 self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
-            ext_tags: Dict[int, dict] = dict()
             enter_list, exit_list = [], []
             for strategy in strategy_list:
                 stg_name = strategy.name
                 strategy.on_bar(pair_arr)
                 # 调用策略生成入场和出场信号
-                sigin = strategy.on_entry(pair_arr)
-                sigout = strategy.on_exit(pair_arr)
-                if sigin and not bar_expired and (not strategy.skip_enter_on_exit or not sigout):
-                    if 'legal_cost' not in sigin:
-                        sigin['legal_cost'] = strategy.custom_cost(sigin)
-                    enter_list.append((stg_name, sigin))
-                if not strategy.skip_exit_on_enter or not sigin:
-                    if sigout:
-                        exit_list.append((stg_name, sigout))
-                    if not BotGlobal.is_warmup:
-                        exts, cur_edits = self.order_mgr.calc_custom_exits(pair_arr, strategy)
-                        edit_triggers.extend(cur_edits)
-                        ext_tags.update(exts)
+                if not bar_expired:
+                    enter_list.extend([(stg_name, d) for d in strategy.entrys])
+                if not BotGlobal.is_warmup:
+                    cur_edits = strategy.check_custom_exits(pair_arr)
+                    edit_triggers.extend(cur_edits)
+                exit_list.extend([(stg_name, d) for d in strategy.exits])
             calc_cost = (time.monotonic() - start_time) * 1000
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
-            self.order_mgr.process_orders(pair_tf, enter_list, exit_list, ext_tags, edit_tgs)
-        return enter_list, exit_list, ext_tags
+            self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
+        return enter_list, exit_list
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')
