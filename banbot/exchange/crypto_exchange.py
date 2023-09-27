@@ -733,6 +733,7 @@ class CryptoExchange:
             raise ValueError('cancel_invalid_orders only support binance')
         exg_orders = await self._open_orders()
         exp_types = {'STOP', 'TAKE_PROFIT', 'STOP_MARKET', 'TAKE_PROFIT_MARKET'}
+        cancel_num = 0
         for eod in exg_orders:
             if not eod['clientOrderId'].startswith(self.bot_name):
                 # 只取消当前机器人下的订单
@@ -744,10 +745,12 @@ class CryptoExchange:
                 continue
             try:
                 await self.api_async.cancel_order(eod['orderId'], eod['symbol'])
+                cancel_num += 1
             except ccxt.OrderNotFound:
                 pass
             except Exception as e:
                 logger.error(f'cancel invalid order fail: {e} {eod}')
+        logger.warning(f'canceled {cancel_num} invalid orders')
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单
