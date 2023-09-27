@@ -263,14 +263,19 @@ def new_async_thread():
 class LazyTqdm:
     def __init__(self, *args, **kwargs):
         from tqdm import tqdm
+        from banbot.util import btime
         import sys
-        self.isatty = sys.stdout.isatty()
+        self.show_bar = btime.run_mode not in btime.LIVE_MODES or sys.stdout.isatty()
+        if not self.show_bar:
+            # 实时运行，且输出不是交互控制台时，不显示进度条
+            from banbot.util.common import logger
+            logger.warning('cur output is not interactive, tqdm bar is hidden')
         self.bar: Optional[tqdm] = None
         self.args = args
         self.kwargs = kwargs
 
     def update(self, n=1):
-        if not self.isatty:
+        if not self.show_bar:
             return
         if self.bar is None:
             from tqdm import tqdm

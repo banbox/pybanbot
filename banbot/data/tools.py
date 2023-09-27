@@ -398,6 +398,7 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
         exs_map[exs.id] = exs
     item_ranges = KLine.load_kline_ranges()
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit)
+    # 筛选需要下载的币种
     down_pairs = []
     for sid, tf in item_ranges:
         if tf != timeframe or sid not in exs_map:
@@ -407,16 +408,22 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
             continue
         down_pairs.append(exs_map.get(sid))
     if down_pairs:
+        # 分批次执行下载。
         from banbot.util.misc import parallel_jobs
         pbar = LazyTqdm()
         kwargs['pbar'] = pbar
-        args_list = [((exg, exs, timeframe, start_ms, end_ms), kwargs) for i, exs in enumerate(down_pairs)]
-        task_iter = parallel_jobs(download_to_db, args_list)
-        for f in task_iter:
-            await f
+        down_tf = KLine.get_down_tf(timeframe)
+        for rid in range(0, len(down_pairs), MAX_CONC_OHLCV):
+            # 批量下载，提升效率
+            batch = down_pairs[rid: rid + MAX_CONC_OHLCV]
+            args_list = [((exg, exs, down_tf, start_ms, end_ms), kwargs) for i, exs in enumerate(batch)]
+            task_iter = parallel_jobs(download_to_db, args_list)
+            for f in task_iter:
+                await f
         pbar.close()
     if not callback:
         return
+    # 查询全部数据然后分组返回
     result = KLine.query_batch(list(exs_map.keys()), timeframe, start_ms, end_ms)
     result = sorted(result, key=lambda x: x[-1])
     prev_sid, ohlcvs = 0, []
