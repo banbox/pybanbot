@@ -255,6 +255,7 @@ class CryptoExchange:
 
     async def init(self, pairs: List[str]):
         await self._check_fee_limits()
+        await self.cancel_invalid_orders()
         await self.cancel_open_orders(pairs)
         await self.update_symbol_leverages(pairs)
 
@@ -694,6 +695,59 @@ class CryptoExchange:
         if item and item.leverage:
             return item.leverage
         return self._leverage if with_def else 0
+
+    async def _open_orders(self, all_pairs=True) -> List[dict]:
+        if all_pairs:
+            try:
+                return await self.api_async.fetch_open_orders()
+            except Exception as e:
+                logger.error(f'fetch_open_orders for all fail: {e}')
+        from banbot.storage import BotGlobal
+        result = []
+        for symbol in BotGlobal.pairs:
+            orders = await self.api_async.fetch_open_orders(symbol)
+            result.extend(orders)
+        return result
+
+    async def cancel_invalid_orders(self):
+        '''
+        有些策略会挂止损止盈单，且每个bar删除重新下。
+        机器人可能有些旧的止损止盈单没有及时撤销，长时间运行后导致超出最大订单限制。
+        故调用此方法检查所有打开的订单，如果没有和订单关联，则取消
+        '''
+        from banbot.storage import InOutOrder, db, InOutStatus, BotGlobal
+        op_ods = InOutOrder.open_orders(pairs=list(BotGlobal.pairs))
+        valid_odids = set()
+        for od in op_ods:
+            if od.enter.order_id:
+                valid_odids.add(od.enter.order_id)
+            if od.exit and od.exit.order_id:
+                valid_odids.add(od.exit.order_id)
+            sl_oid = od.get_info('stoploss_oid')
+            tp_oid = od.get_info('takeprofit_oid')
+            if sl_oid:
+                valid_odids.add(sl_oid)
+            if tp_oid:
+                valid_odids.add(tp_oid)
+        if self.name != 'binance':
+            raise ValueError('cancel_invalid_orders only support binance')
+        exg_orders = await self._open_orders()
+        exp_types = {'STOP', 'TAKE_PROFIT', 'STOP_MARKET', 'TAKE_PROFIT_MARKET'}
+        for eod in exg_orders:
+            if not eod['clientOrderId'].startswith(self.bot_name):
+                # 只取消当前机器人下的订单
+                continue
+            if eod['orderId'] in valid_odids:
+                continue
+            if eod['type'] not in exp_types:
+                # 只取消：止损单、止盈单
+                continue
+            try:
+                await self.api_async.cancel_order(eod['orderId'], eod['symbol'])
+            except ccxt.OrderNotFound:
+                pass
+            except Exception as e:
+                logger.error(f'cancel invalid order fail: {e} {eod}')
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单

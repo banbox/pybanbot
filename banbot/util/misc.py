@@ -263,11 +263,15 @@ def new_async_thread():
 class LazyTqdm:
     def __init__(self, *args, **kwargs):
         from tqdm import tqdm
+        import sys
+        self.isatty = sys.stdout.isatty()
         self.bar: Optional[tqdm] = None
         self.args = args
         self.kwargs = kwargs
 
     def update(self, n=1):
+        if not self.isatty:
+            return
         if self.bar is None:
             from tqdm import tqdm
             self.bar = tqdm(*self.args, **self.kwargs)

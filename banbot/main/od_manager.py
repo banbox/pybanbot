@@ -891,7 +891,7 @@ class LiveOrderManager(OrderManager):
             if exg_outkey in self.exg_orders:
                 self.exg_orders.pop(exg_outkey)
 
-    async def _edit_trigger_od(self, od: InOutOrder, prefix: str):
+    async def _edit_trigger_od(self, od: InOutOrder, prefix: str, try_kill=True):
         trigger_oid = od.get_info(f'{prefix}oid')
         params = dict()
         params['positionSide'] = 'SHORT' if od.short else 'LONG'
@@ -905,6 +905,15 @@ class LiveOrderManager(OrderManager):
         except ccxt.OrderImmediatelyFillable:
             logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
             return
+        except ccxt.ExchangeError as e:
+            err_msg = str(e)
+            if err_msg.find('-4045,') > 0 and try_kill:
+                # binanceusdm {"code":-4045,"msg":"Reach max stop order limit."}
+                logger.error('max stop orders reach, try cancel invalid orders...')
+                await self.exchange.cancel_invalid_orders()
+                await self._edit_trigger_od(od, prefix, False)
+                return
+            raise e
         od.set_info(**{f'{prefix}oid': order['id']})
         if trigger_oid and order['status'] == 'open':
             try:

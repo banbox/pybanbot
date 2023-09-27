@@ -4,11 +4,11 @@
 # Author: anyongjin
 # Date  : 2023/3/28
 import time
-from tqdm import tqdm
 
 from banbot.data.feeder import *
 from banbot.storage import *
 from banbot.util.common import logger
+from banbot.util.misc import LazyTqdm
 
 
 class DataProvider:
@@ -87,7 +87,7 @@ class HistDataProvider(DataProvider):
     def _update_bar(self):
         if self.pbar is None:
             total_p = sum(h.total_len for h in self.holders) / 100
-            self.pbar = tqdm(total=round(total_p))
+            self.pbar = LazyTqdm(total=round(total_p))
             self.ptime = time.monotonic()
         elif time.monotonic() - self.ptime > 0.3:
             pg_num = round(sum(h.row_id for h in self.holders) / 100)

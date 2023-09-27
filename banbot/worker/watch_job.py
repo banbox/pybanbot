@@ -102,7 +102,8 @@ async def _consume_jobs():
                         start = time.time()
                         await run_on_bar(state)
                         cost = time.time() - start
-                        logger.info(f'done run_on_bar {symbol} {tf}, cost: {cost:.2f} s')
+                        if cost > 0.1:
+                            logger.info(f'done run_on_bar {symbol} {tf}, cost: {cost:.2f} s')
         except Exception:
             logger.exception(f'_run_watch_job error: {exg_name} {market} {symbol}')
 
