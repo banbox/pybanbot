@@ -729,22 +729,20 @@ class CryptoExchange:
                 valid_odids.add(sl_oid)
             if tp_oid:
                 valid_odids.add(tp_oid)
-        if self.name != 'binance':
-            raise ValueError('cancel_invalid_orders only support binance')
         exg_orders = await self._open_orders()
-        exp_types = {'STOP', 'TAKE_PROFIT', 'STOP_MARKET', 'TAKE_PROFIT_MARKET'}
+        exp_types = {'stop', 'take_limit', 'stop_market', 'take_market'}
         cancel_num = 0
         for eod in exg_orders:
             if not eod['clientOrderId'].startswith(self.bot_name):
                 # 只取消当前机器人下的订单
                 continue
-            if eod['orderId'] in valid_odids:
+            if eod['id'] in valid_odids:
                 continue
             if eod['type'] not in exp_types:
                 # 只取消：止损单、止盈单
                 continue
             try:
-                await self.api_async.cancel_order(eod['orderId'], eod['symbol'])
+                await self.api_async.cancel_order(eod['id'], eod['symbol'])
                 cancel_num += 1
             except ccxt.OrderNotFound:
                 pass
