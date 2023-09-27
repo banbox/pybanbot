@@ -631,8 +631,10 @@ def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str
         query = query.offset(offset)
     if limit:
         query = query.limit(limit)
-    io_rows: List[InOutOrder] = query.all()
+    io_rows: List[InOutOrder] = list(query.all())
     io_ids = {row.id for row in io_rows}
+    if not io_ids:
+        return []
     ex_filters = [Order.task_id == task_id, Order.inout_id.in_(io_ids)]
     ex_ods = sess.query(Order).filter(*ex_filters).all()
     ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
