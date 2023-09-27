@@ -5,6 +5,7 @@
 # Date  : 2023/3/1
 from banbot.strategy.common import *
 from banbot.rpc import Notify, NotifyType  # noqa
+from banbot.storage import ExSymbol
 
 
 class BaseStrategy:
@@ -38,6 +39,14 @@ class BaseStrategy:
         self.exits: List[dict] = []
         '策略创建的出场信号'
         self.calc_num = 0
+        self.orders: List[InOutOrder] = []
+        '当前打开的订单'
+        self.symbol: Optional[ExSymbol] = None
+        '当前处理的币种'
+        self.timeframe: Optional[str] = None
+        '当前处理的时间周期'
+        self.enter_tags: Set[str] = set()
+        '已入场订单的标签'
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -50,11 +59,18 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
+        if self.timeframe is None:
+            self.symbol, self.timeframe = get_cur_symbol()
         self.entrys = []
         self.exits = []
         self.state = dict()
         self.bar_signals = dict()
         self.calc_num += 1
+        if BotGlobal.is_warmup:
+            self.orders = []
+        else:
+            self.orders = InOutOrder.open_orders(self.name, self.symbol.symbol)
+            self.enter_tags = {od.enter_tag for od in self.orders}
 
     def open_order(self, tag: str,
                    short: bool = False,
@@ -140,13 +156,9 @@ class BaseStrategy:
         return None
 
     def check_custom_exits(self, pair_arr: np.ndarray) -> List[Tuple[InOutOrder, str]]:
-        exs, _ = get_cur_symbol()
-        op_orders = InOutOrder.open_orders(self.name, exs.symbol)
-        if not op_orders:
-            return []
         # 调用策略的自定义退出判断
         edit_ods = []
-        for od in op_orders:
+        for od in self.orders:
             if not od.can_close():
                 continue
             sl_price = od.get_info('stoploss_price')

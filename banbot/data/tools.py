@@ -341,6 +341,25 @@ async def download_to_file(exchange, pair: str, timeframe: str, start_ms: int, e
     df.to_feather(data_path, compression='lz4')
 
 
+def parse_down_args(timeframe: str, start_ms: Optional[int] = None, end_ms: Optional[int] = None,
+                    limit: Optional[int] = None, with_unfinish: bool = False):
+    tf_msecs = tf_to_secs(timeframe) * 1000
+    if start_ms:
+        fix_start_ms = start_ms // tf_msecs * tf_msecs
+        if start_ms > fix_start_ms:
+            start_ms = fix_start_ms + tf_msecs
+        if limit and not end_ms:
+            end_ms = start_ms + tf_msecs * limit
+    if not end_ms:
+        end_ms = int(btime.time() * 1000)
+    factor = end_ms / tf_msecs
+    factor_int = math.ceil(factor) if with_unfinish else math.floor(factor)
+    end_ms = factor_int * tf_msecs
+    if not start_ms:
+        start_ms = end_ms - tf_msecs * limit
+    return start_ms, end_ms
+
+
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
                            allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto'):
@@ -359,21 +378,58 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     :return:
     '''
     from banbot.storage import KLine
-    tf_msecs = tf_to_secs(timeframe) * 1000
-    if not end_ms:
-        end_ms = int(btime.time() * 1000)
-    factor = end_ms / tf_msecs
-    factor_int = math.ceil(factor) if with_unfinish else math.floor(factor)
-    end_ms = factor_int * tf_msecs
-    if not start_ms:
-        start_ms = end_ms - tf_msecs * limit
-    else:
-        fix_start_ms = start_ms // tf_msecs * tf_msecs
-        if start_ms > fix_start_ms:
-            start_ms = fix_start_ms + tf_msecs
+    start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit, with_unfinish)
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar)
     return KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
+
+
+async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: str,
+                          start_ms: int = None, end_ms: int = None, limit: int = None,
+                          callback: Callable = None, **kwargs):
+    '''
+    快速批量获取K线。先下载所有需要的币种，然后批量查询再分组返回。
+    适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
+    '''
+    from banbot.storage import KLine
+    exs_map = dict()
+    for pair in symbols:
+        exs = ExSymbol.get(exg.name, exg.market_type, pair)
+        exs_map[exs.id] = exs
+    item_ranges = KLine.load_kline_ranges()
+    start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit)
+    down_pairs = []
+    for sid, tf in item_ranges:
+        if tf != timeframe or sid not in exs_map:
+            continue
+        cur_start, cur_stop = item_ranges[(sid, tf)]
+        if cur_start <= start_ms <= end_ms <= cur_stop:
+            continue
+        down_pairs.append(exs_map.get(sid))
+    if down_pairs:
+        from banbot.util.misc import parallel_jobs
+        pbar = LazyTqdm()
+        kwargs['pbar'] = pbar
+        args_list = [((exg, exs, timeframe, start_ms, end_ms), kwargs) for i, exs in enumerate(down_pairs)]
+        task_iter = parallel_jobs(download_to_db, args_list)
+        for f in task_iter:
+            await f
+        pbar.close()
+    if not callback:
+        return
+    result = KLine.query_batch(list(exs_map.keys()), timeframe, start_ms, end_ms)
+    result = sorted(result, key=lambda x: x[-1])
+    prev_sid, ohlcvs = 0, []
+    ret_args = dict(start_ms=start_ms, end_ms=end_ms, limit=limit)
+    for bar in result:
+        if bar[-1] != prev_sid:
+            if ohlcvs and prev_sid in exs_map:
+                callback(ohlcvs, exs_map.get(prev_sid), timeframe, **ret_args)
+            prev_sid = bar[-1]
+            ohlcvs = []
+        ohlcvs.append(bar[:-1])
+    if ohlcvs and prev_sid in exs_map:
+        callback(ohlcvs, exs_map.get(prev_sid), timeframe, **ret_args)
 
 
 async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str, kwargs: Union[dict, List[dict]],

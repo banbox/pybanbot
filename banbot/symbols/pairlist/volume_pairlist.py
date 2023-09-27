@@ -67,26 +67,20 @@ class VolumePairList(PairList):
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
         if not self.use_tickers:
+            # 非实时模式、实时模式非按天更新
             res_list = []
 
             def kline_cb(data, exs: ExSymbol, timeframe, **kwargs):
                 item = dict(symbol=exs.symbol)
-                contract_size = self.exchange.markets[exs.symbol].get('contractSize', 1.0) or 1.0
                 if not data:
                     item['quoteVolume'] = 0
                 else:
-                    arr = np.array(data)
-                    if self.exchange.get_option('ohlcv_volume_currency') == 'base':
-                        typical = (arr[:, hcol] + arr[:, lcol] + arr[:, ccol]) / 3
-                        quote_vol = typical * arr[:, vcol] * contract_size
-                    else:
-                        quote_vol = arr[:, vcol]
-                    item['quoteVolume'] = np.sum(quote_vol[-self.backperiod:])
+                    item['quoteVolume'] = sum(bar[ccol] * bar[vcol] for bar in data[-self.backperiod:])
                 res_list.append(item)
             down_args = dict(limit=self.backperiod)
             if not BotGlobal.live_mode:
                 down_args['start_ms'] = self.config['timerange'].startts * 1000
-            await bulk_ohlcv_do(self.exchange, pairlist, self.backtf, down_args, kline_cb)
+            await fast_bulk_ohlcv(self.exchange, pairlist, self.backtf, callback=kline_cb, **down_args)
         else:
             # Tickers mode - filter based on incoming pairlist.
             res_list = [dict(symbol=k, quoteVolume=v.get('quoteVolume', 0))

@@ -36,8 +36,7 @@ class RangeStabilityFilter(PairList):
                 pairlist.remove(exs.symbol)
 
         new_pairs = [pair for pair in pairlist if pair not in self.pair_cache]
-        down_args = dict(limit=self.backdays)
-        await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)
+        await fast_bulk_ohlcv(self.exchange, new_pairs, '1d', limit=self.backdays, callback=kline_cb)
         return pairlist
 
     def _validate_pair_loc(self, pair: str, candles: List):

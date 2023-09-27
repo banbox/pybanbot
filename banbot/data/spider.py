@@ -78,7 +78,7 @@ async def down_pairs_by_config(config: Config):
         exs_list: Iterable[ExSymbol] = sess.query(ExSymbol).filter(*fts).all()
         symbols = [exs.symbol for exs in exs_list]
         logger.info(f'start download for {len(symbols)} symbols')
-        await bulk_ohlcv_do(exchange, symbols, tf, dict(start_ms=start_ms, end_ms=end_ms))
+        await fast_bulk_ohlcv(exchange, symbols, tf, start_ms, end_ms)
     else:
         data_dir = config['data_dir']
         if not os.path.isdir(data_dir):

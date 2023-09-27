@@ -6,7 +6,7 @@
 from typing import List, Tuple, Dict
 
 from banbot.compute.sta_inds import ocol, hcol, lcol, ccol
-from banbot.data.tools import bulk_ohlcv_do
+from banbot.data.tools import fast_bulk_ohlcv
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.storage import KLine, ExSymbol, BotGlobal
 from banbot.util.common import logger
@@ -29,8 +29,7 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
         res_list.append((exs.symbol, timeframe, tf_secs, kscore))
 
     for cur_tf, _ in BotGlobal.run_tf_secs:
-        down_args = dict(limit=back_num, allow_lack=0.1)
-        await bulk_ohlcv_do(exg, symbols, cur_tf, down_args, ohlcv_cb)
+        await fast_bulk_ohlcv(exg, symbols, cur_tf, limit=back_num, callback=ohlcv_cb, allow_lack=0.1)
 
     from itertools import groupby
     res_list = sorted(res_list, key=lambda x: x[0])

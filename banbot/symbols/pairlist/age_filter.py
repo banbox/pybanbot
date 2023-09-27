@@ -46,7 +46,6 @@ class AgeFilter(PairList):
                 self._failed[exs.symbol] = cur_ms
                 nofails.remove(exs.symbol)
 
-        down_args = dict(limit=since_days)
-        await bulk_ohlcv_do(self.exchange, new_pairs, '1d', down_args, kline_cb)
+        await fast_bulk_ohlcv(self.exchange, new_pairs, '1d', limit=since_days, callback=kline_cb)
 
         return nofails

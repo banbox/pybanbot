@@ -28,7 +28,6 @@ class PriceFilter(PairList):
         self.stoploss = 0.95
 
     async def filter_pairlist(self, pairlist: List[str], tickers: Tickers) -> List[str]:
-        from banbot.data.tools import bulk_ohlcv_do
         if not self.enable:
             return pairlist
         res_pairs = []
@@ -48,7 +47,7 @@ class PriceFilter(PairList):
                     return
                 if self._validate_price(exs.symbol, candles[-1][ccol]):
                     res_pairs.append(exs.symbol)
-            await bulk_ohlcv_do(self.exchange, pairlist, '1h', dict(limit=1), kline_cb)
+            await fast_bulk_ohlcv(self.exchange, pairlist, '1h', limit=1, callback=kline_cb)
         return res_pairs
 
     def _validate_price(self, pair: str, price: float) -> bool:

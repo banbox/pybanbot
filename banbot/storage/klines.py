@@ -262,6 +262,11 @@ order by time'''
 
     @classmethod
     def query_batch(cls, exs_ids: Iterable[int], timeframe: str, start_ms: int, end_ms: int):
+        '''
+        批量查询sid的ohlcv。
+        返回的按time, sid升序。
+        sid作为最后一列返回。
+        '''
         tf_secs = tf_to_secs(timeframe)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
