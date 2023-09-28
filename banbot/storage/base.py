@@ -6,6 +6,7 @@
 import os
 import time
 import threading
+import traceback
 from contextvars import ContextVar, copy_context
 from typing import Optional, List, Union, Type, Dict
 
@@ -24,6 +25,7 @@ from sqlalchemy.ext.asyncio.engine import Engine as AsyEngine
 
 from banbot.config import AppConfig
 from banbot.util.common import logger
+from banbot.util import btime
 
 _BaseDbModel = declarative_base()
 _db_engine: Optional[Engine] = None
@@ -85,6 +87,7 @@ class DBSessionMeta(type):
 
 class DBSession(metaclass=DBSessionMeta):
     _sess = None
+    _hold_map = dict()
 
     def __new__(cls, *args, **kwargs):
         if cls._sess and cls._sess.token and cls._sess.fetch_tid == threading.get_ident():
@@ -103,7 +106,17 @@ class DBSession(metaclass=DBSessionMeta):
             sess = _DbSession(**self.session_args)
             self.token = _db_sess.set(sess)
             self.fetch_tid = threading.get_ident()
-            logger.debug('[%s] set new dbSession: %s, in ctx: %s', self.fetch_tid, sess, copy_context())
+            # logger.debug('[%s] set new dbSession: %s, in ctx: %s', self.fetch_tid, sess, copy_context())
+            cur_time = btime.time()
+            self._hold_map[id(sess)] = (cur_time, traceback.format_stack())
+            if round(cur_time) % 60 == 0:
+                bad_list = []
+                for key, item in self._hold_map.items():
+                    if cur_time - item[0] > 300:
+                        bad_list.append(f'[{key}] {btime.to_datestr(item[0])} {item[1]}')
+                if bad_list:
+                    bad_text = "\n".join(bad_list)
+                    logger.warning(f'timeout db sess: {bad_text}')
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -119,10 +132,12 @@ class DBSession(metaclass=DBSessionMeta):
 
         if self.token and self.fetch_tid == threading.get_ident():
             sess.close()
-            logger.debug('[%s] close dbSession: %s, %s, %s, in ctx: %s',
-                        self.fetch_tid, sess, exc_type, self.commit_on_exit, copy_context())
+            # logger.debug('[%s] close dbSession: %s, in ctx: %s',self.fetch_tid, sess, copy_context())
             _db_sess.set(None)
             self.token = None
+            sess_key = id(sess)
+            if sess_key in self._hold_map:
+                del self._hold_map[sess_key]
 
 
 db: DBSessionMeta = DBSession
