@@ -3,6 +3,7 @@
 # File  : spider.py
 # Author: anyongjin
 # Date  : 2023/4/25
+import asyncio
 import os.path
 
 from asyncio import Queue
@@ -507,10 +508,12 @@ async def run_spider_forever(args: dict = None):
     '''
     from banbot.worker.top_change import TopChange
     from banbot.worker.watch_job import run_watch_jobs
+    from banbot.storage.base import DBSession
     logger.info('start top change update timer...')
     await TopChange.start()
     asyncio.create_task(run_watch_jobs())
     asyncio.create_task(WebsocketWatcher.run_consumers(5))
+    asyncio.create_task(DBSession.chec_sess_timeouts())
     await LiveSpider.run_spider()
     # await TopChange.clear()
 

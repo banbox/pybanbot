@@ -3,6 +3,7 @@
 # File  : base.py
 # Author: anyongjin
 # Date  : 2023/4/24
+import asyncio
 import os
 import time
 import threading
@@ -107,16 +108,7 @@ class DBSession(metaclass=DBSessionMeta):
             self.token = _db_sess.set(sess)
             self.fetch_tid = threading.get_ident()
             # logger.debug('[%s] set new dbSession: %s, in ctx: %s', self.fetch_tid, sess, copy_context())
-            cur_time = btime.time()
-            self._hold_map[id(sess)] = (cur_time, traceback.format_stack())
-            if round(cur_time) % 60 == 0:
-                bad_list = []
-                for key, item in self._hold_map.items():
-                    if cur_time - item[0] > 300:
-                        bad_list.append(f'[{key}] {btime.to_datestr(item[0])} {item[1]}')
-                if bad_list:
-                    bad_text = "\n".join(bad_list)
-                    logger.warning(f'timeout db sess: {bad_text}')
+            self._hold_map[id(sess)] = (btime.time(), traceback.format_stack())
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -139,6 +131,22 @@ class DBSession(metaclass=DBSessionMeta):
             if sess_key in self._hold_map:
                 del self._hold_map[sess_key]
 
+    @classmethod
+    async def chec_sess_timeouts(cls):
+        while True:
+            await asyncio.sleep(60)
+            cur_time = btime.time()
+            bad_list = []
+            sess_ids = set(cls._hold_map.keys())
+            for key in sess_ids:
+                if key not in cls._hold_map:
+                    continue
+                item = cls._hold_map[key]
+                if cur_time - item[0] > 300:
+                    bad_list.append(f'[{key}] {btime.to_datestr(item[0])} {item[1]}')
+            if bad_list:
+                bad_text = "\n".join(bad_list)
+                logger.warning(f'timeout db sess: {bad_text}')
 
 db: DBSessionMeta = DBSession
 
