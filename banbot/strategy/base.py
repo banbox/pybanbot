@@ -47,6 +47,8 @@ class BaseStrategy:
         '当前处理的时间周期'
         self.enter_tags: Set[str] = set()
         '已入场订单的标签'
+        self._enter_num = 0
+        '记录已提交入场订单数量，避免访问数据库过于频繁'
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -68,9 +70,10 @@ class BaseStrategy:
         self.calc_num += 1
         if BotGlobal.is_warmup:
             self.orders = []
-        else:
+        elif self._enter_num:
             self.orders = InOutOrder.open_orders(self.name, self.symbol.symbol)
             self.enter_tags = {od.enter_tag for od in self.orders}
+            self._enter_num = len(self.orders)
 
     def open_order(self, tag: str,
                    short: bool = False,
@@ -116,6 +119,7 @@ class BaseStrategy:
         if takeprofit:
             od_args['takeprofit_price'] = takeprofit
         self.entrys.append(od_args)
+        self._enter_num  += 1
 
     def close_orders(self, tag: str,
                      short: bool = False,
