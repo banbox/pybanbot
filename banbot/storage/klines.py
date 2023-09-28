@@ -666,6 +666,8 @@ update "kline_un" set high={phigh},low={plow},
         places = f"{sid}, {cur_bar[0]}, {bar_end_ms}, {cur_bar[1]}, {cur_bar[2]}, {cur_bar[3]}, " \
                  f"{cur_bar[4]}, {cur_bar[5]}, '{item.tf}'"
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
+        # 先删除旧的无效的记录
+        sess.execute(sa.text(f"DELETE {from_where}"))
         sess.execute(sa.text(insert_sql))
         sess.commit()
 
