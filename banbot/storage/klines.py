@@ -89,7 +89,7 @@ class KLine(BaseDbModel):
     agg_map: Dict[str, BarAgg] = {v.tf: v for v in agg_list}
 
     _insert_conflict = '''
-    ON CONFLICT (sid, time)
+ON CONFLICT (sid, time)
 DO UPDATE SET 
 open = EXCLUDED.open,
 high = EXCLUDED.high,

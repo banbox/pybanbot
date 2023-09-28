@@ -58,6 +58,8 @@ class BaseStrategy:
     def on_bar(self, arr: np.ndarray):
         '''
         计算指标。用于后续入场出场信号判断使用。
+        此方法必须被派生类重写后调用。
+        此方法应尽可能减少访问数据库。很多策略同时运行此方法会导致db连接过多。
         :param arr:
         :return:
         '''
