@@ -71,7 +71,7 @@ class OrderManager(metaclass=SingletonArg):
             try:
                 self.callback(od, enter)
             except Exception:
-                logger.exception(f'fire od callback fail {od.id}, enter: {enter}')
+                logger.exception(f'fire od callback fail {od.id}, enter: {enter} {traceback.format_stack()}')
 
     def get_context(self, od: InOutOrder):
         pair_tf = f'{self.name}_{self.market_type}_{od.symbol}_{od.timeframe}'
