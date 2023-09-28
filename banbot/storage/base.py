@@ -87,27 +87,25 @@ class DBSessionMeta(type):
 
 
 class DBSession(metaclass=DBSessionMeta):
-    _sess = None
+    _sess_map: Dict = dict()
     _hold_map = dict()
 
     def __new__(cls, *args, **kwargs):
-        if cls._sess and cls._sess.token and cls._sess.fetch_tid == threading.get_ident():
-            return cls._sess
-        cls._sess = super().__new__(cls)
-        return cls._sess
+        cur_tid = threading.get_ident()
+        if cur_tid not in cls._sess_map:
+            cls._sess_map[cur_tid] = super().__new__(cls)
+        return cls._sess_map[cur_tid]
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
         self.token = None
         self.session_args = session_args or {}
         self.commit_on_exit = commit_on_exit
-        self.fetch_tid = 0
 
     def __enter__(self):
         if _db_sess.get() is None:
             sess = _DbSession(**self.session_args)
             self.token = _db_sess.set(sess)
-            self.fetch_tid = threading.get_ident()
-            # logger.debug('[%s] set new dbSession: %s, in ctx: %s', self.fetch_tid, sess, copy_context())
+            # logger.debug('set new dbSession: %s, in ctx: %s', sess, copy_context())
             self._hold_map[id(sess)] = (btime.time(), traceback.format_stack())
         return type(self)
 
@@ -119,12 +117,12 @@ class DBSession(metaclass=DBSessionMeta):
         if exc_type is not None:
             sess.rollback()
 
-        if self.commit_on_exit:
+        elif self.commit_on_exit:
             sess.commit()
 
-        if self.token and self.fetch_tid == threading.get_ident():
+        if self.token:
             sess.close()
-            # logger.debug('[%s] close dbSession: %s, in ctx: %s',self.fetch_tid, sess, copy_context())
+            # logger.debug('close dbSession: %s, in ctx: %s', sess, copy_context())
             _db_sess.set(None)
             self.token = None
             sess_key = id(sess)
