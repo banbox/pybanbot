@@ -102,8 +102,8 @@ class DBSession(metaclass=DBSessionMeta):
         if _db_sess.get() is None:
             sess = _DbSession(**self.session_args)
             self.token = _db_sess.set(sess)
-            # logger.info(f'set new dbSession: {sess}, in ctx: {copy_context()}')
             self.fetch_tid = threading.get_ident()
+            logger.debug('[%s] set new dbSession: %s, in ctx: %s', self.fetch_tid, sess, copy_context())
         return type(self)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -119,7 +119,8 @@ class DBSession(metaclass=DBSessionMeta):
 
         if self.token and self.fetch_tid == threading.get_ident():
             sess.close()
-            # logger.info(f'close session: {sess}, {exc_type} {self.commit_on_exit}, in ctx: {copy_context()}')
+            logger.debug('[%s] close dbSession: %s, %s, %s, in ctx: %s',
+                        self.fetch_tid, sess, exc_type, self.commit_on_exit, copy_context())
             _db_sess.set(None)
             self.token = None
 
