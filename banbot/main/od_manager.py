@@ -907,13 +907,18 @@ class LiveOrderManager(OrderManager):
             return
         except ccxt.ExchangeError as e:
             err_msg = str(e)
-            if err_msg.find('-4045,') > 0 and try_kill:
-                # binanceusdm {"code":-4045,"msg":"Reach max stop order limit."}
-                logger.error('max stop orders reach, try cancel invalid orders...')
-                await self.exchange.cancel_invalid_orders()
-                await self._edit_trigger_od(od, prefix, False)
-                return
-            raise e
+            if err_msg.find('-4045,') > 0:
+                if try_kill:
+                    # binanceusdm {"code":-4045,"msg":"Reach max stop order limit."}
+                    logger.error('max stop orders reach, try cancel invalid orders...')
+                    await self.exchange.cancel_invalid_orders()
+                    await self._edit_trigger_od(od, prefix, False)
+                    return
+                else:
+                    logger.warning('max stop orders reach, put trigger order skip...')
+                    # 这里不返回，取消已有的触发订单
+            else:
+                raise e
         od.set_info(**{f'{prefix}oid': order['id']})
         if trigger_oid and order['status'] == 'open':
             try:

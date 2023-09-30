@@ -153,6 +153,10 @@ class WebsocketWatcher:
                 await asyncio.sleep(0.3)
                 tag = f'{self.exchange.name}/{self.exchange.market_type}/{self.pair}'
                 logger.error(f'watch {tag} trades net fail: {e}')
+            except (ConnectionResetError, ConnectionAbortedError):
+                # 连接被重置，需要重新初始化交易所
+                logger.warning('exg conn reseted, reconnect to exchange')
+                await self.exchange.reconnect()
             except Exception:
                 tag = f'{self.exchange.name}/{self.exchange.market_type}/{self.pair}'
                 logger.exception(f'watch {tag} trades fail')

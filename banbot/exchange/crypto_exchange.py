@@ -113,6 +113,7 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
         logger.warning("[PROXY] %s", exg_cfg['proxies'])
     # exchange = _create_exchange(ccxt, api_overrides, cfg, exg_name, market_type)
     exchange_async = _create_exchange(ccxt_async, asy_overrides, cfg, exg_name, market_type)
+    exchange_async.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
     if not with_ws:
         return exchange_async, None
     run_env = cfg["env"]
@@ -786,6 +787,18 @@ class CryptoExchange:
     async def close(self):
         await self.api_async.close()
         await self.api_ws.close()
+
+    async def reconnect(self):
+        try:
+            self.api_async.close()
+        except Exception:
+            pass
+        try:
+            self.api_ws.close()
+        except Exception:
+            pass
+        self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
+        await self.load_markets()
 
     def __str__(self):
         return self.name
