@@ -35,7 +35,16 @@ class BanConn:
     async def write_msg(self, msg_type: str, data: Any):
         logger.debug('%s write: %s %s', self.remote, msg_type, data)
         dump_data = marshal.dumps((msg_type, data))
-        return await self.write(dump_data)
+        while True:
+            try:
+                return await self.write(dump_data)
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
+                err_type = type(e).__name__
+                if not self.reconnect:
+                    logger.error(f'write {name} {err_type}, skip..')
+                    return
+                logger.error(f'write {name} {err_type}, sleep 3s and retry...')
+                await asyncio.sleep(3)
 
     async def write(self, data: bytes):
         if not self.writer:
@@ -117,7 +126,7 @@ class BanConn:
         except (asyncio.IncompleteReadError, ConnectionResetError) as e:
             self.reader = None
             self.writer = None
-            err_type = type(e)
+            err_type = type(e).__name__
             if not self.reconnect:
                 # 不尝试重新连接，退出
                 logger.error(f'remote {name} {err_type}, remove conn')
