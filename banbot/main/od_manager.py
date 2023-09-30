@@ -544,6 +544,8 @@ class LiveOrderManager(OrderManager):
             raise ValueError(f'invalid order type: {self.od_type}, `limit` or `market` is accepted')
         if self.market_type == 'future' and self.od_type == 'limit':
             raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
+        self.last_lack_ts = 0
+        '上次通知余额不足的时间戳，10位秒级'
 
     async def sync_orders_with_exg(self):
         '''
@@ -924,7 +926,7 @@ class LiveOrderManager(OrderManager):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
             except ccxt.OrderNotFound:
-                logger.error(f'cancel old stop order fail, not found: {od.symbol}, {trigger_oid}')
+                logger.error(f'[{od.id}] cancel old stop order fail, not found: {od.symbol}, {trigger_oid}')
 
     async def _cancel_trigger_ods(self, od: InOutOrder):
         '''
@@ -1236,7 +1238,20 @@ class LiveOrderManager(OrderManager):
                 od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
             except Exception:
                 logger.error(f'pres_amount for order fail: {od.dict()}')
-        await self._create_exg_order(od, True)
+        try:
+            await self._create_exg_order(od, True)
+        except ccxt.InsufficientFunds:
+            od.local_exit(ExitTags.force_exit, status_msg='InsufficientFunds')
+            sess = db.session
+            sess.delete(od)
+            if od.enter:
+                sess.delete(od.enter)
+            err_msg = f'InsufficientFunds open cancel: {od}'
+            if btime.time() - self.last_lack_ts > 3600:
+                logger.error(err_msg)
+                self.last_lack_ts = btime.time()
+            else:
+                logger.warning(err_msg)
 
     async def _exec_order_exit(self, od: InOutOrder):
         if (not od.enter.amount or od.enter.filled < od.enter.amount) and od.enter.status < OrderStatus.Close:
