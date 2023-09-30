@@ -87,14 +87,7 @@ class DBSessionMeta(type):
 
 
 class DBSession(metaclass=DBSessionMeta):
-    _sess_map: Dict = dict()
     _hold_map = dict()
-
-    def __new__(cls, *args, **kwargs):
-        cur_tid = threading.get_ident()
-        if cur_tid not in cls._sess_map:
-            cls._sess_map[cur_tid] = super().__new__(cls)
-        return cls._sess_map[cur_tid]
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
         self.token = None
