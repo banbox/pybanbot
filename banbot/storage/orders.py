@@ -298,17 +298,6 @@ class InOutOrder(BaseDbModel, InfoPart):
                 kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)
             self.exit = Order(**kwargs)
         else:
-            if self.exit.filled and kwargs.get('filled'):
-                # 已有部分退出，传入新的退出成交时，重新计算average
-                cur_filled = kwargs.get('filled')
-                cur_price = kwargs.get('average') or kwargs.get('price')
-                if not cur_price:
-                    raise ValueError('price is require to update exit')
-                total_fill = cur_filled + self.exit.filled
-                if total_fill > self.exit.amount:
-                    raise ValueError(f'exit filled fail: {self.exit.filled:.5f}/{self.exit.amount:.5f} cur: {cur_filled:.5f}')
-                kwargs['average'] = (cur_price * cur_filled + self.exit.filled * self.exit.average) / total_fill
-                kwargs['filled'] = total_fill
             self.exit.update_props(**kwargs)
 
     def update_by_price(self, price: float):
