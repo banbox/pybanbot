@@ -266,10 +266,6 @@ class LazyTqdm:
         from banbot.util import btime
         import sys
         self.show_bar = btime.run_mode not in btime.LIVE_MODES or sys.stdout.isatty()
-        if not self.show_bar:
-            # 实时运行，且输出不是交互控制台时，不显示进度条
-            from banbot.util.common import logger
-            logger.warning('cur output is not interactive, tqdm bar is hidden')
         self.bar: Optional[tqdm] = None
         self.args = args
         self.kwargs = kwargs
