@@ -1289,6 +1289,7 @@ class LiveOrderManager(OrderManager):
                 with db():
                     sess = db.session
                     od = InOutOrder.get(sess, job.od_id)
+                    in_sess1 = od in sess
                     if job.action == OrderJob.ACT_ENTER:
                         await self._exec_order_enter(od)
                     elif job.action == OrderJob.ACT_EXIT:
@@ -1297,6 +1298,9 @@ class LiveOrderManager(OrderManager):
                         await self._edit_trigger_od(od, job.data)
                     else:
                         logger.error(f'unsupport order job type: {job.action}')
+                    cur_in_sess = od in sess
+                    if not in_sess1 or not cur_in_sess:
+                        logger.error(f'before in sess: {in_sess1}, cur: {cur_in_sess}, {od}')
                     sess.commit()
             except Exception as e:
                 if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:

@@ -63,9 +63,18 @@ def send_exc_notify_after(secs: int, key: str, desp: str):
     sched = get_sched()
     start_at = datetime.datetime.now() + datetime.timedelta(seconds=secs)
     args = [key, desp]
-    sched.add_job(_send_exc_notify, 'date', run_date=start_at, args=args)
-    if sched.state == STATE_STOPPED:
-        sched.start()
+    try:
+        if sched.state == STATE_STOPPED:
+            sched.start()
+        sched.add_job(_send_exc_notify, 'date', run_date=start_at, args=args)
+    except RuntimeError as e:
+        from banbot.util.common import logger
+        err_msg = str(e)
+        if err_msg.find('shutdown') > 0:
+            logger.error('sched shutdown, restarting...')
+            sched.start()
+        else:
+            logger.error(f'sched RuntimeError: {e}')
 
 
 def _send_exc_notify(key: str, desp: str):
