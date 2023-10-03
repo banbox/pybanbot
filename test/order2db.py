@@ -7,6 +7,7 @@
 将保存到json文件的订单信息转存到数据库。
 针对早期的实盘订单数据。
 '''
+import asyncio
 import os
 import orjson
 from banbot.storage import *
@@ -31,21 +32,21 @@ task: Optional[BotTask] = None
 task_ver = None
 
 
-def update_task(item: dict, ver: int):
+async def update_task(item: dict, ver: int):
     global task, task_ver
     if not task or ver != task_ver:
-        sess = db.session
+        sess = dba.session
         task = BotTask(mode='live', start_at=btime.to_datetime(item['enter_timestamp']))
         sess.add(task)
-        sess.flush()
+        await sess.flush()
         task_ver = ver
     item['task_id'] = task.id
     ext_at = item.get('exit_timestamp') or (item['enter_timestamp'] + 1)
     task.stop_at = btime.to_datetime(ext_at)
 
 
-def convert():
-    sess = db.session
+async def convert():
+    sess = dba.session
     for fname, ver in file_vers:
         fpath = os.path.join(data_dir, fname)
         with open(fpath, 'rb') as fin:
@@ -54,7 +55,7 @@ def convert():
         all_ods = sorted(all_ods, key=lambda x: x['enter_timestamp'])
         logger.info(f'handle: {fname}, ver: {ver}, num: {len(all_ods)}')
         for item in all_ods:
-            update_task(item, ver)
+            await update_task(item, ver)
             item['strategy'] = item['key'].split('_')[-1]
             item['stg_ver'] = ver
             item['enter_create_at'] = item['enter_timestamp'] * 1000
@@ -66,20 +67,24 @@ def convert():
             item['exit_at'] = item['exit_create_at']
             od = InOutOrder(**item)
             sess.add(od)
-            sess.flush()
+            await sess.flush()
             od.enter.inout_id = od.id
             sess.add(od.enter)
             if od.exit:
                 od.exit.inout_id = od.id
                 sess.add(od.exit)
-            sess.commit()
-        sess.commit()
+            await sess.commit()
+        await sess.commit()
 
 
-if __name__ == '__main__':
+async def test_main():
     from banbot.storage.base import init_db
     from banbot.config import AppConfig
     AppConfig.init_by_args()
     init_db()
-    with db():
-        convert()
+    async with dba():
+        await convert()
+
+
+if __name__ == '__main__':
+    asyncio.run(test_main())

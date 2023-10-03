@@ -33,7 +33,8 @@ class BanConn:
         raise NotImplementedError
 
     async def write_msg(self, msg_type: str, data: Any):
-        logger.debug('%s write: %s %s', self.remote, msg_type, data)
+        name = self.remote
+        logger.debug('%s write: %s %s', name, msg_type, data)
         dump_data = marshal.dumps((msg_type, data))
         while True:
             try:

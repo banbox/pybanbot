@@ -58,10 +58,10 @@ class LiveTrader(Trader):
     async def init(self):
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
-        with db():
-            BotTask.init()
-            sync_timeframes()
-            await ExSymbol.fill_list_dts()
+        async with dba():
+            await BotTask.init()
+            await sync_timeframes()
+            await ExSymbol.init()
             # 先更新所有未平仓订单的状态
             old_num, new_num, del_num, open_ods = await self.order_mgr.sync_orders_with_exg()
             add_pairs = {od.symbol for od in open_ods}
@@ -164,7 +164,7 @@ class LiveTrader(Trader):
         while True:
             await asyncio.sleep(refresh_intv)
             try:
-                with db():
+                async with dba():
                     await self.refresh_pairs()
             except Exception:
                 logger.exception('loop refresh pairs error')

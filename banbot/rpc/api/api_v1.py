@@ -12,7 +12,7 @@ from banbot import __version__
 from banbot.rpc import RPC, RPCException
 from banbot.config import AppConfig
 from banbot.rpc.api.schemas import *
-from banbot.storage import db, BotGlobal, ExSymbol, KInfo
+from banbot.storage import BotGlobal
 
 
 logger = logging.getLogger(__name__)

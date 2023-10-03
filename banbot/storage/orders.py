@@ -356,12 +356,12 @@ class InOutOrder(BaseDbModel, InfoPart):
         part.save()
         return part
 
-    def _save_to_db(self):
-        sess = db.session
+    async def _save_to_db(self):
+        sess = dba.session
         if self.status < InOutStatus.FullExit:
             if not self.id:
                 sess.add(self)
-                sess.flush()
+                await sess.flush()
             if self.enter and not self.enter.id:
                 if not self.enter.inout_id:
                     self.enter.inout_id = self.id
@@ -370,7 +370,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                 if not self.exit.inout_id:
                     self.exit.inout_id = self.id
                 sess.add(self.exit)
-        sess.commit()
+        await sess.commit()
 
     def _save_to_mem(self):
         if self.status < InOutStatus.FullExit:
@@ -380,11 +380,11 @@ class InOutOrder(BaseDbModel, InfoPart):
                 self._open_ods.pop(self.id)
             self._his_ods.append(self)
 
-    def save(self):
+    async def save(self):
         if btime.run_mode not in btime.LIVE_MODES:
             self._save_to_mem()
         else:
-            self._save_to_db()
+            await self._save_to_db()
         return self
 
     def local_exit(self, tag: str, price: float = None, status_msg: str = None):
@@ -434,7 +434,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                 LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
                 LocalOrderManager.obj.exit_order(self, exit_dic)
-        db.session.commit()
+        dba.session.commit()
 
     def detach(self, sess: SqlSession):
         detach_obj(sess, self)
@@ -477,12 +477,12 @@ class InOutOrder(BaseDbModel, InfoPart):
         return result
 
     @classmethod
-    def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+    async def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
                    close_after: int = None)\
             -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
             from banbot.storage.bot_task import BotTask
-            return get_db_orders(BotTask.cur_id, strategy, pairs, status, close_after)
+            return await get_db_orders(BotTask.cur_id, strategy, pairs, status, close_after)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -505,20 +505,20 @@ class InOutOrder(BaseDbModel, InfoPart):
             return candicates
 
     @classmethod
-    def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
-        return cls.get_orders(strategy, pairs, 'open')
+    async def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
+        return await cls.get_orders(strategy, pairs, 'open')
 
     @classmethod
-    def his_orders(cls) -> List['InOutOrder']:
-        return cls.get_orders(status='his')
+    async def his_orders(cls) -> List['InOutOrder']:
+        return await cls.get_orders(status='his')
 
     @classmethod
-    def get_overall_performance(cls, minutes=None) -> List[Dict[str, Any]]:
+    async def get_overall_performance(cls, minutes=None) -> List[Dict[str, Any]]:
         from itertools import groupby
         close_after = None
         if minutes:
             close_after = btime.utcstamp() - minutes * 60000
-        his_ods = cls.get_orders(status='his', close_after=close_after)
+        his_ods = await cls.get_orders(status='his', close_after=close_after)
         his_ods = sorted(his_ods, key=lambda x: x.symbol)
         gps = groupby(his_ods, key=lambda x: x.symbol)
         result = []
@@ -545,12 +545,12 @@ class InOutOrder(BaseDbModel, InfoPart):
         return result
 
     @classmethod
-    def get(cls, sess: SqlSession, od_id: int):
+    async def get(cls, sess: SqlSession, od_id: int):
         if btime.run_mode in btime.LIVE_MODES:
-            op_od = sess.query(InOutOrder).get(od_id)
+            op_od = await sess.get(InOutOrder, od_id)
             if not op_od:
                 return op_od
-            ex_ods = list(sess.query(Order).filter(Order.inout_id == od_id).all())
+            ex_ods = list(await sess.scalars(select(Order).where(Order.inout_id == od_id)))
             op_od.enter = next((o for o in ex_ods if o.enter), None)
             op_od.exit = next((o for o in ex_ods if not o.enter), None)
             return op_od
@@ -560,10 +560,10 @@ class InOutOrder(BaseDbModel, InfoPart):
         return next((od for od in cls._his_ods if od.id == od_id), None)
 
     @classmethod
-    def dump_to_db(cls):
+    async def dump_to_db(cls):
         save_ods = cls._his_ods + list(cls._open_ods.values())
         logger.info(f'dump {len(save_ods)} orders to db...')
-        insert_orders_to_db(save_ods)
+        await insert_orders_to_db(save_ods)
 
     def __str__(self):
         return f'[{self.key}] {self.enter} || {self.exit}'
@@ -606,26 +606,27 @@ def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, 
     return where_list
 
 
-def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+async def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
                   close_after: int = None, filters=None, limit=0, offset=0, order_by=None) -> List[InOutOrder]:
     '''
     此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
     '''
-    sess = db.session
+    sess = dba.session
     where_list = get_order_filters(task_id, strategy, pairs, status, close_after, filters)
-    query = sess.query(InOutOrder).filter(*where_list)
+    query = select(InOutOrder).where(*where_list)
     if order_by:
         query = query.order_by(order_by)
     if offset:
         query = query.offset(offset)
     if limit:
         query = query.limit(limit)
-    io_rows: List[InOutOrder] = list(query.all())
+    io_rows: List[InOutOrder] = list((await sess.scalars(query)).all())
     io_ids = {row.id for row in io_rows}
     if not io_ids:
         return []
     ex_filters = [Order.task_id == task_id, Order.inout_id.in_(io_ids)]
-    ex_ods = sess.query(Order).filter(*ex_filters).all()
+    stmt = select(Order).where(*ex_filters)
+    ex_ods = (await sess.scalars(stmt)).all()
     ex_enters = {od.inout_id: od for od in ex_ods if od.enter}
     ex_exits = {od.inout_id: od for od in ex_ods if not od.enter}
     for row in io_rows:
@@ -634,12 +635,12 @@ def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str
     return io_rows
 
 
-def insert_orders_to_db(orders: List[InOutOrder]):
-    sess = db.session
+async def insert_orders_to_db(orders: List[InOutOrder]):
+    sess = dba.session
     for od in orders:
         od.id = None
         sess.add(od)
-    sess.flush()
+    await sess.flush()
     for od in orders:
         if od.enter:
             od.enter.inout_id = od.id
@@ -647,6 +648,6 @@ def insert_orders_to_db(orders: List[InOutOrder]):
         if od.exit:
             od.exit.inout_id = od.id
             sess.add(od.exit)
-    sess.flush()
-    sess.commit()
+    await sess.flush()
+    await sess.commit()
 

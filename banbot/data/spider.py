@@ -47,7 +47,7 @@ async def down_pairs_by_config(config: Config):
     根据配置文件和解析的命令行参数，下载交易对数据（到数据库或文件）
     此方法由命令行调用。
     '''
-    from banbot.storage.klines import KLine, db
+    from banbot.storage.klines import KLine, dba, select
     from banbot.data.toolbox import fill_holes
     await fill_holes()
     pairs = config.get('pairs')
@@ -67,16 +67,15 @@ async def down_pairs_by_config(config: Config):
         if tf not in KLine.down_tfs:
             logger.error(f'can only download kline: {KLine.down_tfs}, current: {tf}')
             return
-        sess = db.session
+        sess = dba.session
         # 加载最新币列表
         await exchange.load_markets()
         all_symbols = list(exchange.get_cur_markets().keys())
-        for symbol in all_symbols:
-            ExSymbol.get(exchange.name, exchange.market_type, symbol)
+        await ExSymbol.ensures(exchange.name, exchange.market_type, all_symbols)
         fts = [ExSymbol.exchange == exchange.name, ExSymbol.market == exchange.market_type]
         if pairs:
             fts.append(ExSymbol.symbol.in_(set(pairs)))
-        exs_list: Iterable[ExSymbol] = sess.query(ExSymbol).filter(*fts).all()
+        exs_list: Iterable[ExSymbol] = await sess.scalars(select(ExSymbol).where(*fts))
         symbols = [exs.symbol for exs in exs_list]
         logger.info(f'start download for {len(symbols)} symbols')
         await fast_bulk_ohlcv(exchange, symbols, tf, start_ms, end_ms)
@@ -98,8 +97,8 @@ def run_down_pairs(args: Dict[str, Any]):
     config = AppConfig.init_by_args(args)
 
     async def run_download():
-        from banbot.storage import db
-        with db():
+        from banbot.storage import dba
+        async with dba():
             await down_pairs_by_config(config)
 
     asyncio.run(run_download())
@@ -166,9 +165,7 @@ class WebsocketWatcher:
 
     def get_sid(self) -> int:
         if self.sid == 0:
-            from banbot.storage import db
-            with db():
-                self.sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, self.pair)
+            self.sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, self.pair)
         return self.sid
 
     @classmethod
@@ -181,10 +178,10 @@ class WebsocketWatcher:
             ohlcv = ohlcv[1:]
         else:
             fetch_end_ms = ohlcv[0][0]
-        start_ms, end_ms = KLine.query_range(sid, save_tf)
+        start_ms, end_ms = await KLine.query_range(sid, save_tf)
         if not end_ms or fetch_end_ms <= end_ms:
             # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-            KLine.insert(sid, save_tf, ohlcv)
+            await KLine.insert(sid, save_tf, ohlcv)
             return
 
         try_count = 0
@@ -193,7 +190,7 @@ class WebsocketWatcher:
         while True:
             try_count += 1
             ins_num = await download_to_db(exchange, exs, save_tf, end_ms, fetch_end_ms)
-            save_bars = KLine.query(exs, save_tf, end_ms, fetch_end_ms)
+            save_bars = await KLine.query(exs, save_tf, end_ms, fetch_end_ms)
             last_ms = save_bars[-1][0] if save_bars else None
             if last_ms and last_ms + tf_msecs == fetch_end_ms:
                 break
@@ -204,21 +201,21 @@ class WebsocketWatcher:
                 # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
                 logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {exs.symbol}')
                 await asyncio.sleep(3)
-        KLine.insert(sid, save_tf, ohlcv)
+        await KLine.insert(sid, save_tf, ohlcv)
         logger.info(f'first fetch ok {exs.symbol} {end_ms}-{fetch_end_ms}')
 
     @classmethod
     async def consume_queue(cls):
-        from banbot.storage import db
+        from banbot.storage import dba
         while True:
             try:
                 sid, ohlcv, save_tf, skip_first = await cls.write_q.get()
-                with db():
+                async with dba():
                     if sid not in cls.init_sid:
                         await cls._save_init(sid, ohlcv, save_tf, skip_first)
                     else:
                         try:
-                            KLine.insert(sid, save_tf, ohlcv)
+                            await KLine.insert(sid, save_tf, ohlcv)
                         except DisContiError as e:
                             logger.warning(f"Kline DisConti {e}, try fill...")
                             await cls._save_init(sid, ohlcv, save_tf, False)
@@ -382,7 +379,7 @@ class LiveMiner:
     async def _try_update(self, job: MinerJob):
         from banbot.util.common import MeasureTime
         import ccxt
-        from banbot.storage import db
+        from banbot.storage import dba
         measure = MeasureTime()
         do_print = False
         try:
@@ -405,10 +402,10 @@ class LiveMiner:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
             measure.start_for(f'write_db:{len(ohlcvs)}')
-            with db():
+            async with dba():
                 sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
                 ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
-                KLine.insert(sid, job.timeframe, ohlcvs)
+                await KLine.insert(sid, job.timeframe, ohlcvs)
             # 发布小间隔数据到订阅方
             measure.start_for('send_pub')
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
@@ -429,8 +426,8 @@ class LiveMiner:
         tf_msecs = tf_to_secs(save_tf) * 1000
         cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
         start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
-        exs = ExSymbol.get(self.exchange.name, self.exchange.market_type, symbol)
-        _, end_ms = KLine.query_range(exs.id, save_tf)
+        exs = await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [symbol])[0]
+        _, end_ms = await KLine.query_range(exs.id, save_tf)
         if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
             # 当缺失数据超过30个时，才执行批量下载
             await download_to_db(self.exchange, exs, save_tf, start_ms, cur_ms)
@@ -489,13 +486,14 @@ class LiveSpider(ServerIO):
     @classmethod
     async def run_spider(cls):
         from banbot.data.toolbox import sync_timeframes, purge_kline_un
-        from banbot.storage import db
+        from banbot.storage import dba
         spider = LiveSpider()
 
-        with db():
+        async with dba():
             logger.info('[spider] sync timeframe ranges ...')
-            sync_timeframes()
-            purge_kline_un()
+            await sync_timeframes()
+            await purge_kline_un()
+            await ExSymbol.init()
         while True:
             try:
                 logger.info('[spider] wait job ...')
@@ -512,12 +510,12 @@ async def run_spider_forever(args: dict = None):
     '''
     from banbot.worker.top_change import TopChange
     from banbot.worker.watch_job import run_watch_jobs
-    from banbot.storage.base import DBSession
+    from banbot.storage.base import DBSessionAsync
     logger.info('start top change update timer...')
     await TopChange.start()
     asyncio.create_task(run_watch_jobs())
     asyncio.create_task(WebsocketWatcher.run_consumers(5))
-    asyncio.create_task(DBSession.chec_sess_timeouts())
+    asyncio.create_task(DBSessionAsync.chec_sess_timeouts())
     await LiveSpider.run_spider()
     # await TopChange.clear()
 

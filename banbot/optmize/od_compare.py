@@ -22,10 +22,12 @@ def calc_overlap_rate(od1, od2):
     return overlap / (x2 - x1) / 2 + overlap / (y2 - y1) / 2
 
 
-def compare_task_orders(bt_task_id: int, live_task_ids: List[int]):
-    sess = db.session
-    live_ods: List[InOutOrder] = sess.query(InOutOrder).filter(InOutOrder.task_id.in_(set(live_task_ids))).all()
-    bt_ods: List[InOutOrder] = sess.query(InOutOrder).filter(InOutOrder.task_id == bt_task_id).all()
+async def compare_task_orders(bt_task_id: int, live_task_ids: List[int]):
+    sess = dba.session
+    live_stats = select(InOutOrder).where(InOutOrder.task_id.in_(set(live_task_ids)))
+    live_ods: List[InOutOrder] = list(await sess.scalars(live_stats))
+    bt_od_stat = select(InOutOrder).where(InOutOrder.task_id == bt_task_id)
+    bt_ods: List[InOutOrder] = list(await sess.scalars(bt_od_stat))
     logger.info(f'load orders ok, backtest: {len(bt_ods)}, live: {len(live_ods)}')
     # 查找回测订单和实盘订单的最匹配对。（按入场时间和离场时间）
     pair_mats, unmat_lives = [], []
@@ -76,10 +78,10 @@ def compare_task_orders(bt_task_id: int, live_task_ids: List[int]):
     logger.info(f"Avg Match Score: {avg_score:.1f}")
 
 
-def compare_orders(task_ids: List[int], task_hash: str):
+async def compare_orders(task_ids: List[int], task_hash: str):
     from banbot.strategy.resolver import StrategyResolver
     config = AppConfig.get()
-    sess = db.session
+    sess = dba.session
     if not task_ids:
         if not task_hash:
             StrategyResolver.load_run_jobs(config, [])
@@ -91,26 +93,28 @@ def compare_orders(task_ids: List[int], task_hash: str):
         where_list = [BotTask.id.in_(set(task_ids))]
         filter_text = 'task_ids:' + str(task_ids)
     bt_wheres = where_list + [BotTask.mode == RunMode.BACKTEST.value]
-    bt_task: BotTask = sess.query(BotTask).filter(*bt_wheres).order_by(BotTask.create_at.desc()).first()
+    qtask_st = select(BotTask).where(*bt_wheres).order_by(BotTask.create_at.desc()).one()
+    bt_task: BotTask = await sess.scalars(qtask_st)
     if not bt_task:
         logger.error('no Backtest Task found for ' + filter_text)
         return
     logger.info(f'found Backtest Task: {bt_task.id}')
     live_wheres = where_list + [BotTask.mode == RunMode.PROD.value]
-    live_tasks: List[BotTask] = sess.query(BotTask).filter(*live_wheres).order_by(BotTask.id).all()
+    lv_stat = select(BotTask).where(*live_wheres).order_by(BotTask.id)
+    live_tasks: List[BotTask] = list(await sess.scalars(lv_stat))
     if not live_tasks:
         logger.error('no live tasks found for ' + filter_text)
         return
     logger.info(f'found live tasks: {[t.id for t in live_tasks]}')
     lv_tids = [ltask.id for ltask in live_tasks]
-    compare_task_orders(bt_task.id, lv_tids)
+    await compare_task_orders(bt_task.id, lv_tids)
 
 
-def run_od_compare(args: Dict[str, Any]):
-    from banbot.storage.base import init_db, db
+async def run_od_compare(args: Dict[str, Any]):
+    from banbot.storage.base import init_db
     AppConfig.init_by_args(args)
     init_db()
     task_hash, task_id = args.get('task_hash'), args.get('task_id')
-    with db():
-        compare_orders(task_id, task_hash)
+    async with dba():
+        await compare_orders(task_id, task_hash)
 

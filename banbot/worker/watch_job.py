@@ -76,7 +76,7 @@ async def run_on_bar(state: WatchState):
             ohlcvs = await auto_fetch_ohlcv(exchange, exs, state.timeframe, fetch_start, cur_end)
         else:
             fetch_start = state.end_ms
-            ohlcvs = KLine.query(exs, state.timeframe, fetch_start, cur_end)
+            ohlcvs = await KLine.query(exs, state.timeframe, fetch_start, cur_end)
         if not ohlcvs:
             return
         for i in range(len(ohlcvs)):
@@ -94,7 +94,7 @@ async def _consume_jobs():
         exg_name, market, symbol = wait_jobs.pop(0)
         try:
             cur_ms = btime.utcstamp()
-            with db():
+            async with dba():
                 for tf in _tf_stgy_cls:
                     state = _get_state(exg_name, market, symbol, tf)
                     cur_end = cur_ms // state.tf_msecs * state.tf_msecs

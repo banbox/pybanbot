@@ -39,23 +39,23 @@ class DbUser(BaseDbModel):
     email_verified = Column(sa.Boolean, default=False)
     pwd_salt = Column(sa.String(128))
     last_ip = Column(sa.String(64), nullable=True)
-    create_at = Column(sa.DateTime, default=min_date_time)
-    last_login = Column(sa.DateTime, default=min_date_time)
+    create_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
+    last_login = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
 
     vip_type = Column(IntEnum(VIPType), default=VIPType.normal)
-    vip_expire_at = Column(sa.DateTime, default=min_date_time)
+    vip_expire_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
     inviter_id = Column(sa.Integer)
 
     @classmethod
-    def init_tbl(cls, conn: sa.Connection):
+    async def init_tbl(cls, sess: SqlSession):
         ins_cols = "user_name, mobile, mobile_verified"
         places = ":user_name, :mobile, :mobile_verified"
         insert_sql = f"insert into users ({ins_cols}) values ({places})"
         result = [
             dict(user_name='anyongjin', mobile='18932531737', mobile_verified=True),
         ]
-        conn.execute(sa.text(insert_sql), result)
-        conn.commit()
+        await sess.execute(sa.text(insert_sql), result)
+        await sess.commit()
 
 
 class ExgUser(BaseDbModel):

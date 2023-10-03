@@ -23,8 +23,8 @@ class ExSymbol(BaseDbModel):
     exchange = Column(sa.String(50))
     symbol = Column(sa.String(20))  # BTC/USDT  BTC/USDT:USDT  BTC/USDT:USDT-230630
     market = Column(sa.String(20))
-    list_dt = Column(sa.DateTime)
-    delist_dt = Column(sa.DateTime)
+    list_dt = Column(type_=sa.TIMESTAMP(timezone=True))
+    delist_dt = Column(type_=sa.TIMESTAMP(timezone=True))
 
     @orm.reconstructor
     def __init__(self, **kwargs):
@@ -57,9 +57,10 @@ class ExSymbol(BaseDbModel):
         return f'[{self.id}] {self.exchange}:{self.symbol}:{self.market}'
 
     @classmethod
-    def _load_objects(cls, sess: SqlSession, more_than: int = 0):
+    async def load_all(cls, sess: SqlSession, more_than: int = 0):
         fts = [ExSymbol.id > more_than, ExSymbol.delist_dt.is_(None)]
-        records: Iterable[ExSymbol] = sess.query(ExSymbol).filter(*fts).all()
+        stmt = select(ExSymbol).where(*fts)
+        records: Iterable[ExSymbol] = (await sess.scalars(stmt)).all()
         for r in records:
             rkey = f'{r.exchange}:{r.market}:{r.symbol}'
             if rkey in cls._object_map:
@@ -74,22 +75,35 @@ class ExSymbol(BaseDbModel):
     @classmethod
     def get(cls, exg_name: str, market: str, symbol: str) -> 'ExSymbol':
         key = f'{exg_name}:{market}:{symbol}'
-        cache_val = cls._object_map.get(key)
-        if cache_val:
-            return cache_val
-        sess = db.session
-        cls._load_objects(sess)
-        if key in cls._object_map:
-            return cls._object_map[key]
-        # logger.info(f'{key} not found in cache, create new, cache: {cls._object_map.keys()}')
-        obj = ExSymbol(exchange=exg_name, symbol=symbol, market=market)
-        sess.add(obj)
-        sess.commit()
-        logger.info(f'create symbol: {key}, id: {obj.id}')
-        detach_obj(sess, obj)
-        cls._object_map[key] = obj
-        cls._id_map[obj.id] = obj
+        obj = cls._object_map.get(key)
+        if not obj:
+            raise ValueError(f'{key} not exist in {len(cls._object_map)} cache')
         return obj
+
+    @classmethod
+    async def ensures(cls, exg_name: str, market: str, symbols: Iterable[str]):
+        sess = dba.session
+        fail_pairs = set(symbols).difference(cls._object_map.keys())
+        if fail_pairs:
+            await cls.load_all(sess)
+        result = []
+        add_items = []
+        for symbol in symbols:
+            key = f'{exg_name}:{market}:{symbol}'
+            cache_val = cls._object_map.get(key)
+            if cache_val:
+                result.append(cache_val)
+                continue
+            obj = ExSymbol(exchange=exg_name, symbol=symbol, market=market)
+            sess.add(obj)
+            result.append(obj)
+            add_items.append((key, obj))
+        await sess.commit()
+        for key, obj in add_items:
+            detach_obj(sess, obj)
+            cls._object_map[key] = obj
+            cls._id_map[obj.id] = obj
+        return result
 
     @classmethod
     def get_id(cls, exg_name: str, market: str, symbol: str) -> int:
@@ -98,19 +112,12 @@ class ExSymbol(BaseDbModel):
     @classmethod
     def get_by_id(cls, sid: int) -> 'ExSymbol':
         cache_val = cls._id_map.get(sid)
-        if cache_val:
-            return cache_val
-        sess = db.session
-        cls._load_objects(sess)
-        if sid not in cls._id_map:
-            raise ValueError(f'invalid sid: {sid}')
-        return cls._id_map[sid]
+        if not cache_val:
+            raise ValueError(f'invalid sid: {sid}, from {len(cls._id_map)} items')
+        return cache_val
 
     @classmethod
     def search(cls, keyword: str) -> List['ExSymbol']:
-        if not cls._object_map:
-            sess = db.session
-            cls._load_objects(sess)
         if not keyword:
             return [item for key, item in cls._object_map.items()]
         upp_text = keyword.upper()
@@ -126,8 +133,8 @@ class ExSymbol(BaseDbModel):
     async def init_list_dt(self):
         if self.list_dt:
             return
-        sess = db.session
-        inst: ExSymbol = sess.query(ExSymbol).get(self.id)
+        sess = dba.session
+        inst: ExSymbol = await sess.get(ExSymbol, self.id)
         if not inst.list_dt:
             from banbot.exchange.crypto_exchange import get_exchange
             exchange = get_exchange(self.exchange, inst.market)
@@ -136,17 +143,17 @@ class ExSymbol(BaseDbModel):
                 logger.warning(f'no candles found for {self.exchange}/{self.symbol}')
                 return
             inst.list_dt = btime.to_datetime(candles[0][0])
-            sess.commit()
+            await sess.commit()
         self.list_dt = inst.list_dt
 
     @classmethod
-    async def fill_list_dts(cls):
+    async def init(cls):
         '''
         遍历symbols，填充未计算的list_dt，在机器人启动时执行
         '''
-        sess = db.session
+        sess = dba.session
         start = time.monotonic()
-        cls._load_objects(sess)
+        await cls.load_all(sess)
         for key, obj in cls._object_map.items():
             if obj.list_dt:
                 continue
@@ -155,7 +162,7 @@ class ExSymbol(BaseDbModel):
             except ccxt.BadSymbol:
                 obj.delist_dt = btime.now()
         cost = time.monotonic() - start
-        sess.commit()
+        await sess.commit()
         if cost > 0.5:
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
 

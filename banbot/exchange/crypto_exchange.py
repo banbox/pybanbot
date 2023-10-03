@@ -716,8 +716,8 @@ class CryptoExchange:
         机器人可能有些旧的止损止盈单没有及时撤销，长时间运行后导致超出最大订单限制。
         故调用此方法检查所有打开的订单，如果没有和订单关联，则取消
         '''
-        from banbot.storage import InOutOrder, db, InOutStatus, BotGlobal
-        op_ods = InOutOrder.open_orders(pairs=list(BotGlobal.pairs))
+        from banbot.storage import InOutOrder, dba, InOutStatus, BotGlobal
+        op_ods = await InOutOrder.open_orders(pairs=list(BotGlobal.pairs))
         valid_odids = set()
         for od in op_ods:
             if od.enter.order_id:
@@ -753,19 +753,19 @@ class CryptoExchange:
 
     async def cancel_open_orders(self, symbols: List[str]):
         # 查询数据库的订单，删除未创建成功的入场订单
-        from banbot.storage import InOutOrder, db, InOutStatus
-        op_ods = InOutOrder.open_orders(pairs=symbols)
+        from banbot.storage import InOutOrder, dba, InOutStatus
+        op_ods = await InOutOrder.open_orders(pairs=symbols)
         open_pairs = set()
         if op_ods:
-            sess = db.session
+            sess = dba.session
             for od in op_ods:
                 if od.status == InOutStatus.Init and (not od.enter or not od.enter.order_id):
-                    sess.delete(od)
+                    await sess.delete(od)
                     if od.enter:
-                        sess.delete(od.enter)
+                        await sess.delete(od.enter)
                 if od.status in {InOutStatus.Init, InOutStatus.PartExit, InOutStatus.PartEnter}:
                     open_pairs.add(od.symbol)
-            sess.commit()
+            await sess.commit()
         success_cnt = 0
         for symbol in open_pairs:
             # 这里不要使用fetch_open_orders不带参数一次性获取，有1200s频率限制
@@ -790,14 +790,14 @@ class CryptoExchange:
 
     async def reconnect(self):
         try:
-            self.api_async.close()
+            await self.api_async.close()
         except Exception:
             pass
         try:
-            self.api_ws.close()
+            await self.api_ws.close()
         except Exception:
             pass
-        self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
+        self.api_async, self.api_ws = _init_exchange(self.config, True, self.name, self.market_type)
         await self.load_markets()
 
     def __str__(self):

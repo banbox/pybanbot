@@ -28,9 +28,9 @@ class BackTest(Trader):
         self.bar_count = 0
         self.bar_assets = []
 
-    def on_data_feed(self, pair, timeframe, row):
+    async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
-        super(BackTest, self).on_data_feed(pair, timeframe, row)
+        await super(BackTest, self).on_data_feed(pair, timeframe, row)
         # 更新总资产
         self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal()))
         # 更新最大最小余额
@@ -39,15 +39,16 @@ class BackTest(Trader):
         self.max_balance = max(self.max_balance, quote_legal)
 
     async def init(self):
+        await AppConfig.test_db()
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         self.min_balance = sys.maxsize
-        with db():
+        async with dba():
             # 创建回测任务，记录相关周期
-            BotTask.init()
+            await BotTask.init()
             # 同步K线数据，防止不同周期数据有未更新
-            sync_timeframes()
-            await ExSymbol.fill_list_dts()
+            await sync_timeframes()
+            await ExSymbol.init()
             await self.pair_mgr.refresh_pairlist()
             if not self.pair_mgr.symbols:
                 raise ValueError('no pairs generate from PairManager')
@@ -67,27 +68,27 @@ class BackTest(Trader):
         from banbot.optmize.bt_analysis import BTAnalysis
         await self.init()
         # 轮训数据
-        with db():
+        async with dba():
             await self.data_mgr.down_data()
             bt_start = time.monotonic()
-            self.data_mgr.loop_main()
+            await self.data_mgr.loop_main()
             bt_cost = time.monotonic() - bt_start
             logger.info(f'Complete! cost: {bt_cost:.3f}s, avg: {self.bar_count / bt_cost:.1f} bar/s')
             # 关闭未完成订单
-            self.order_mgr.cleanup()
-            self._calc_result_done()
+            await self.order_mgr.cleanup()
+            await self._calc_result_done()
 
-            print_backtest(self.result)
+            await print_backtest(self.result)
 
             await BTAnalysis(**self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    def order_callback(self, od: InOutOrder, is_enter: bool):
-        open_orders = InOutOrder.open_orders()
+    async def order_callback(self, od: InOutOrder, is_enter: bool):
+        open_orders = await InOutOrder.open_orders()
         if is_enter:
             self.max_open_orders = max(self.max_open_orders, len(open_orders))
 
-    def _calc_result_done(self):
+    async def _calc_result_done(self):
         start_balance = self.result['start_balance']
         task = BotTask.obj
         task.set_info(start_balance=start_balance, stake_amount=self.stake_amount)
@@ -102,7 +103,7 @@ class BackTest(Trader):
         self.result['date_to'] = btime.to_datestr(timerange.stopts)
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
-        his_orders = InOutOrder.his_orders()
+        his_orders = await InOutOrder.his_orders()
         self.result['orders_num'] = len(his_orders)
         fin_balance = self.wallets.get(quote_s).available
         self.result['final_balance'] = f"{fin_balance:.3f} {quote_s}"

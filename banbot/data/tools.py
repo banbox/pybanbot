@@ -270,7 +270,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     measure.start_for('valid_start')
     start_ms = await exs.get_valid_start(start_ms)
     measure.start_for('down_range')
-    start_ms, end_ms = KHole.get_down_range(exs, timeframe, start_ms, end_ms)
+    start_ms, end_ms = await KHole.get_down_range(exs, timeframe, start_ms, end_ms)
     if not start_ms:
         return 0
     if isinstance(pbar, six.string_types) and pbar == 'auto':
@@ -278,7 +278,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     down_count = 0
     if check_exist:
         measure.start_for('query_range')
-        old_start, old_end = KLine.query_range(exs.id, timeframe)
+        old_start, old_end = await KLine.query_range(exs.id, timeframe)
         if old_start and old_end > old_start:
             if start_ms < old_start:
                 # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
@@ -286,9 +286,9 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                 measure.start_for('fetch_start')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
                 measure.start_for('insert_start')
-                down_count += KLine.insert(exs.id, timeframe, predata)
+                down_count += await KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_start')
-                KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
+                await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
                 start_ms = old_end
             elif end_ms > old_end:
                 if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
@@ -298,9 +298,9 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                 measure.start_for('fetch_end')
                 predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
                 measure.start_for('insert_end')
-                down_count += KLine.insert(exs.id, timeframe, predata)
+                down_count += await KLine.insert(exs.id, timeframe, predata)
                 measure.start_for('candle_conts_end')
-                KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
+                await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
                 return down_count
             else:
                 # 要下载的数据全部存在，直接退出
@@ -308,9 +308,9 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     measure.start_for('fetch_all')
     newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
     measure.start_for('insert_all')
-    down_count += KLine.insert(exs.id, timeframe, newdata, check_exist)
+    down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist)
     measure.start_for('candle_conts_all')
-    KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
+    await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
     measure.print_all(min_cost=0.01)
     return down_count
 
@@ -381,7 +381,7 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit, with_unfinish)
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar)
-    return KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
+    return await KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
 
 
 async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: str,
@@ -392,11 +392,9 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
     适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
     '''
     from banbot.storage import KLine
-    exs_map = dict()
-    for pair in symbols:
-        exs = ExSymbol.get(exg.name, exg.market_type, pair)
-        exs_map[exs.id] = exs
-    item_ranges = KLine.load_kline_ranges()
+    exs_list = await ExSymbol.ensures(exg.name, exg.market_type, symbols)
+    exs_map = {item.id: item for item in exs_list}
+    item_ranges = await KLine.load_kline_ranges()
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit)
     # 筛选需要下载的币种
     down_pairs = []
@@ -424,7 +422,7 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
     if not callback:
         return
     # 查询全部数据然后分组返回
-    result = KLine.query_batch(list(exs_map.keys()), timeframe, start_ms, end_ms)
+    result = await KLine.query_batch(list(exs_map.keys()), timeframe, start_ms, end_ms)
     result = sorted(result, key=lambda x: x[-1])
     prev_sid, ohlcvs = 0, []
     ret_args = dict(start_ms=start_ms, end_ms=end_ms, limit=limit)
@@ -449,8 +447,8 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     :param kwargs: 下载K线的额外参数，支持：start_ms,end_ms,limit,allow_lack
     :param callback: 获得K线数据后回调处理函数，接受参数：ohlcv_arr, symbol, timeframe, **kwargs
     '''
-    from banbot.util.misc import parallel_jobs
-    from banbot.storage import db
+    from banbot.util.misc import parallel_jobs, run_async
+    from banbot.storage import dba, select
     pbar = LazyTqdm()
     if isinstance(kwargs, dict):
         kwargs['pbar'] = pbar
@@ -458,9 +456,9 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     else:
         for kw in kwargs:
             kw['pbar'] = pbar
-    sess = db.session
+    sess = dba.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
-    exs_list = sess.query(ExSymbol).filter(*fts).all()
+    exs_list = list(await sess.scalars(select(ExSymbol).filter(*fts)))
     if len(symbols) < len(exs_list):
         keep_pairs = {s.symbol for s in exs_list}
         del_pairs = set(symbols).difference(keep_pairs)
@@ -473,6 +471,6 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
         for f in task_iter:
             res = await f
             if callback:
-                callback(res['data'], res['args'][1], res['args'][2], **res['kwargs'])
+                await run_async(callback, res['data'], res['args'][1], res['args'][2], **res['kwargs'])
     pbar.close()
 

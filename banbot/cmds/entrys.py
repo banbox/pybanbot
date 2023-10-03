@@ -24,24 +24,24 @@ def term_handler(signum, frame):
 signal.signal(signal.SIGTERM, term_handler)
 
 
-def start_trading(args: Dict[str, Any]) -> int:
+async def start_trading(args: Dict[str, Any]) -> int:
     """
     Main entry point for trading mode
     """
     from banbot.main.live_trader import LiveTrader
-    from banbot.storage.scripts import rebuild_db, get_fail_tables, db
+    from banbot.storage.scripts import rebuild_db, get_fail_tables, dba
 
     config = AppConfig.init_by_args(args)
-    if get_fail_tables():
+    if await get_fail_tables():
         # 有未初始化的表，自动执行脚本创建
-        with db():
-            rebuild_db(require_confirm=False)
+        async with dba():
+            await rebuild_db(require_confirm=False)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
     cluster_text = 'Cluster' if config.get('cluster') else 'Stand-Alone'
     logger.warning("Run Mode: %s    Arch: %s", btime.run_mode.value, cluster_text)
     trader = LiveTrader(config)
     try:
-        asyncio.run(trader.run())
+        await trader.run()
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")

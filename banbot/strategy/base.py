@@ -47,7 +47,7 @@ class BaseStrategy:
         '当前处理的时间周期'
         self.enter_tags: Set[str] = set()
         '已入场订单的标签'
-        self._enter_num = 0
+        self.enter_num = 0
         '记录已提交入场订单数量，避免访问数据库过于频繁'
 
     def _calc_state(self, key: str, *args, **kwargs):
@@ -70,12 +70,6 @@ class BaseStrategy:
         self.state = dict()
         self.bar_signals = dict()
         self.calc_num += 1
-        if BotGlobal.is_warmup:
-            self.orders = []
-        elif self._enter_num:
-            self.orders = InOutOrder.open_orders(self.name, self.symbol.symbol)
-            self.enter_tags = {od.enter_tag for od in self.orders}
-            self._enter_num = len(self.orders)
 
     def open_order(self, tag: str,
                    short: bool = False,
@@ -121,7 +115,7 @@ class BaseStrategy:
         if takeprofit:
             od_args['takeprofit_price'] = takeprofit
         self.entrys.append(od_args)
-        self._enter_num  += 1
+        self.enter_num += 1
 
     def close_orders(self, tag: str,
                      short: bool = False,
@@ -187,9 +181,8 @@ class BaseStrategy:
         '''
         获取仓位大小，返回基于基准金额的倍数。
         '''
-        symbol = symbol_tf.get().split('_')[2]
         # 从订单成本计算仓位
-        open_ods = InOutOrder.open_orders(self.name, symbol)
+        open_ods = self.orders
         if enter_tag:
             open_ods = [od for od in open_ods if od.enter_tag == enter_tag]
         if side and side != 'both':

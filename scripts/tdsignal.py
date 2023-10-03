@@ -25,7 +25,7 @@ async def load_file_signal(xls_path: str, timezone_off: int = 0):
     action_map = dict(LONG='buy', SHORT='sell')
     df['action'] = df['action'].map(action_map)
     # print(df.head())
-    sess = db.session
+    sess = dba.session
     off_msecs = timezone_off * 3600000
     for rid, row in df.iterrows():
         action = action_map.get(row['action'], row['action'])
@@ -75,7 +75,7 @@ async def load_file_signal(xls_path: str, timezone_off: int = 0):
             bar_ms=(create_ts // tf_msecs) * tf_msecs,
             price=row['open']
         ))
-    sess.commit()
+    await sess.commit()
     return df
 
 
@@ -101,21 +101,21 @@ async def load_signals(timezone_off: int, *xls_paths: str):
 def load_signals_from_dir():
     par_xls_dir = r'E:/Data/SignalData/'
     fnames = os.listdir(par_xls_dir)
-    with db():
+    async with dba():
         path_list = [par_xls_dir + n for n in fnames]
         asyncio.run(load_signals(8, *path_list))
 
 
-def fix_symbol_wrong():
+async def fix_symbol_wrong():
     '''
     针对TV的BTCUSDT.p未做兼容，只兼容了BTCUSDT.P；导致导入信号创建了冗余的交易对。
     信号中symbol_id对应错误。
     此脚本筛选symbol中所有以"-p"结尾的，找到对应的symbol_id，进行tdsignal更新替换。
     '''
     from banbot.storage.base import sa
-    with db():
-        sess = db.session
-        all_symbols = list(sess.query(ExSymbol).all())
+    async with dba():
+        sess = dba.session
+        all_symbols = list((await sess.scalars(select(ExSymbol))).all())
         symbol_map = {f'{s.exchange}:{s.market}:{s.symbol}': s for s in all_symbols}
         for i, s in enumerate(all_symbols):
             if i < 300:
@@ -127,15 +127,14 @@ def fix_symbol_wrong():
             if not true_row:
                 print(f'no true symbol for: {s}')
                 continue
-            res = sess.execute(sa.text(f'update tdsignal set symbol_id={true_row.id} where symbol_id={s.id}'))
+            res = await sess.execute(sa.text(f'update tdsignal set symbol_id={true_row.id} where symbol_id={s.id}'))
             print(f'[{i}]change signal id {s.id} > {true_row.id}, num: {res.rowcount}')
-            sess.commit()
-        
+            await sess.commit()
 
 
 if __name__ == '__main__':
     import os
-    from banbot.storage.base import init_db, db
+    from banbot.storage.base import init_db
     from banbot.config import AppConfig
     AppConfig.init_by_args()
     init_db()

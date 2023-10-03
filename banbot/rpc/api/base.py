@@ -24,13 +24,11 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
         commit_on_exit: bool = False,
     ):
         super().__init__(app)
-        # Web应用里面不能使用单例的DBSession
-        db_base.db = db_base.DBSession
         db_base.init_db(iso_level, db_url=db_url)
         self.session_args = session_args
         self.commit_on_exit = commit_on_exit
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
-        with db_base.db(session_args=self.session_args, commit_on_exit=self.commit_on_exit):
+        async with db_base.dba(session_args=self.session_args, commit_on_exit=self.commit_on_exit):
             response = await call_next(request)
         return response

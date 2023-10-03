@@ -20,9 +20,9 @@ class BotTask(BaseDbModel, InfoPart):
     id = Column(sa.Integer, primary_key=True)
     mode = Column(sa.String(10))  # run mode
     stg_hash = Column(sa.String(32))
-    create_at = Column(sa.DateTime)
-    start_at = Column(sa.DateTime)
-    stop_at = Column(sa.DateTime)
+    create_at = Column(type_=sa.TIMESTAMP(timezone=True))
+    start_at = Column(type_=sa.TIMESTAMP(timezone=True))
+    stop_at = Column(type_=sa.TIMESTAMP(timezone=True))
 
     @orm.reconstructor
     def __init__(self, **kwargs):
@@ -30,7 +30,7 @@ class BotTask(BaseDbModel, InfoPart):
         super(BotTask, self).__init__(**kwargs)
 
     @classmethod
-    def init(cls, start_at: Optional[float] = None):
+    async def init(cls, start_at: Optional[float] = None):
         '''
         创建交易任务。记录涉及的时间周期
         '''
@@ -57,9 +57,10 @@ class BotTask(BaseDbModel, InfoPart):
             cls.cur_id = -1
             logger.info(f"init task ok, id: {task.id} hash: {task.stg_hash}")
             return
-        sess = db.session
+        sess = dba.session
         where_list = [BotTask.mode == rmode, BotTask.stg_hash == BotGlobal.stg_hash]
-        task = sess.query(BotTask).filter(*where_list).order_by(BotTask.create_at.desc()).first()
+        stat = select(BotTask).where(*where_list).order_by(BotTask.create_at.desc()).limit(1)
+        task = (await sess.scalars(stat)).first()
         if not task or not live_mode:
             # 非实盘模式下，不可重复使用一个任务，否则可能同一时刻多个完全相同的订单
             ctime = btime.now()
@@ -71,20 +72,20 @@ class BotTask(BaseDbModel, InfoPart):
             else:
                 raise ValueError('start_at is required for backtesting')
             sess.add(task)
-            sess.flush()
+            await sess.flush()
         cls.cur_id = task.id
         logger.info(f"init task ok, id: {task.id} hash: {task.stg_hash}")
         cls.obj = task
-        sess.commit()
+        await sess.commit()
 
     @classmethod
-    def update(cls, **kwargs):
+    async def update(cls, **kwargs):
         if not cls.obj or cls.cur_id < 0:
             return
-        sess = db.session
-        sess.refresh(cls.obj)
+        sess = dba.session
+        await sess.refresh(cls.obj)
         cls.obj.update_props(**kwargs)
-        sess.commit()
+        await sess.commit()
 
     def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None):
         data = super().dict(only, skips)

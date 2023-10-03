@@ -11,6 +11,20 @@ from banbot.cmds.arguments import *
 from banbot.util.common import logger, set_log_level
 
 
+async def pause_compress():
+    from banbot.storage import KLine, dba
+    from banbot.storage.base import init_db
+    init_db()
+    async with dba():
+        return await KLine.pause_compress()
+
+
+async def restore_compress(prs_res):
+    from banbot.storage import KLine, dba
+    async with dba():
+        await KLine.restore_compress(prs_res)
+
+
 def main(sysargv: Optional[List[str]] = None) -> None:
     """
     This function will initiate the bot and start the trading loop.
@@ -31,19 +45,13 @@ def main(sysargv: Optional[List[str]] = None) -> None:
             nocompress = args.get('nocompress')
             prs_res = None
             if nocompress:
-                from banbot.storage import KLine, db
-                from banbot.storage.base import init_db
-                init_db()
-                with db():
-                    prs_res = KLine.pause_compress()
+                prs_res = asyncio.run(pause_compress())
             if asyncio.iscoroutinefunction(run_func):
                 return_code = asyncio.run(run_func(args))
             else:
                 return_code = run_func(args)
             if nocompress and prs_res:
-                from banbot.storage import KLine, db
-                with db():
-                    KLine.restore_compress(prs_res)
+                asyncio.run(restore_compress(prs_res))
         else:
             # No subcommand was issued.
             raise RuntimeError(

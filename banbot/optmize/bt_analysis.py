@@ -16,7 +16,7 @@ import pandas as pd
 from banbot.storage.orders import *
 
 
-def dump_orders(task_id: int, out_dir: str):
+async def dump_orders(task_id: int, out_dir: str):
     '''
     将任务订单输出到CSV文件方便对比
     '''
@@ -24,7 +24,7 @@ def dump_orders(task_id: int, out_dir: str):
         return
     from banbot.storage.orders import get_db_orders
     from banbot.util import btime
-    iorders = get_db_orders(task_id)
+    iorders = await get_db_orders(task_id)
     iorders = sorted(iorders, key=lambda x: x.enter_at)
     result = []
     for iod in iorders:
@@ -100,7 +100,7 @@ class BTAnalysis:
         async with aiof.open(dump_path, 'wb') as fout:
             await fout.write(orjson.dumps(self.result))
         # 保存订单记录到CSV
-        dump_orders(task_id, task_dir)
+        await dump_orders(task_id, task_dir)
         # 保存总资产曲线
         dump_hist_assets(self.result['bar_assets'], task_dir)
 

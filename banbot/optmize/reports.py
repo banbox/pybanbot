@@ -179,15 +179,15 @@ def text_day_profits(df: pd.DataFrame):
     return tabulate(records, headers, 'orgtbl')
 
 
-def get_order_df() -> pd.DataFrame:
+async def get_order_df() -> pd.DataFrame:
     from banbot.storage import InOutOrder
-    his_orders = InOutOrder.his_orders()
+    his_orders = await InOutOrder.his_orders()
     data_list = [od.dict(flat_sub=True) for od in his_orders]
     return pd.DataFrame(data_list)
 
 
-def print_backtest(result: dict):
-    order_df = get_order_df()
+async def print_backtest(result: dict):
+    order_df = await get_order_df()
     if len(order_df):
         table = text_pair_groups(order_df)
         if isinstance(table, str) and len(table) > 0:

@@ -154,6 +154,19 @@ class AppConfig(metaclass=Singleton):
         return cls.obj.get_config()
 
     @classmethod
+    async def test_db(cls):
+        # 测试数据库连接
+        from banbot.storage.base import init_db, dba, sa
+        init_db()
+        async with dba():
+            sess = dba.session
+            db_tz = (await sess.execute(sa.text('show timezone;'))).scalar()
+            if str(db_tz).lower() != 'utc':
+                raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
+                                   'and exec `select pg_reload_conf();` to apply; then re-download all data')
+            logger.info(f'Connect DataBase Success')
+
+    @classmethod
     def init_by_args(cls, args: dict = None) -> Config:
         from banbot.util.misc import deep_merge_dicts
         if not args:
@@ -165,16 +178,6 @@ class AppConfig(metaclass=Singleton):
         if 'timerange' in config:
             from banbot.config.timerange import TimeRange
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
-        # 测试数据库连接
-        from banbot.storage.base import init_db, db, sa
-        init_db()
-        with db():
-            conn = db.session.connection()
-            db_tz = conn.execute(sa.text('show timezone;')).scalar()
-            if str(db_tz).lower() != 'utc':
-                raise RuntimeError('database timezone must be UTC, please change it in `postgresql.conf`'
-                                   'and exec `select pg_reload_conf();` to apply; then re-download all data')
-            logger.info(f'Connect DataBase Success')
         # 检查是否启用了异常通知，如启用则设置
         from banbot.worker.exc_notify import allow_exc_notify
         from banbot.util.common import set_log_notify

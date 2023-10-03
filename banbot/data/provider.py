@@ -21,9 +21,9 @@ class DataProvider:
         self._init_args = dict()
         self.holders: List[DataFeeder] = []
 
-        def handler(*args, **kwargs):
+        async def handler(*args, **kwargs):
             try:
-                callback(*args, **kwargs)
+                await callback(*args, **kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler
@@ -98,20 +98,22 @@ class HistDataProvider(DataProvider):
     async def down_data(self):
         timeframes = {s.timeframe for hold in self.holders for s in hold.states}
         tbls = [item.tbl for item in KLine.agg_list if item.tf in timeframes]
-        jobs = KLine.pause_compress(tbls)
+        jobs = await KLine.pause_compress(tbls)
         for hold in self.holders:
             await hold.down_if_need()
-        KLine.restore_compress(jobs)
+        await KLine.restore_compress(jobs)
 
-    def loop_main(self):
+    async def loop_main(self):
         try:
             while BotGlobal.state == BotState.RUNNING:
-                feeder = sorted(self.holders, key=lambda x: x.next_at)[0]
-                bar_time = feeder.next_at
+                items = []
+                for hold in self.holders:
+                    items.append((hold, await hold.get_next_at()))
+                feeder, bar_time = sorted(items, key=lambda x: x[1])[0]
                 if bar_time >= btime.utcstamp():
                     break
                 btime.cur_timestamp = bar_time / 1000
-                feeder()
+                await feeder.invoke()
                 self._update_bar()
             if self.pbar:
                 self.pbar.close()
@@ -181,8 +183,8 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
 
             hold_map = {h.pair: h for h, _ in warm_jobs}
 
-            def ohlcv_cb(data, exs: ExSymbol, timeframe: str, **kwargs):
-                since_ms = hold_map[exs.symbol].warm_tfs({timeframe: data})
+            async def ohlcv_cb(data, exs: ExSymbol, timeframe: str, **kwargs):
+                since_ms = await hold_map[exs.symbol].warm_tfs({timeframe: data})
                 since_map[f'{exs.symbol}/{timeframe}'] = since_ms
 
             exg = get_exchange(self.exg_name)
@@ -211,7 +213,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         await self.unwatch_klines(self.exg_name, market, pairs)
 
     @classmethod
-    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],
+    async def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],
                       fetch_tfsecs: int, update_tfsecs: float):
         if exg_name != cls._obj.exg_name or cls._obj.market != market:
             logger.warning(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
@@ -225,7 +227,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             hold.wait_bar = last_bar
         elif last_bar[0] > hold.wait_bar[0]:
             # 新bar出现，认为wait_bar完成
-            hold.on_new_data([last_bar], fetch_tfsecs)
+            await hold.on_new_data([last_bar], fetch_tfsecs)
             hold.wait_bar = last_bar
             return
         if update_tfsecs <= 5 and hold.states[0].tf_secs >= 60:
@@ -237,7 +239,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         end_lack = bar_end_ts - btime.utctime()
         if end_lack < update_tfsecs * 0.5:
             # 缺少的时间不足更新间隔的一半，认为完成。
-            hold.on_new_data([last_bar], fetch_tfsecs)
+            await hold.on_new_data([last_bar], fetch_tfsecs)
             hold.wait_bar = None
             return
         hold.wait_bar = last_bar

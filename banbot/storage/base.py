@@ -6,49 +6,42 @@
 import asyncio
 import os
 import time
-import threading
 import traceback
-from contextvars import ContextVar, copy_context
+from contextvars import ContextVar
 from typing import Optional, List, Union, Type, Dict
 
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, pool, Column, orm  # noqa
+from sqlalchemy import create_engine, pool, Column, orm, select, update, delete, insert  # noqa
 from sqlalchemy import event as db_event
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session as SqlSession
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.session import make_transient
 from sqlalchemy.types import TypeDecorator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.ext.asyncio.engine import Engine as AsyEngine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncSession as SqlSession
 
 from banbot.config import AppConfig
 from banbot.util.common import logger
 from banbot.util import btime
 
 _BaseDbModel = declarative_base()
-_db_engine: Optional[Engine] = None
-_DbSession: Optional[sessionmaker] = None
-_db_sess: ContextVar[Optional[SqlSession]] = ContextVar('_db_sess', default=None)
-_db_engine_asy: Optional[AsyEngine] = None
-_DbSessionAsync: Optional[sessionmaker] = None
+_db_engine_asy: Optional[AsyncEngine] = None
+_DbSessionAsync: Optional[async_sessionmaker] = None
 _db_sess_asy: ContextVar[Optional[AsyncSession]] = ContextVar('_db_sess_asy', default=None)
 db_slow_query_timeout = 1
 
 
-def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None):
+def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     '''
     初始化数据库客户端（并未连接到数据库）
     传入的参数将针对所有连接生效。
     如只需暂时生效：
-    db.session.connection().execution_options(isolation_level='AUTOCOMMIT')
+    dba.session.connection().execution_options(isolation_level='AUTOCOMMIT')
     或engine.echo=True
     '''
-    global _db_engine, _DbSession, _db_engine_asy, _DbSessionAsync
-    if _db_engine is not None:
-        return _db_engine
+    global _db_engine_asy, _DbSessionAsync
+    if _db_engine_asy is not None:
+        return _db_engine_asy
     if not db_url:
         db_url = os.environ.get('ban_db_url')
     try:
@@ -65,28 +58,24 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     if debug is not None:
         create_args['echo'] = debug
     create_args['isolation_level'] = iso_level
-    _db_engine = create_engine(db_url, **create_args)
-    _DbSession = sessionmaker(bind=_db_engine)
     # 实例化异步engine
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
     _db_engine_asy = create_async_engine(db_url, **create_args)
-    _DbSessionAsync = sessionmaker(_db_engine_asy, class_=AsyncSession)
-    return _db_engine
+    _DbSessionAsync = async_sessionmaker(_db_engine_asy, class_=AsyncSession, expire_on_commit=False)
+    set_engine_event(_db_engine_asy.sync_engine)
+    return _db_engine_asy
 
 
-class DBSessionMeta(type):
-    # using this metaclass means that we can access db.session as a property at a class level,
-    # rather than db().session
+class DBSessionAsyncMeta(type):
     @property
-    def session(self) -> SqlSession:
-        """Return an instance of Session local to the current async context."""
-        session = _db_sess.get()
+    def session(cls) -> AsyncSession:
+        session = _db_sess_asy.get()
         if session is None:
             raise RuntimeError('db sess not loaded')
         return session
 
 
-class DBSession(metaclass=DBSessionMeta):
+class DBSessionAsync(metaclass=DBSessionAsyncMeta):
     _hold_map = dict()
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
@@ -94,33 +83,31 @@ class DBSession(metaclass=DBSessionMeta):
         self.session_args = session_args or {}
         self.commit_on_exit = commit_on_exit
 
-    def __enter__(self):
-        if _db_sess.get() is None:
-            sess = _DbSession(**self.session_args)
-            self.token = _db_sess.set(sess)
-            # logger.debug('set new dbSession: %s, in ctx: %s', sess, copy_context())
+    async def __aenter__(self):
+        if _db_sess_asy.get() is None:
+            sess = _DbSessionAsync(**self.session_args)
+            self.token = _db_sess_asy.set(sess)
             self._hold_map[id(sess)] = (btime.time(), traceback.format_stack())
         return type(self)
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        sess = _db_sess.get()
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        if not self.token:
+            return
+        sess = _db_sess_asy.get()
         if not sess:
             return
 
         if exc_type is not None:
-            sess.rollback()
-
+            await sess.rollback()
         elif self.commit_on_exit:
-            sess.commit()
+            await sess.commit()
 
-        if self.token:
-            sess.close()
-            # logger.debug('close dbSession: %s, in ctx: %s', sess, copy_context())
-            _db_sess.set(None)
-            self.token = None
-            sess_key = id(sess)
-            if sess_key in self._hold_map:
-                del self._hold_map[sess_key]
+        await asyncio.shield(sess.close())
+        _db_sess_asy.set(None)
+        self.token = None
+        sess_key = id(sess)
+        if sess_key in self._hold_map:
+            del self._hold_map[sess_key]
 
     @classmethod
     async def chec_sess_timeouts(cls):
@@ -138,56 +125,6 @@ class DBSession(metaclass=DBSessionMeta):
             if bad_list:
                 bad_text = "\n".join(bad_list)
                 logger.warning(f'timeout db sess: {bad_text}')
-
-db: DBSessionMeta = DBSession
-
-
-class DBSessionAsyncMeta(type):
-    @property
-    def session(cls) -> AsyncSession:
-        session = _db_sess_asy.get()
-        if session is None:
-            raise RuntimeError('db sess not loaded')
-        return session
-
-
-class DBSessionAsync(metaclass=DBSessionAsyncMeta):
-    _sess = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._sess and cls._sess.token and cls._sess.fetch_tid == threading.get_ident():
-            return cls._sess
-        cls._sess = super().__new__(cls)
-        return cls._sess
-
-    def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
-        self.token = None
-        self.session_args = session_args or {}
-        self.commit_on_exit = commit_on_exit
-        self.fetch_tid = 0
-
-    async def __aenter__(self):
-        if _db_sess_asy.get() is None:
-            self.token = _db_sess_asy.set(_DbSessionAsync(**self.session_args))
-            self.fetch_tid = threading.get_ident()
-        return type(self)
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        sess = _db_sess_asy.get()
-        if not sess:
-            return
-
-        if exc_type is not None:
-            await sess.rollback()
-
-        if self.commit_on_exit:
-            await sess.commit()
-
-        await sess.close()
-
-        if self.token and self.fetch_tid == threading.get_ident():
-            _db_sess_asy.set(None)
-            self.token = None
 
 
 dba: DBSessionAsyncMeta = DBSessionAsync
@@ -266,18 +203,19 @@ class BaseDbModel(_BaseDbModel):
             setattr(self, k, v)
 
 
-@db_event.listens_for(Engine, 'before_cursor_execute')
-def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    conn.info.setdefault('query_start_time', []).append(time.monotonic())
+def set_engine_event(engine):
 
+    @db_event.listens_for(engine, 'before_cursor_execute')
+    def before_cursor_execute(conn: AsyncConnection, *args, **kwargs):
+        conn.info['query_start_time'] = time.monotonic()
 
-@db_event.listens_for(Engine, "after_cursor_execute")
-def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    total = time.monotonic() - conn.info['query_start_time'].pop(-1)
-    if total > db_slow_query_timeout:
-        if not str(statement).lower().strip().startswith('select'):
-            return
-        logger.warn(f'Slow Query Found！Cost {total * 1000:.1f} ms: {statement}')
+    @db_event.listens_for(engine, "after_cursor_execute")
+    def after_cursor_execute(conn: AsyncConnection, cursor, statement, *args, **kwargs):
+        total = time.monotonic() - conn.info['query_start_time']
+        if total > db_slow_query_timeout:
+            if not str(statement).lower().strip().startswith('select'):
+                return
+            logger.warn(f'Slow Query Found！Cost {total * 1000:.1f} ms: {statement}')
 
 
 def detach_obj(sess: SqlSession, obj: BaseDbModel):

@@ -9,7 +9,6 @@ import random
 import time
 
 from banbot.data.tools import *
-from banbot.storage.base import init_db, db
 from banbot.config import AppConfig
 
 
@@ -21,7 +20,7 @@ async def test_get_ohlcv():
     start_ms = stop_ms - tf_msecs * 100
     timeframe = '1m'
     # timeframe, start_ms, stop_ms = '5m', 1695315300000, 1695405300000
-    ohlcv_arr = KLine.query(exs, timeframe, start_ms, stop_ms)
+    ohlcv_arr = await KLine.query(exs, timeframe, start_ms, stop_ms)
     # print(len(ohlcv_arr))
     for bar in ohlcv_arr:
         print(bar)
@@ -43,10 +42,10 @@ async def test_down():
     print(bar_end)
 
 
-def test_kline_insert():
+async def test_kline_insert():
     from banbot.storage import KLine
     from banbot.data.toolbox import sync_timeframes
-    sync_timeframes()
+    await sync_timeframes()
     insert_num = 300
     open_price = 30000
     ohlcvs = []
@@ -62,7 +61,7 @@ def test_kline_insert():
         open_price = cprice
         cur_stamp += 60 * 1000
         start = time.monotonic()
-        KLine.insert(14, '1m', [bar])
+        await KLine.insert(14, '1m', [bar])
         cost = time.monotonic() - start
         if i > 10:
             cost_list.append(cost)
@@ -362,7 +361,7 @@ def dump_bad_trades():
 
 if __name__ == '__main__':
     AppConfig.init_by_args()
-    with db():
+    async with dba():
         # test_kline_insert()
         # analyze_trade_agg('BCH')
         asyncio.run(test_get_ohlcv())

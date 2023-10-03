@@ -39,21 +39,21 @@ class Watcher:
     def __init__(self, callback: Callable):
         self.callback = callback
 
-    def _on_state_ohlcv(self, pair: str, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
+    async def _on_state_ohlcv(self, pair: str, state: PairTFCache, ohlcvs: List[Tuple], last_finish: bool, do_fire=True) -> list:
         finish_bars = ohlcvs if last_finish else ohlcvs[:-1]
         if state.wait_bar and state.wait_bar[0] < ohlcvs[0][0]:
             finish_bars.insert(0, state.wait_bar)
         state.wait_bar = None if last_finish else ohlcvs[-1]
         state.latest = ohlcvs[-1]
         if finish_bars and do_fire:
-            self._fire_callback(finish_bars, pair, state.timeframe, state.tf_secs)
+            await self._fire_callback(finish_bars, pair, state.timeframe, state.tf_secs)
         return finish_bars
 
-    def _fire_callback(self, bar_arr, pair: str, timeframe: str, tf_secs: int):
+    async def _fire_callback(self, bar_arr, pair: str, timeframe: str, tf_secs: int):
         for bar_row in bar_arr:
             if btime.run_mode not in btime.LIVE_MODES:
                 btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
-            self.callback(pair, timeframe, bar_row)
+            await self.callback(pair, timeframe, bar_row)
         if btime.run_mode in btime.LIVE_MODES and not BotGlobal.is_warmup:
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs:
@@ -165,7 +165,7 @@ class KlineLiveConsumer(ClientIO):
             return False
         if self.realtime:
             ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
-            self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
+            await self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
             return True
         ohlc_arr, fetch_tfsecs = msg_data
         job = self.jobs[pair]
@@ -179,11 +179,11 @@ class KlineLiveConsumer(ClientIO):
             ohlcvs, last_finish = ohlc_arr, True
         if ohlcvs:
             logger.debug('finish ohlcv: %s %s', msg_key, ohlcvs)
-            self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, job.tf_secs, job.tf_secs)
+            await self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, job.tf_secs, job.tf_secs)
         return True
 
     @classmethod
-    def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
+    async def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
                       fetch_tfsecs: int, update_tfsecs: float):
         '''
         监听spider的蜡烛数据，收到时会回调此方法。

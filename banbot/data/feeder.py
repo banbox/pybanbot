@@ -6,7 +6,7 @@
 
 from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import *
-from banbot.storage import BotGlobal, KLine, db
+from banbot.storage import BotGlobal
 from banbot.data.tools import *
 
 
@@ -22,7 +22,6 @@ class DataFeeder(Watcher):
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False):
         super(DataFeeder, self).__init__(callback)
         self.pair = pair
-        self.exs = ExSymbol.get(BotGlobal.exg_name, BotGlobal.market_type, pair)
         self.states: List[PairTFCache] = []
         self.auto_prefire = auto_prefire
         self.sub_tflist(*tf_warms.keys())
@@ -52,7 +51,7 @@ class DataFeeder(Watcher):
         self.states = sorted(self.states, key=lambda x: x.tf_secs)
         return timeframes
 
-    def warm_tfs(self, tf_datas: Dict[str, List[Tuple]]) -> Optional[int]:
+    async def warm_tfs(self, tf_datas: Dict[str, List[Tuple]]) -> Optional[int]:
         '''
         预热周期数据。当动态添加周期到已有的HistDataFeeder时，应调用此方法预热数据。
         LiveFeeder在初始化时也应当调用此函数
@@ -69,7 +68,7 @@ class DataFeeder(Watcher):
             logger.info(f'warmup {self.pair}/{tf} {start_dt} - {end_dt}')
             try:
                 BotGlobal.is_warmup = True
-                self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
+                await self._fire_callback(ohlcv_arr, self.pair, tf, tf_secs)
             finally:
                 BotGlobal.is_warmup = False
             tf_next_ms = ohlcv_arr[-1][0] + tf_secs * 1000
@@ -90,7 +89,7 @@ class DataFeeder(Watcher):
             raise RuntimeError(f'fetch interval {fetch_intv} should <= min_tf: {state.tf_secs}')
         return ohlcvs, last_finish
 
-    def on_new_data(self, details: List[Tuple], fetch_intv: int) -> bool:
+    async def on_new_data(self, details: List[Tuple], fetch_intv: int) -> bool:
         '''
         有新完成的子周期蜡烛数据，尝试更新
         :param details: 蜡烛数据，必须是已完成的，二维列表
@@ -103,7 +102,7 @@ class DataFeeder(Watcher):
         if not ohlcvs:
             return False
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
-        min_finished = self._on_state_ohlcv(self.pair, state, ohlcvs, last_finish)
+        min_finished = await self._on_state_ohlcv(self.pair, state, ohlcvs, last_finish)
         if len(self.states) > 1:
             # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
             # 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
@@ -116,7 +115,7 @@ class DataFeeder(Watcher):
                 cur_ohlcvs = [state.wait_bar] if state.wait_bar else []
                 prefire = 0.05 if self.auto_prefire else 0
                 cur_ohlcvs, last_finish = build_ohlcvc(ohlcvs, state.tf_secs, prefire, ohlcvs=cur_ohlcvs)
-                self._on_state_ohlcv(self.pair, state, cur_ohlcvs, last_finish)
+                await self._on_state_ohlcv(self.pair, state, cur_ohlcvs, last_finish)
         return bool(min_finished)
 
 
@@ -143,21 +142,20 @@ class HistDataFeeder(DataFeeder):
         self.row_id = 0
         self._next_arr: List[Tuple] = None  # 下个bar的数据
 
-    @property
-    def next_at(self):
+    async def get_next_at(self):
         if self._next_arr is None:
-            self._set_next()
+            await self._set_next()
         if not self._next_arr:
             return sys.maxsize
         return self._next_arr[-1][0]
 
-    def _set_next(self):
+    async def _set_next(self):
         pass
 
-    def __call__(self, *args, **kwargs):
+    async def invoke(self):
         ret_arr = self._next_arr
-        self.on_new_data(ret_arr, self.states[0].tf_secs)
-        self._set_next()
+        await self.on_new_data(ret_arr, self.states[0].tf_secs)
+        await self._set_next()
         return ret_arr
 
     async def down_if_need(self):
@@ -176,7 +174,7 @@ class FileDataFeeder(HistDataFeeder):
         self.total_len = len(self.dataframe)
         self._set_next()
 
-    def _set_next(self):
+    async def _set_next(self):
         if self.row_id >= self.total_len:
             self._next_arr = []
             return
@@ -204,7 +202,7 @@ class DBDataFeeder(HistDataFeeder):
         self._batch_size = 3000
         self._row_id = 0
         self._cache_arr = []
-        self._calc_total()
+        self.total_len = -1
 
     async def down_if_need(self):
         from banbot.storage import KLine
@@ -214,10 +212,10 @@ class DBDataFeeder(HistDataFeeder):
         end = int(self.timerange.stopts * 1000)
         await download_to_db(exg, self.exs, down_tf, start_ms, end)
 
-    def _calc_total(self):
+    async def _calc_total(self):
         from banbot.storage import KLine
         state = self.states[0]
-        start_ts, stop_ts = KLine.query_range(self.exs.id, state.timeframe)
+        start_ts, stop_ts = await KLine.query_range(self.exs.id, state.timeframe)
         if start_ts and stop_ts:
             vstart = max(start_ts, int(self.timerange.startts * 1000))
             vend = min(stop_ts, int(self.timerange.stopts * 1000))
@@ -225,16 +223,18 @@ class DBDataFeeder(HistDataFeeder):
                 div_m = state.tf_secs * 1000
                 self.total_len = (vend - vstart) // div_m + 1
 
-    def _set_next(self):
+    async def _set_next(self):
         if self._row_id >= len(self._cache_arr):
             # 缓存结束，重新读取数据库
+            if self.total_len < 0:
+                await self._calc_total()
             if self.row_id >= self.total_len:
                 self._next_arr = []
                 return
             from banbot.storage import KLine
             end = int(self.timerange.stopts * 1000)
             min_tf = self.states[0].timeframe
-            self._cache_arr = KLine.query(self.exs, min_tf, self._offset_ts, end, self._batch_size)
+            self._cache_arr = await KLine.query(self.exs, min_tf, self._offset_ts, end, self._batch_size)
             self._row_id = 0
             if not self._cache_arr:
                 self.total_len = self.row_id

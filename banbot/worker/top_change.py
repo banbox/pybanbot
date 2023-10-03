@@ -16,14 +16,14 @@ class TopChange:
         self.exg_name = self.config['exchange']['name']
         self.market = config['market_type']
 
-    def calculate(self, start_ts: float, stop_ts: float) -> List[Tuple[int, str, float, float, float, float, float]]:
+    async def calculate(self, start_ts: float, stop_ts: float) -> List[Tuple[int, str, float, float, float, float, float]]:
         '''
         计算指定市场的变动率，和成交量。
         :param start_ts: 秒级开始时间。
         :param stop_ts: 秒级结束时间
         :return:
         '''
-        conn = db.session.connection()
+        sess = dba.session
         # 这是特定于postgresql的语句。查询某一时刻某个市场所有标的的价格。
         market_price_sql = '''
 with last_1m as (select distinct on(sid) * from kline_1m
@@ -34,11 +34,11 @@ where exchange=:exchange and market=:market
 ORDER BY sid;'''
         # 查询所有标的最新价格
         where_args = dict(exchange=self.exg_name, market=self.market, start=stop_ts - 1000, stop=stop_ts)
-        rows = conn.execute(sa.text(market_price_sql), where_args)
+        rows = await sess.execute(sa.text(market_price_sql), where_args)
         latest = {r[1]: r for r in rows}
         # 查询24H前所有标的价格
         where_args.update(start=start_ts - 1000, stop=start_ts)
-        rows = conn.execute(sa.text(market_price_sql), where_args)
+        rows = await sess.execute(sa.text(market_price_sql), where_args)
         prev = {r[1]: r for r in rows}
         # 查询周期内成交量
         market_vol_sql = '''
@@ -48,7 +48,7 @@ GROUP BY sid)
 select symbol.symbol, vol_all.volume, vol_all.volume_q from symbol JOIN vol_all on symbol.id = vol_all.sid
 where exchange=:exchange and market=:market;'''
         where_args.update(start=start_ts, stop=stop_ts)
-        rows = conn.execute(sa.text(market_vol_sql), where_args)
+        rows = await sess.execute(sa.text(market_vol_sql), where_args)
         vols = {r[0]: r for r in rows}
         # 计算价格变动比率，组合成交量
         car_keys = set(latest.keys()).intersection(prev.keys())
@@ -60,7 +60,7 @@ where exchange=:exchange and market=:market;'''
             short_name = to_short_symbol(new_p[1])
             change_list.append((new_p[0], short_name, new_p[2], chg_rate, vol_r[1], vol_r[2], 0))
         change_list = sorted(change_list, key=lambda x: x[1])
-        conn.commit()
+        await sess.commit()
         return change_list
 
     async def run(self):
@@ -78,8 +78,8 @@ where exchange=:exchange and market=:market;'''
             # 目前固定对比UTC0点
             start_ts = cur_time // secs_day * secs_day
             try:
-                with db():
-                    data = self.calculate(start_ts, next_run)
+                async with dba():
+                    data = await self.calculate(start_ts, next_run)
                 # 计算价格一分钟是上涨还是下跌
                 old_data = BanCache.get(cache_key)
                 if old_data:

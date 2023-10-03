@@ -18,17 +18,18 @@ class Overlay(BaseDbModel):
     start_ms = Column(sa.BIGINT, index=True)
     stop_ms = Column(sa.BIGINT, index=True)
     tf_msecs = Column(sa.Integer)
-    update_at = Column(sa.DateTime, default=min_date_time)
+    update_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
     data = Column(sa.Text)
 
     @classmethod
-    def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int) -> List[dict]:
+    async def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int) -> List[dict]:
         import orjson
-        sess = db.session
+        sess = dba.session
         sel_cols = [Overlay.id, Overlay.data]
         fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= end_ms]
-        overlays = list(sess.query(*sel_cols).filter(*fts).order_by(Overlay.id).all())
+        stat = select(*sel_cols).where(*fts).order_by(Overlay.id)
+        overlays = list(await sess.scalars(stat))
         result = []
         for row in overlays:
             if not row.data:
@@ -42,11 +43,11 @@ class Overlay(BaseDbModel):
         return result
 
     @classmethod
-    def create(cls, user_id: int, sid: int, timeframe: str, data: dict):
+    async def create(cls, user_id: int, sid: int, timeframe: str, data: dict):
         from banbot.util import btime
         import orjson
         olay_id = data.get('ban_id')
-        sess = db.session
+        sess = dba.session
         points: List[dict] = data.get('points')
         if not points:
             logger.error(f'no points, skip overlay: {user_id}, {sid} {data}')
@@ -57,37 +58,39 @@ class Overlay(BaseDbModel):
         save_data = orjson.dumps(data).decode('utf-8')
         if olay_id:
             data.pop('ban_id')
-            olay: Overlay = sess.query(Overlay).get(olay_id)
+            olay: Overlay = await sess.get(Overlay, olay_id)
             if olay and olay.user == user_id:
                 olay.start_ms = start_ms
                 olay.stop_ms = stop_ms
                 olay.update_at = cur_time
                 olay.data = save_data
-                sess.commit()
+                await sess.commit()
                 return olay.id
         from banbot.exchange.exchange_utils import tf_to_secs
         tf_msecs = tf_to_secs(timeframe) * 1000
         olay = Overlay(user=user_id, sid=sid, start_ms=start_ms, stop_ms=stop_ms, tf_msecs=tf_msecs,
                        update_at=cur_time, data=save_data)
         sess.add(olay)
-        sess.commit()
+        await sess.commit()
         return olay.id
 
     @classmethod
-    def delete_by_id(cls, user_id: int, id_list: List[int]) -> int:
-        sess = db.session
+    async def delete_by_id(cls, user_id: int, id_list: List[int]) -> int:
+        sess = dba.session
         fts = [Overlay.user == user_id, Overlay.id.in_(set(id_list))]
-        count = sess.query(Overlay).filter(*fts).delete(synchronize_session=False)
-        sess.commit()
+        stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
+        count = await sess.execute(stat)
+        await sess.commit()
         return count
 
     @classmethod
-    def delete(cls, user_id: int, sid: int, timeframe: str, start_ms: int, stop_ms: int):
+    async def delete(cls, user_id: int, sid: int, timeframe: str, start_ms: int, stop_ms: int):
         from banbot.exchange.exchange_utils import tf_to_secs
-        sess = db.session
+        sess = dba.session
         tf_msecs = tf_to_secs(timeframe) * 1000
         fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= stop_ms]
-        count = sess.query(Overlay).filter(*fts).delete(synchronize_session=False)
-        sess.commit()
+        stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
+        count = await sess.execute(stat)
+        await sess.commit()
         return count

@@ -50,7 +50,7 @@ class Trader:
             logger.info(f'{key}: {items}')
         return pair_tfs
 
-    def on_data_feed(self, pair: str, timeframe: str, row: list):
+    async def on_data_feed(self, pair: str, timeframe: str, row: list):
         BotGlobal.last_bar_ms = btime.time_ms()
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
@@ -75,11 +75,17 @@ class Trader:
                 logger.info(f'skip invalid bar: {e}')
                 return [], [], []
             if not BotGlobal.is_warmup:
-                self.order_mgr.update_by_bar(row)
+                await self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
             enter_list, exit_list = [], []
             for strategy in strategy_list:
                 stg_name = strategy.name
+                if BotGlobal.is_warmup:
+                    strategy.orders = []
+                elif strategy.enter_num:
+                    strategy.orders = await InOutOrder.open_orders(stg_name, strategy.symbol.symbol)
+                    strategy.enter_tags = {od.enter_tag for od in strategy.orders}
+                    strategy.enter_num = len(strategy.orders)
                 strategy.on_bar(pair_arr)
                 # 调用策略生成入场和出场信号
                 if not bar_expired:
@@ -94,7 +100,7 @@ class Trader:
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
-            self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
+            await self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
         return enter_list, exit_list
 
     async def run(self):
