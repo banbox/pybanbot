@@ -17,6 +17,7 @@ setup(
     author='anyongjin',
     author_email='anyongjin163@163.com',
     description='high freq trade',
+    packages=['banbot'],
     install_requires=requirements,
     extras_require={
         "develop": [
