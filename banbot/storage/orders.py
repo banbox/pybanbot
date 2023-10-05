@@ -457,7 +457,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         if self.infos:
             result.update(**self.infos)
         del result['info']
-        if not self.exit:
+        if not self.exit_at:
             result['duration'] = 0
         else:
             result['duration'] = round(self.exit_at - self.enter_at) / 1000
