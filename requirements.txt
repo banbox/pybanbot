@@ -16,6 +16,7 @@ tabulate
 PyYaml
 aiohttp
 psutil
+jwt
 
 fastapi
 uvicorn
