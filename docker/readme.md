@@ -42,6 +42,6 @@ echo "$account start ok, run docker logs --tail 50 $account to view logs"
 #!/bin/bash
 python --version
 cd /root/banbot
-python setup.py install
+pip install . --no-deps
 python -m banbot trade -c ~/ban_data/config.yml -c ~/ban_data/config.local.yml -c /root/banusers/$account/config.yml
 ```

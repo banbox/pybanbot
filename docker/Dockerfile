@@ -10,6 +10,6 @@ FROM anyongjin/banbot:3
 
 COPY . /banbot
 WORKDIR /banbot
-RUN python setup.py install
+RUN pip install . --no-deps
 
 # ENTRYPOINT ["/bin/bash", "scripts/run_docker.sh"]
