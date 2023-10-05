@@ -15,5 +15,6 @@ tzlocal
 tabulate
 PyYaml
 aiohttp
+psutil
 
 fastapi
