@@ -1,12 +1,4 @@
-# 基础镜像编译
-```dockerfile
-FROM python:3.11.6
-RUN pip install --upgrade --force-reinstall -r requirements.txt
-```
-从上面内容生成不含源代码的基础镜像：  
-`docker commit xxx anyongjin/banbot:3`
-
-# 打包运行镜像
+# 打包镜像
 ```shell
 cd /root/banbot
 docker build . -t banbot -f ./docker/Dockerfile
