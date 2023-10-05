@@ -16,4 +16,4 @@ tabulate
 PyYaml
 aiohttp
 
-starlette
+fastapi

@@ -1,4 +1,4 @@
-FROM anyongjin/banbot
+FROM anyongjin/banbot:3
 #RUN apt-get update
 #RUN apt-get upgrade -qy
 #RUN apt-get install iptables redsocks curl wget lynx -qy
@@ -12,4 +12,4 @@ COPY . /banbot
 WORKDIR /banbot
 RUN python setup.py install
 
-ENTRYPOINT ["/bin/bash", "scripts/run_docker.sh"]
+# ENTRYPOINT ["/bin/bash", "scripts/run_docker.sh"]
