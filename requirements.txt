@@ -5,7 +5,6 @@ arrow
 sqlalchemy
 psycopg2-binary
 cachetools
-corpwechatbot
 numpy
 asyncpg
 APScheduler
@@ -16,7 +15,12 @@ tabulate
 PyYaml
 aiohttp
 psutil
-jwt
+PyJWT
+python-dateutil
 
+python-telegram-bot
+corpwechatbot
+
+pydantic
 fastapi
 uvicorn
