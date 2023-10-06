@@ -17,7 +17,7 @@ class BaseStrategy:
     '指定运行周期，从里面计算最小符合分数的周期，不提供尝试使用config.json中run_timeframes或Kline.agg_list'
     params = []
     '传入参数'
-    warmup_num = 600
+    warmup_num = 60
     min_tfscore = 0.8
     nofee_tfscore = 0.6
     max_fee = 0.002

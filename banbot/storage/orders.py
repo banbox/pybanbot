@@ -327,9 +327,10 @@ class InOutOrder(BaseDbModel, InfoPart):
                 get_amount *= (1 - self.exit.fee)  # 出场后的数量
             fee_cost = 0
         # TODO: 当定价货币不是USD时，这里需要计算对应USD的利润
-        self.profit = get_amount * price - ent_quote_amount - fee_cost
+        clean_profit = get_amount * price - ent_quote_amount
         if self.short:
-            self.profit = 0 - self.profit
+            clean_profit = 0 - clean_profit
+        self.profit = clean_profit - fee_cost
         if self.leverage:
             ent_quote_amount /= self.leverage
         self.profit_rate = self.profit / ent_quote_amount
