@@ -66,6 +66,8 @@ class OrderManager(metaclass=SingletonArg):
 
     async def _fire(self, od: InOutOrder, enter: bool):
         from banbot.util.misc import run_async
+        call_stack = '\n'.join(traceback.format_stack())
+        print(f'fire od cb: {call_stack}')
         pair_tf = f'{self.name}_{self.data_mgr.market}_{od.symbol}_{od.timeframe}'
         with TempContext(pair_tf):
             try:
@@ -964,7 +966,7 @@ class LiveOrderManager(OrderManager):
         od_type = sub_od.order_type or self.od_type
         order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
         print_args = [is_enter, od.symbol, od_type, side, amount, price, params, order]
-        logger.debug('create exg order: %s, %s, %s, %s, %s, %s, %s, %s', print_args)
+        logger.debug('create exg order: %s, %s, %s, %s, %s, %s, %s, %s', *print_args)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)

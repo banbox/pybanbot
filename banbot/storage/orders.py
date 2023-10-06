@@ -225,7 +225,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         exs = ExSymbol.get_by_id(self.sid)
         ctx = get_context(f'{exs.exchange}_{exs.market}_{exs.symbol}_{self.timeframe}')
         tf_secs = tf_to_secs(self.timeframe)
-        return round((ctx[bar_time][0] - time_ms) / tf_secs / 1000)
+        return round((ctx[bar_time][1] - time_ms) / tf_secs / 1000)
 
     @property
     def elp_num_enter(self):
