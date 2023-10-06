@@ -719,8 +719,8 @@ class LiveOrderManager(OrderManager):
                 if iod.short != is_short:
                     continue
                 before_amt = od_amount
-                od_amount = await self._try_fill_exit(iod, od_amount, od_price, od_time, od['id'], od['type'],
-                                                fee_name, fee_rate)
+                od_amount = (await self._try_fill_exit(iod, od_amount, od_price, od_time, od['id'], od['type'],
+                                                       fee_name, fee_rate))[0]
                 fill_amt = before_amt - od_amount
                 tag_ = '平空' if is_short else '平多'
                 logger.info(
@@ -1100,7 +1100,7 @@ class LiveOrderManager(OrderManager):
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
 
     async def _try_fill_exit(self, iod: InOutOrder, filled: float, od_price: float, od_time: int, order_id: str,
-                       order_type: str, fee_name: str, fee_rate: float):
+                             order_type: str, fee_name: str, fee_rate: float):
         '''
         尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
         '''
@@ -1108,25 +1108,26 @@ class LiveOrderManager(OrderManager):
             ava_amount = iod.exit.amount - iod.exit.filled
         else:
             ava_amount = iod.enter_amount
-        if filled >= ava_amount:
+        if filled >= ava_amount * 0.99:
             fill_amt = ava_amount
-            exit_status = OrderStatus.Close
             filled -= ava_amount
+            part = iod.cut_part(fill_amt)
         else:
             fill_amt = filled
-            exit_status = OrderStatus.PartOk
             filled = 0
-        iod.update_exit(amount=iod.enter.amount, filled=fill_amt, order_type=order_type,
-                        order_id=order_id, price=od_price, average=od_price,
-                        status=exit_status, fee=fee_rate, fee_type=fee_name,
-                        create_at=od_time, update_at=od_time)
-        iod.exit_tag = ExitTags.user_exit
-        iod.exit_at = od_time
-        if exit_status == OrderStatus.Close:
-            iod.status = InOutStatus.FullExit
-            if iod.id:
-                await iod.save()
-        return filled
+            part = iod
+        part.update_exit(amount=iod.enter.amount, filled=fill_amt, order_type=order_type,
+                         order_id=order_id, price=od_price, average=od_price,
+                         status=OrderStatus.Close, fee=fee_rate, fee_type=fee_name,
+                         create_at=od_time, update_at=od_time)
+        part.exit_tag = ExitTags.third
+        part.exit_at = od_time
+        part.status = InOutStatus.FullExit
+        await iod.save()
+        if not part.id:
+            # 没有id说明是分离出来的订单，需要保存
+            await part.save()
+        return filled, part
 
     async def _exit_any_bnb_order(self, trade: dict) -> bool:
         info: dict = trade['info']
@@ -1154,13 +1155,14 @@ class LiveOrderManager(OrderManager):
             fee_val /= filled
         for iod in open_ods:
             # 尝试平仓
-            filled = await self._try_fill_exit(iod, filled, od_price, od_time, order_id, od_type, fee_name, fee_val)
+            filled, part = await self._try_fill_exit(iod, filled, od_price, od_time, order_id,
+                                                     od_type, fee_name, fee_val)
+            if part.status == InOutStatus.FullExit:
+                await self._finish_order(part)
+                logger.debug('exit : %s by third %s', part, trade)
+                await self._fire(part, False)
             if filled <= min_dust:
                 break
-            if iod.status == InOutStatus.FullExit:
-                await self._finish_order(iod)
-                logger.debug('exit any: %s', iod)
-                await self._fire(iod, False)
         if not is_reduce_only and filled > min_dust and self.allow_take_over:
             # 有剩余数量，创建相反订单
             exs = ExSymbol.get(self.name, self.market_type, pair)

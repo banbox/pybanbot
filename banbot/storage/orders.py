@@ -43,6 +43,8 @@ class ExitTags:
     '发生错误时强制平仓'
     user_exit = 'user_exit'
     '用户主动平仓'
+    third = 'third'
+    '第三方平仓：从收到的推送流中更新订单状态'
     fatal_err = 'fatal_err'
     '退出时交易所返回错误，无法追踪订单状态'
     pair_del = 'pair_del'
