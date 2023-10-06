@@ -963,6 +963,8 @@ class LiveOrderManager(OrderManager):
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
         od_type = sub_od.order_type or self.od_type
         order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
+        print_args = [is_enter, od.symbol, od_type, side, amount, price, params, order]
+        logger.debug('create exg order: %s, %s, %s, %s, %s, %s, %s, %s', print_args)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)
@@ -975,6 +977,7 @@ class LiveOrderManager(OrderManager):
                 # 平仓，取消关联订单
                 await self._cancel_trigger_ods(od)
             if sub_od.status == OrderStatus.Close:
+                logger.debug('fire od: %s %s %s %s', is_enter, sub_od.status, sub_od.filled, sub_od.amount)
                 await self._fire(od, is_enter)
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
@@ -1042,7 +1045,8 @@ class LiveOrderManager(OrderManager):
             inout_od.status = inout_status
         if inout_status == InOutStatus.FullExit:
             await self._finish_order(inout_od)
-        await self._fire(inout_od, od.enter)
+            logger.debug('fire exg od: %s', inout_od)
+            await self._fire(inout_od, od.enter)
 
     async def _update_order(self, od: Order, data: dict):
         if self.name.find('binance') >= 0:
@@ -1144,6 +1148,7 @@ class LiveOrderManager(OrderManager):
                 break
             if iod.status == InOutStatus.FullExit:
                 await self._finish_order(iod)
+                logger.debug('exit any: %s', iod)
                 await self._fire(iod, False)
         if not is_reduce_only and filled > min_dust and self.allow_take_over:
             # 有剩余数量，创建相反订单
@@ -1152,6 +1157,7 @@ class LiveOrderManager(OrderManager):
                                         OrderStatus.Close, order_id)
             if iod:
                 await iod.save()
+                logger.debug('enter for left: %s', iod)
                 await self._fire(iod, True)
         return True
 
@@ -1219,6 +1225,7 @@ class LiveOrderManager(OrderManager):
                                    btime.time_ms(), od_status, trade['id'])
         if od:
             await od.save()
+            logger.debug('enter od: %s', od)
             await self._fire(od, True)
             stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')
             stg = next((stg for stg in stg_list if stg.name == self.take_over_stgy), None)
@@ -1270,6 +1277,7 @@ class LiveOrderManager(OrderManager):
                 await self._cancel_trigger_ods(od)
                 # 这里未入场直接退出的，不应该fire
                 return
+            logger.debug('exit uncomple od: %s', od)
             await self._fire(od, True)
         if not od.exit.price:
             od.exit.price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[1]
