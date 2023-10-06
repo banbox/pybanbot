@@ -71,7 +71,7 @@ class OrderManager(metaclass=SingletonArg):
             try:
                 await run_async(self.callback, od, enter)
             except Exception:
-                logger.exception(f'fire od callback fail {od.id}, enter: {enter} {traceback.format_stack()}')
+                logger.exception(f'fire od callback fail {od.id} {od}, enter: {enter} {traceback.format_stack()}')
 
     def get_context(self, od: InOutOrder):
         pair_tf = f'{self.name}_{self.market_type}_{od.symbol}_{od.timeframe}'
