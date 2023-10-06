@@ -41,4 +41,4 @@ class InfoPart:
 
     def set_info(self, **kwargs):
         self.infos.update(kwargs)
-        self.info = json.dumps(self.infos)
+        self.info = json.dumps(self.infos, ensure_ascii=False)

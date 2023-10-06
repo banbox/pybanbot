@@ -5,6 +5,7 @@
 # Date  : 2023/3/21
 import copy
 import json
+import math
 from dataclasses import dataclass
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
@@ -123,8 +124,9 @@ class Order(BaseDbModel):
             # 从数据库读取映射对象。这里不用设置，否则会覆盖数据库的值
             data = dict()
         else:
+            cur_stamp = math.floor(btime.time() * 1000)
             data = dict(enter=False, status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
-                        side='buy', filled=0, create_at=btime.time(), update_at=btime.time())
+                        side='buy', filled=0, create_at=cur_stamp, update_at=cur_stamp)
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
