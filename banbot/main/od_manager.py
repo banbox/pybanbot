@@ -66,8 +66,6 @@ class OrderManager(metaclass=SingletonArg):
 
     async def _fire(self, od: InOutOrder, enter: bool):
         from banbot.util.misc import run_async
-        call_stack = '\n'.join(traceback.format_stack())
-        print(f'fire od cb: {call_stack}')
         pair_tf = f'{self.name}_{self.data_mgr.market}_{od.symbol}_{od.timeframe}'
         with TempContext(pair_tf):
             try:
@@ -959,14 +957,19 @@ class LiveOrderManager(OrderManager):
                 od.leverage = item.leverage
                 sub_od.amount *= rate
                 od.quote_cost *= rate
+        od_type = sub_od.order_type or self.od_type
+        if not sub_od.price and od_type.find('market') < 0:
+            # 非市价单时，计算价格
+            buy_price, sell_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))
+            cur_price = buy_price if sub_od.side == 'buy' else sell_price
+            sub_od.price = self.exchange.pres_price(od.symbol, cur_price)
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         params = dict()
         if self.market_type == 'future':
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
-        od_type = sub_od.order_type or self.od_type
         order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
         print_args = [is_enter, od.symbol, od_type, side, amount, price, params, order]
-        logger.debug('create exg order: %s, %s, %s, %s, %s, %s, %s, %s', *print_args)
+        logger.debug('create exg order res: %s, %s, %s, %s, %s, %s, %s, %s', *print_args)
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
             await self._update_subod_by_ccxtres(od, is_enter, order)
@@ -1245,14 +1248,13 @@ class LiveOrderManager(OrderManager):
         if od.exit_tag:
             # 订单已被取消，不再提交到交易所
             return
-        if not od.enter.price:
-            enter_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[0]
-            od.enter.price = self.exchange.pres_price(od.symbol, enter_price)
         if not od.enter.amount:
             if not od.quote_cost:
                 raise ValueError(f'quote_cost is required to calc enter_amount')
             try:
-                od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / od.enter.price)
+                real_price = MarketPrice.get(od.symbol)
+                # 这里应使用市价计算数量，因传入价格可能和市价相差很大
+                od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / real_price)
             except Exception:
                 logger.error(f'pres_amount for order fail: {od.dict()}')
         try:
@@ -1287,8 +1289,6 @@ class LiveOrderManager(OrderManager):
                 return
             logger.debug('exit uncomple od: %s', od)
             await self._fire(od, True)
-        if not od.exit.price:
-            od.exit.price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))[1]
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 
