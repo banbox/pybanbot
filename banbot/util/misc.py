@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-from typing import List, Optional, Callable, Dict, Any
+from typing import List, Optional, Callable, Dict, Any, ClassVar
 _run_env = None
 
 
@@ -282,3 +282,55 @@ class LazyTqdm:
         if self.bar is not None:
             self.bar.close()
             self.bar = None
+
+
+class BanLock:
+    '''
+    带超时的异步锁。
+    根据键维护锁对象。超时未获取锁时发出asyncio.TimeoutError异常
+    '''
+    _locks: ClassVar[Dict[str, asyncio.Lock]] = dict()
+    _holds: ClassVar[Dict[str, int]] = dict()
+
+    def __init__(self, key: str, timeout=0, force_on_fail=False):
+        '''
+        :param key: 锁的键
+        :param timeout: 超时时间，默认0，永远等待
+        :param force_on_fail: 超时是否强制获取锁而不发出异常
+        '''
+        self.key = key
+        self.timeout = timeout
+        self.force = force_on_fail
+        self._obj: Optional[asyncio.Lock] = None
+
+    async def __aenter__(self):
+        if self.key not in self._locks:
+            lock = asyncio.Lock()
+            self._locks[self.key] = lock
+            self._holds[self.key] = 1
+        else:
+            lock = self._locks[self.key]
+            self._holds[self.key] += 1
+        if not self.timeout:
+            await lock.acquire()
+        elif self.force:
+            try:
+                await asyncio.wait_for(lock.acquire(), self.timeout)
+            except asyncio.TimeoutError:
+                from banbot.util.common import logger
+                logger.error(f'get lock timeout, force lock: {self.key}')
+        else:
+            await asyncio.wait_for(lock.acquire(), self.timeout)
+        self._obj = lock
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.key in self._holds:
+            self._holds[self.key] -= 1
+        if not self._obj:
+            return
+        lock = self._obj
+        if lock.locked():
+            lock.release()
+        if not self._holds.get(self.key) and self.key in self._locks:
+            # 只有当此锁没有其他使用者时，才删除引用
+            del self._locks[self.key]

@@ -527,7 +527,7 @@ class LiveOrderManager(OrderManager):
         LiveOrderManager.obj = self
         self.exchange = exchange
         self.wallets: CryptoWallet = wallets
-        self.exg_orders: Dict[Tuple[str, str], int] = dict()
+        self.exg_orders: Dict[Tuple[str, str], Tuple[int, int]] = dict()
         self.unmatch_trades: Dict[str, dict] = dict()
         '未匹配交易，key: symbol, order_id；每个订单只保留一个未匹配交易，也只应该有一个'
         self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
@@ -878,7 +878,7 @@ class LiveOrderManager(OrderManager):
             del self.exg_orders[(od.symbol, sub_od.order_id)]
         sub_od.order_id = order["id"]
         exg_key = od.symbol, sub_od.order_id
-        self.exg_orders[exg_key] = sub_od.id
+        self.exg_orders[exg_key] = od.id, sub_od.id
         logger.debug('create order: %s %s %s', od.symbol, sub_od.order_id, order)
         new_num, old_num = self._check_new_trades(order['trades'])
         if new_num or self.market_type != 'spot':
@@ -1051,6 +1051,9 @@ class LiveOrderManager(OrderManager):
             await self._fire(inout_od, od.enter)
 
     async def _update_order(self, od: Order, data: dict):
+        if od.status == OrderStatus.Close:
+            logger.warning(f'order: {od.inout_id} enter: {od.enter} complete: {od}, ignore trade: {data}')
+            return
         if self.name.find('binance') >= 0:
             await self._update_bnb_order(od, data)
         else:
@@ -1079,12 +1082,15 @@ class LiveOrderManager(OrderManager):
                 if od_key not in self.exg_orders:
                     self.unmatch_trades[trade_key] = data
                     continue
-                sub_od: Order = await sess.get(Order, self.exg_orders[od_key])
-                await self._update_order(sub_od, data)
-                related_ods.add(sub_od)
-                await sess.commit()
+                iod_id, sub_id = self.exg_orders[od_key]
+                async with BanLock(f'iod_{iod_id}', 5, force_on_fail=True):
+                    sub_od: Order = await sess.get(Order, sub_id)
+                    await self._update_order(sub_od, data)
+                    related_ods.add(sub_od)
+                    await sess.commit()
             for sub_od in related_ods:
-                self._consume_unmatchs(sub_od)
+                async with BanLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
+                    self._consume_unmatchs(sub_od)
             await sess.commit()
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
@@ -1298,22 +1304,23 @@ class LiveOrderManager(OrderManager):
         try:
             od: Optional[InOutOrder] = None
             try:
-                async with dba():
-                    sess = dba.session
-                    od = await InOutOrder.get(sess, job.od_id)
-                    in_sess1 = od in sess
-                    if job.action == OrderJob.ACT_ENTER:
-                        await self._exec_order_enter(od)
-                    elif job.action == OrderJob.ACT_EXIT:
-                        await self._exec_order_exit(od)
-                    elif job.action == OrderJob.ACT_EDITTG:
-                        await self._edit_trigger_od(od, job.data)
-                    else:
-                        logger.error(f'unsupport order job type: {job.action}')
-                    cur_in_sess = od in sess
-                    if not in_sess1 or not cur_in_sess:
-                        logger.error(f'before in sess: {in_sess1}, cur: {cur_in_sess}, {od}')
-                    await sess.commit()
+                async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
+                    async with dba():
+                        sess = dba.session
+                        od = await InOutOrder.get(sess, job.od_id)
+                        in_sess1 = od in sess
+                        if job.action == OrderJob.ACT_ENTER:
+                            await self._exec_order_enter(od)
+                        elif job.action == OrderJob.ACT_EXIT:
+                            await self._exec_order_exit(od)
+                        elif job.action == OrderJob.ACT_EDITTG:
+                            await self._edit_trigger_od(od, job.data)
+                        else:
+                            logger.error(f'unsupport order job type: {job.action}')
+                        cur_in_sess = od in sess
+                        if not in_sess1 or not cur_in_sess:
+                            logger.error(f'before in sess: {in_sess1}, cur: {cur_in_sess}, {od}')
+                        await sess.commit()
             except Exception as e:
                 if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                     err_msg = str(e)

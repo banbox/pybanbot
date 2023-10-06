@@ -5,8 +5,10 @@
 # Date  : 2023/5/18
 import random
 import time
+import asyncio
 
-from banbot.util.common import MeasureTime
+from banbot.util.common import MeasureTime, logger
+from banbot.util.misc import BanLock
 
 
 def test_measure():
@@ -73,4 +75,20 @@ def test_for_performance():
         print(f'{name} cost: {round(cost_a * 1000)} ms, {res_a[:30]}')
 
 
-test_for_performance()
+async def test_ban_lock():
+    tasks = ['a', 'b', 'c', 'd']
+    jobs = [only_run_once(n) for n in tasks]
+    await asyncio.gather(*jobs)
+    logger.info('all complete')
+
+
+async def only_run_once(name: str):
+    async with BanLock('test', 10, force_on_fail=True):
+        cost = random.random()
+        logger.info(f'{name} runing {round(cost * 1000)} ms')
+        await asyncio.sleep(cost)
+        logger.info(f'{name} complete')
+
+
+if __name__ == '__main__':
+    asyncio.run(test_ban_lock())
