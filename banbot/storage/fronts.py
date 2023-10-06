@@ -79,7 +79,7 @@ class Overlay(BaseDbModel):
         sess = dba.session
         fts = [Overlay.user == user_id, Overlay.id.in_(set(id_list))]
         stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
-        count = await sess.execute(stat)
+        count = (await sess.execute(stat)).rowcount
         await sess.commit()
         return count
 
@@ -91,6 +91,6 @@ class Overlay(BaseDbModel):
         fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= stop_ms]
         stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
-        count = await sess.execute(stat)
+        count = (await sess.execute(stat)).rowcount
         await sess.commit()
         return count
