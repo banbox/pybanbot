@@ -60,6 +60,8 @@ AVAILABLE_CLI_OPTIONS = {
     "debug": Arg('--debug', help='set logging level to debug', action='store_true', default=False),
     "with_spider": Arg('--spider', help='start spider if not running', action='store_true', default=False),
     "nocompress": Arg('--no-compress', help='disable compress for hyper table', action='store_true', default=False),
+    "no_default": Arg('--no-default', help='ignore default: config.yml, config.local.yml',
+                      action='store_true', default=False),
     "yes": Arg('--yes', help='skip confirm', action='store_true', default=False),
     "cluster": Arg('--cluster', help='run in cluster mode', action='store_true', default=False),
     "medium": Arg('--medium', help='data medium:db,file', default='db'),

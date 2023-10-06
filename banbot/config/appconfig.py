@@ -120,9 +120,10 @@ class AppConfig(metaclass=Singleton):
         run_env = get_run_env()
         if run_env != 'prod':
             logger.info(f'Running in {run_env}, Please set `ban_run_env=prod` in production running')
-        path_list = self.args.get("config")
-        if not path_list:
-            path_list = self._get_def_config_paths()
+        path_list = [] if self.args.get('no_default') else self._get_def_config_paths()
+        in_paths = self.args.get("config")
+        if in_paths:
+            path_list.extend(in_paths)
         config = load_from_files(path_list)
         if not config.get('data_dir'):
             import os
@@ -201,7 +202,7 @@ class AppConfig(metaclass=Singleton):
         if not os.path.isdir(data_dir):
             raise ValueError(f'`ban_data_dir`:{data_dir} not exits, config load fail')
         result = []
-        try_names = ['config.json', 'config.yml', 'config.local.json', 'config.local.yml']
+        try_names = ['config.yml', 'config.local.yml']
         for name in try_names:
             full_path = os.path.join(data_dir, name)
             if os.path.isfile(full_path):
