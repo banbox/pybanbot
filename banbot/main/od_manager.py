@@ -1262,20 +1262,31 @@ class LiveOrderManager(OrderManager):
                 od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / real_price)
             except Exception:
                 logger.error(f'pres_amount for order fail: {od.dict()}')
-        try:
-            await self._create_exg_order(od, True)
-        except ccxt.InsufficientFunds:
+
+        async def force_exit_od():
             od.local_exit(ExitTags.force_exit, status_msg='InsufficientFunds')
             sess = dba.session
             await sess.delete(od)
             if od.enter:
                 await sess.delete(od.enter)
+        try:
+            await self._create_exg_order(od, True)
+        except ccxt.InsufficientFunds:
+            await force_exit_od()
             err_msg = f'InsufficientFunds open cancel: {od}'
             if btime.time() - self.last_lack_ts > 3600:
                 logger.error(err_msg)
                 self.last_lack_ts = btime.time()
             else:
                 logger.warning(err_msg)
+        except ccxt.ExchangeError as e:
+            err_msg = str(e)
+            if err_msg.find(':-4061') > 0:
+                side = 'SHORT' if od.short else 'LONG'
+                logger.error(f'enter fail, SideNotMatch: order: {side}, {e}')
+                await force_exit_od()
+            else:
+                raise
 
     async def _exec_order_exit(self, od: InOutOrder):
         if (not od.enter.amount or od.enter.filled < od.enter.amount) and od.enter.status < OrderStatus.Close:

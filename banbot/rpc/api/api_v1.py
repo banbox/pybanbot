@@ -55,33 +55,33 @@ async def count(rpc: RPC = Depends(get_rpc)):
 
 
 @router.get('/statistics', tags=['info'])
-def statistics(rpc: RPC = Depends(get_rpc)):
+async def statistics(rpc: RPC = Depends(get_rpc)):
     '''
     整体面板统计信息
     '''
-    return rpc.dash_statistics()
+    return await rpc.dash_statistics()
 
 
 @router.get('/stats', response_model=Stats, tags=['info'])
-def stats(rpc: RPC = Depends(get_rpc)):
+async def stats(rpc: RPC = Depends(get_rpc)):
     '''
     显示各个平仓信号的胜率。盈亏时持仓时间。
     '''
-    return rpc.stats()
+    return await rpc.stats()
 
 
 @router.get('/profit_by', tags=['info'])
-def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
-    return rpc.timeunit_profit(limit, unit)
+async def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
+    return await rpc.timeunit_profit(limit, unit)
 
 
 @router.get('/orders', tags=['info'])
-def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depends(get_rpc)):
+async def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depends(get_rpc)):
     '''
     查询订单列表。status=open表示查询未平仓订单；status=his查询已平仓订单
     '''
     with_total = limit > 0
-    return rpc.get_orders(status, limit, offset, with_total, order_by_id=True)
+    return await rpc.get_orders(status, limit, offset, with_total, order_by_id=True)
 
 
 # /forcebuy is deprecated with short addition. use /forceentry instead
@@ -99,8 +99,8 @@ async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
 
 # /forcesell is deprecated with short addition. use /forceexit instead
 @router.post('/forceexit', tags=['trading'])
-def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
-    return rpc.force_exit(payload.order_id)
+async def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
+    return await rpc.force_exit(payload.order_id)
 
 
 @router.get('/pairlist', tags=['info', 'pairlist'])
@@ -152,11 +152,11 @@ def pair_stgs():
 
 
 @router.get('/performance', response_model=List[PerformanceEntry], tags=['info'])
-def performance(rpc: RPC = Depends(get_rpc)):
+async def performance(rpc: RPC = Depends(get_rpc)):
     '''
     按币种统计大致盈利状态。
     '''
-    return rpc.pair_performance()
+    return await rpc.pair_performance()
 
 
 @router.get('/strategy/{strategy}', tags=['strategy'])
