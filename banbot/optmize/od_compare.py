@@ -3,7 +3,6 @@
 # File  : od_analyze.py
 # Author: anyongjin
 # Date  : 2023/5/7
-from typing import *
 
 import numpy as np
 
@@ -93,8 +92,8 @@ async def compare_orders(task_ids: List[int], task_hash: str):
         where_list = [BotTask.id.in_(set(task_ids))]
         filter_text = 'task_ids:' + str(task_ids)
     bt_wheres = where_list + [BotTask.mode == RunMode.BACKTEST.value]
-    qtask_st = select(BotTask).where(*bt_wheres).order_by(BotTask.create_at.desc()).one()
-    bt_task: BotTask = await sess.scalars(qtask_st)
+    qtask_st = select(BotTask).where(*bt_wheres).order_by(BotTask.create_at.desc()).limit(1)
+    bt_task: BotTask = (await sess.scalars(qtask_st)).first()
     if not bt_task:
         logger.error('no Backtest Task found for ' + filter_text)
         return

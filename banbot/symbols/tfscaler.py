@@ -8,7 +8,7 @@ from typing import List, Tuple, Dict
 from banbot.compute.sta_inds import ocol, hcol, lcol, ccol
 from banbot.data.tools import fast_bulk_ohlcv
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.storage import KLine, ExSymbol, BotGlobal
+from banbot.storage import ExSymbol, BotGlobal
 from banbot.util.common import logger
 
 

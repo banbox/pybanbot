@@ -3,19 +3,20 @@
 # File  : webserver.py
 # Author: anyongjin
 # Date  : 2023/9/6
-from starlette.responses import JSONResponse
+from ipaddress import IPv4Address
+from typing import Any
 
 import orjson
 import uvicorn
-from ipaddress import IPv4Address
-from typing import Any, Optional
-from banbot.config import Config
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from banbot.util.common import logger
+from starlette.responses import JSONResponse
+
+from banbot.config import Config
 from banbot.rpc import RPC, RPCException
 from banbot.rpc.api.uvicorn_api import UvicornServer
 from banbot.types import *
+from banbot.util.common import logger
 
 
 class MyJSONResponse(JSONResponse):

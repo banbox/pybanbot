@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/4/19
 import numpy as np
-from cachetools import TTLCache
 
 from banbot.compute.sta_inds import hcol, lcol
 from banbot.symbols.pairlist.base import *

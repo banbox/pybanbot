@@ -7,7 +7,7 @@ from banbot.storage import *
 from banbot.exchange.exchange_utils import *
 from banbot.strategy.resolver import get_strategy
 from banbot.compute.ctx import *
-from banbot.compute.sta_inds import tcol, ccol
+from banbot.compute.sta_inds import tcol
 from banbot.compute.tools import append_new_bar
 from banbot.config import AppConfig
 from banbot.util.common import logger

@@ -61,7 +61,7 @@ class Webhook:
         self._url = self._config['webhook'].get('url')
         self._retries = self._config['webhook'].get('retries', 0)
         self._retry_delay = self._config['webhook'].get('retry_delay', 0.1)
-        self.keywords = item.get('keywords' ,[])
+        self.keywords = item.get('keywords', [])
         if self.keywords:
             self.keywords = [w for w in self.keywords if w]
 

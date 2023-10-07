@@ -7,14 +7,15 @@ import asyncio
 import datetime
 import math
 import os
+
 import six
-from banbot.util.misc import LazyTqdm
-from banbot.config.consts import *
+
 from banbot.config.timerange import TimeRange
-from banbot.exchange.exchange_utils import *
-from banbot.util.common import logger
 from banbot.exchange.crypto_exchange import CryptoExchange
+from banbot.exchange.exchange_utils import *
 from banbot.storage.symbols import ExSymbol
+from banbot.util.common import logger
+from banbot.util.misc import LazyTqdm
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:

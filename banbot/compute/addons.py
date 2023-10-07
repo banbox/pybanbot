@@ -6,41 +6,6 @@
 from banbot.compute.patterns import *
 
 
-def _log_extrem(log_list: list, ma: StaSMA, min_dist: float = 0):
-    ind_vals = ma[-3:]
-    mid_ind = ind_vals[-2]
-    if min(ind_vals[-3], ind_vals[-1]) <= mid_ind <= max(ind_vals[-3], ind_vals[-1]):
-        return
-    extype = 1 if mid_ind > ind_vals[-1] else -1
-    if log_list:
-        pextype, pprice = log_list[-1][2], log_list[-1][1]
-        if extype == pextype:
-            if extype == 1 and mid_ind > pprice or extype == -1 and mid_ind < pprice:
-                log_list.pop(-1)
-                log_list.append((bar_num.get() - 1, mid_ind, extype))
-            return
-        if abs(pprice - mid_ind) < min_dist:
-            # 与前一个极值点波动过低，过滤掉
-            return
-    log_list.append((bar_num.get() - 1, mid_ind, extype))
-    if len(log_list) > 150:
-        del log_list[:50]
-
-
-def log_ma_extrems(ma_list: List[Tuple[List, StaSMA, float]]):
-    '''
-    检查当前是否出现极值点并记录。
-    :return:
-    '''
-    bar_len_val = LongBarLen.get()
-    if len(ma_list[-1][1]) < 3 or np.isnan(bar_len_val):
-        return
-    for item in ma_list:
-        log_ma, ma, fac = item
-        if not np.isnan(ma[-3]):
-            _log_extrem(log_ma, ma, bar_len_val * fac)
-
-
 def make_big_vol_prc(nvol: StaNVol, ntr_rol: StaNTRRoll):
     def calc_func(arr: np.ndarray) -> float:
         '''

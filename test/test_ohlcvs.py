@@ -3,13 +3,12 @@
 # File  : test_ohlcvs.py
 # Author: anyongjin
 # Date  : 2023/5/17
-import asyncio
 import csv
 import random
 import time
 
-from banbot.data.tools import *
 from banbot.config import AppConfig
+from banbot.data.tools import *
 
 
 async def test_get_ohlcv():

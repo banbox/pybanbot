@@ -358,7 +358,6 @@ class InOutOrder(BaseDbModel, InfoPart):
             part_exit = self.exit.cut_part(exit_rate)
             part_exit.inout_id = part.id
             part.exit = part_exit
-        part.save()
         return part
 
     async def _save_to_db(self):
@@ -414,7 +413,6 @@ class InOutOrder(BaseDbModel, InfoPart):
         self.update_by_price(price)
         if status_msg:
             self.set_info(status_msg=status_msg)
-        self.save()
 
     def force_exit(self, tag: str = None, status_msg: str = None):
         '''

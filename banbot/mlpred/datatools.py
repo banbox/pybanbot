@@ -11,10 +11,9 @@ import os
 import time
 from pathlib import Path
 from typing import Tuple, Optional
+import pandas as pd
 
-import freqtrade.vendor.qtpylib.indicators as qtpylib
-from freqtrade.configuration import TimeRange
-from freqtrade.data import history
+from banbot.config.timerange import TimeRange
 
 from banbot.compute.classic_inds import *
 from banbot.mlpred.consts import *

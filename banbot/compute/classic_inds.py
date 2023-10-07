@@ -20,7 +20,7 @@ def super_smoother(col: Series, period, prev_nan: bool = True) -> np.ndarray:
     :param prev_nan: 前24个无效，是否替换为nan
     :return:
     '''
-    from banbot.compute.utils import np_shift
+    from banbot.util.num_utils import np_shift
     a1 = np.exp(-1.414 * np.pi / (0.5 * period))
     c2 = 2 * a1 * np.cos(1.414 * 180 / (0.5 * period))
     c3 = -a1 * a1
@@ -46,7 +46,7 @@ def re_trend_flex(col: Series, period: int, is_trend: bool = True):
     :return:
     '''
     smooth = super_smoother(col, period, False)
-    from banbot.compute.utils import np_shift
+    from banbot.util.num_utils import np_shift
     prev_res = np_shift(smooth, period, 0)
     slope = (prev_res - smooth) / period
     arr_sum = np.zeros(len(smooth))

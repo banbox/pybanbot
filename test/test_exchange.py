@@ -3,13 +3,12 @@
 # File  : test_exchange.py
 # Author: anyongjin
 # Date  : 2023/8/16
-import asyncio
+
+import logging
 
 from banbot.exchange.crypto_exchange import *
-from banbot.main.od_manager import LiveOrderManager
 from banbot.main.wallets import CryptoWallet
-from banbot.data.provider import LiveDataProvider
-import logging
+
 logging.basicConfig(level=logging.DEBUG)
 
 

@@ -3,7 +3,6 @@
 # File  : notify_mgr.py
 # Author: anyongjin
 # Date  : 2023/4/1
-import asyncio
 
 from banbot.rpc.webhook import *
 from banbot.util import btime

@@ -3,7 +3,6 @@
 # File  : spider.py
 # Author: anyongjin
 # Date  : 2023/4/25
-import asyncio
 import os.path
 
 from asyncio import Queue

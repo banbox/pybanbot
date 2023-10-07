@@ -3,8 +3,6 @@
 # File  : test_stas.py
 # Author: anyongjin
 # Date  : 2023/8/30
-from banbot.compute.sta_inds import *
-from banbot.compute import *
 from test.common import *
 
 

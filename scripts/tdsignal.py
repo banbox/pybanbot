@@ -4,16 +4,14 @@
 # Author: anyongjin
 # Date  : 2023/7/1
 import asyncio
-import random
+import datetime
 
 import pandas as pd
 import six
-import datetime
 
-from banbot.storage.symbols import get_symbol_market
+from banbot.exchange.crypto_exchange import secs_to_tf
 from banbot.storage import *
 from banbot.util import btime
-from banbot.exchange.crypto_exchange import secs_to_tf
 from banbot.util.common import logger
 
 

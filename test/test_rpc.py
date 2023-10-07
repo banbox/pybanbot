@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/9/12
 import asyncio
-import os
+
 from banbot.config import AppConfig
 from banbot.rpc import Notify, NotifyType
 

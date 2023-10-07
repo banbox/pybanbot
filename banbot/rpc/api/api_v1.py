@@ -50,8 +50,8 @@ def balance(rpc: RPC = Depends(get_rpc)):
 
 
 @router.get('/count', tags=['info'])
-def count(rpc: RPC = Depends(get_rpc)):
-    return rpc.open_num()
+async def count(rpc: RPC = Depends(get_rpc)):
+    return await rpc.open_num()
 
 
 @router.get('/statistics', tags=['info'])

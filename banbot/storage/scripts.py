@@ -3,7 +3,6 @@
 # File  : scripts.py
 # Author: anyongjin
 # Date  : 2023/4/24
-from typing import Any, Dict, List
 
 from banbot.storage import *
 from banbot import storage

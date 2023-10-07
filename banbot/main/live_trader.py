@@ -137,7 +137,7 @@ class LiveTrader(Trader):
         add_symbols = list(now_symbols.difference(old_symbols))
         # 检查删除的交易对是否有订单，有则添加回去
         if del_symbols:
-            open_ods = InOutOrder.open_orders(pairs=del_symbols)
+            open_ods = await InOutOrder.open_orders(pairs=del_symbols)
             for od in open_ods:
                 if od.symbol in del_symbols:
                     del_symbols.remove(od.symbol)

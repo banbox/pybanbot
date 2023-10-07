@@ -5,7 +5,6 @@
 # Date  : 2023/4/24
 import math
 import collections
-import asyncio
 from typing import Callable, Tuple, ClassVar, Iterable, Deque
 
 from banbot.exchange.exchange_utils import tf_to_secs

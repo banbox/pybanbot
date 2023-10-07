@@ -7,7 +7,7 @@ import asyncio
 import time
 
 import psutil
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from banbot.storage.common import *
 from banbot.config.consts import *
@@ -85,8 +85,8 @@ class RPC:
             'total': total,
         }
 
-    def open_num(self):
-        open_ods = InOutOrder.open_orders()
+    async def open_num(self):
+        open_ods = await InOutOrder.open_orders()
         return dict(
             open_num=len(open_ods),
             max_num=self.bot.order_mgr.max_open_orders,
@@ -333,7 +333,7 @@ class RPC:
         from banbot.compute import TempContext
         self._force_entry_validations(pair, side)
 
-        open_ods = InOutOrder.open_orders(pairs=pair)
+        open_ods = await InOutOrder.open_orders(pairs=pair)
         if len(open_ods) >= self.bot.order_mgr.max_open_orders:
             raise RPCException("Maximum number of trades is reached.")
 

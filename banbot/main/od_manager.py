@@ -17,7 +17,7 @@ from banbot.util.num_utils import to_pytypes
 min_dust = 0.00000001
 
 
-class OrderBook():
+class OrderBook:
     def __init__(self, **kwargs):
         self.bids = kwargs.get('bids')
         self.asks = kwargs.get('asks')
@@ -194,7 +194,7 @@ class OrderManager(metaclass=SingletonArg):
             # 精确指定退出订单ID时，忽略方向过滤
             if od_dir == 'both':
                 pass
-            elif od_dir == 'long' or sigout.get('short') == False:
+            elif od_dir == 'long' or sigout.get('short') is False:
                 order_list = [od for od in order_list if not od.short]
             elif od_dir == 'short' or sigout.get('short'):
                 order_list = [od for od in order_list if od.short]
@@ -404,6 +404,7 @@ class LocalOrderManager(OrderManager):
                 err_msg = f'{od} pres enter amount fail: {od.quote_cost} {ent_amount} : {e}'
                 logger.warning(err_msg)
                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                await dba.session.commit()
                 return
         ctx = self.get_context(od)
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
@@ -596,6 +597,7 @@ class LiveOrderManager(OrderManager):
         '''
         if op_ods:
             # 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
+            sess = dba.session
             ex_orders = await self.exchange.fetch_orders(pair, since_ms)
             for exod in ex_orders:
                 if exod['status'] != 'closed':
@@ -636,6 +638,7 @@ class LiveOrderManager(OrderManager):
                 long_pos['contracts'] = long_pos_amt
             if short_pos:
                 short_pos['contracts'] = short_pos_amt
+            await sess.commit()
         if not self.take_over_stgy:
             return
         if long_pos and long_pos['contracts'] > min_dust:
@@ -1333,6 +1336,7 @@ class LiveOrderManager(OrderManager):
                         else:
                             # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                             od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                        await dba.session.commit()
                     logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                 else:
                     logger.exception('consume order exception: %s', job)

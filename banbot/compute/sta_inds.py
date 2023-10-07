@@ -8,7 +8,6 @@
 函数式调用，传入序列变量，自动追踪历史结果。
 按序号取值，res[0]表示当前值，res[1]表示前一个。。。
 '''
-import numpy as np
 
 from banbot.compute.ctx import *
 from banbot.util.num_utils import *

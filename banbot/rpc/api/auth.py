@@ -6,10 +6,9 @@
 import logging
 import secrets
 from datetime import datetime, timedelta
-from typing import Any, Dict, Union
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.http import HTTPBasic, HTTPBasicCredentials
 from banbot.config import AppConfig

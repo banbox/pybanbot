@@ -10,8 +10,6 @@
 import pickle
 import statistics
 
-from banbot.compute.utils import *
-
 from banbot.mlpred import features as fts
 from banbot.mlpred.datatools import *
 

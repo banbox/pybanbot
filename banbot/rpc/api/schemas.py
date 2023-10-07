@@ -3,9 +3,9 @@
 # File  : schemas.py
 # Author: anyongjin
 # Date  : 2023/9/6
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 
 class ExchangeModePayloadMixin(BaseModel):

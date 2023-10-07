@@ -19,14 +19,14 @@ class probinanceusdm(ccxtpro.binanceusdm):
     async def watch_mark_prices(self, params={}):
         await self.load_markets()
         defaultType = self.safe_string(self.options, 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        api_type = self.safe_string(params, 'type', defaultType)
         subType, params = self.handle_sub_type_and_params('watchMarkPrices', None, params)
-        if self.isLinear(type, subType):
-            type = 'future'
-        elif self.isInverse(type, subType):
-            type = 'delivery'
+        if self.isLinear(api_type, subType):
+            api_type = 'future'
+        elif self.isInverse(api_type, subType):
+            api_type = 'delivery'
         messageHash = '!markPrice@arr'
-        url = self.urls['api']['ws'][type] + '/' + self.stream(type, messageHash)
+        url = self.urls['api']['ws'][api_type] + '/' + self.stream(api_type, messageHash)
         requestId = self.request_id(url)
         request = {
             'method': 'SUBSCRIBE',
@@ -84,18 +84,18 @@ class probinanceusdm(ccxtpro.binanceusdm):
         await self.load_markets()
         await self.authenticate(params)
         defaultType = self.safe_string(self.options, 'defaultType', 'spot')
-        type = self.safe_string(params, 'type', defaultType)
+        api_type = self.safe_string(params, 'type', defaultType)
         subType, params = self.handle_sub_type_and_params('watchAccountConfig', None, params)
-        if self.isLinear(type, subType):
-            type = 'future'
-        elif self.isInverse(type, subType):
-            type = 'delivery'
-        url = self.urls['api']['ws'][type] + '/' + self.options[type]['listenKey']
+        if self.isLinear(api_type, subType):
+            api_type = 'future'
+        elif self.isInverse(api_type, subType):
+            api_type = 'delivery'
+        url = self.urls['api']['ws'][api_type] + '/' + self.options[api_type]['listenKey']
         client = self.client(url)
-        self.set_balance_cache(client, type)
+        self.set_balance_cache(client, api_type)
         message = None
-        messageHash = type + ':accUpdate'
-        return await self.watch(url, messageHash, message, type)
+        messageHash = api_type + ':accUpdate'
+        return await self.watch(url, messageHash, message, api_type)
 
     def handle_account_update(self, client, message):
         '''

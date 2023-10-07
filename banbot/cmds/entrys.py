@@ -8,7 +8,6 @@
 '''
 import asyncio
 import signal
-from typing import *
 
 from banbot.config import AppConfig
 from banbot.storage.common import *
@@ -45,7 +44,7 @@ async def start_trading(args: Dict[str, Any]) -> int:
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")
-    except (KeyboardInterrupt):
+    except KeyboardInterrupt:
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
         asyncio.run(trader.cleanup())
@@ -76,7 +75,7 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")
-    except (KeyboardInterrupt):
+    except KeyboardInterrupt:
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
     finally:
