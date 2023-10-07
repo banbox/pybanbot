@@ -252,7 +252,7 @@ async def _correct_ohlcv_range(sid: int, timeframe: str, ohlcvs: List[Tuple], ag
     if agg_id < len(agg_ohlcvs):
         ins_rows.extend(agg_ohlcvs[agg_id:])
     if ins_rows:
-        await KLine.force_insert(sid, timeframe, ins_rows)
+        await KLine.force_insert(sess, sid, timeframe, ins_rows)
         ins_ts = [row[0] // 1000 for row in ins_rows]
         logger.info(f'insert {sid} {timeframe}: {ins_ts}')
 

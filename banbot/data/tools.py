@@ -258,12 +258,12 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto') -> int:
+                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', is_parallel=False) -> int:
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
     '''
-    from banbot.storage.klines import KLine, KHole
+    from banbot.storage.klines import KLine, KHole, dba
     if timeframe not in KLine.down_tfs:
         raise RuntimeError(f'can only download kline: {KLine.down_tfs}, current: {timeframe}')
     from banbot.util.common import MeasureTime
@@ -276,43 +276,48 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
         return 0
     if isinstance(pbar, six.string_types) and pbar == 'auto':
         pbar = LazyTqdm()
-    down_count = 0
-    if check_exist:
-        measure.start_for('query_range')
-        old_start, old_end = await KLine.query_range(exs.id, timeframe)
-        if old_start and old_end > old_start:
-            if start_ms < old_start:
-                # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
-                cur_end = round(old_start)
-                measure.start_for('fetch_start')
-                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
-                measure.start_for('insert_start')
-                down_count += await KLine.insert(exs.id, timeframe, predata)
-                measure.start_for('candle_conts_start')
-                await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata)
-                start_ms = old_end
-            elif end_ms > old_end:
-                if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
-                    # 最新部分缺失的较少，不再请求交易所，节省时间
+    cur_sess = dba.new_session() if is_parallel else None
+    try:
+        down_count = 0
+        if check_exist:
+            measure.start_for('query_range')
+            old_start, old_end = await KLine.query_range(exs.id, timeframe)
+            if old_start and old_end > old_start:
+                if start_ms < old_start:
+                    # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
+                    cur_end = round(old_start)
+                    measure.start_for('fetch_start')
+                    predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
+                    measure.start_for('insert_start')
+                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=cur_sess)
+                    measure.start_for('candle_conts_start')
+                    await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata, sess=cur_sess)
+                    start_ms = old_end
+                elif end_ms > old_end:
+                    if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
+                        # 最新部分缺失的较少，不再请求交易所，节省时间
+                        return down_count
+                    # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+                    measure.start_for('fetch_end')
+                    predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
+                    measure.start_for('insert_end')
+                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=cur_sess)
+                    measure.start_for('candle_conts_end')
+                    await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata, sess=cur_sess)
                     return down_count
-                # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-                measure.start_for('fetch_end')
-                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
-                measure.start_for('insert_end')
-                down_count += await KLine.insert(exs.id, timeframe, predata)
-                measure.start_for('candle_conts_end')
-                await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata)
-                return down_count
-            else:
-                # 要下载的数据全部存在，直接退出
-                return down_count
-    measure.start_for('fetch_all')
-    newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
-    measure.start_for('insert_all')
-    down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist)
-    measure.start_for('candle_conts_all')
-    await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata)
-    measure.print_all(min_cost=0.01)
+                else:
+                    # 要下载的数据全部存在，直接退出
+                    return down_count
+        measure.start_for('fetch_all')
+        newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
+        measure.start_for('insert_all')
+        down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist, sess=cur_sess)
+        measure.start_for('candle_conts_all')
+        await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata, sess=cur_sess)
+        measure.print_all(min_cost=0.01)
+    finally:
+        if cur_sess:
+            await asyncio.shield(cur_sess.close())
     return down_count
 
 
@@ -363,7 +368,8 @@ def parse_down_args(timeframe: str, start_ms: Optional[int] = None, end_ms: Opti
 
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
-                           allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto'):
+                           allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto',
+                           is_parallel=False):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -376,12 +382,14 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     :param allow_lack: 最大允许缺失的最新数据比例。设置此项避免对很小数据缺失时的不必要网络请求
     :param with_unfinish: 是否附加未完成的数据
     :param pbar: 进度条
+    :param is_parallel: 如果是并发执行，写入时需要单独的session
     :return:
     '''
     from banbot.storage import KLine
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit, with_unfinish)
     down_tf = KLine.get_down_tf(timeframe)
-    await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar)
+    await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar,
+                         is_parallel=is_parallel)
     return await KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
 
 
@@ -411,6 +419,7 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
         from banbot.util.misc import parallel_jobs
         pbar = LazyTqdm()
         kwargs['pbar'] = pbar
+        kwargs['is_parallel'] = True
         down_tf = KLine.get_down_tf(timeframe)
         for rid in range(0, len(down_pairs), MAX_CONC_OHLCV):
             # 批量下载，提升效率
@@ -453,10 +462,12 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     pbar = LazyTqdm()
     if isinstance(kwargs, dict):
         kwargs['pbar'] = pbar
+        kwargs['is_parallel'] = True
         kwargs = [kwargs] * len(symbols)
     else:
         for kw in kwargs:
             kw['pbar'] = pbar
+            kw['is_parallel'] = True
     sess = dba.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
     exs_list = list(await sess.scalars(select(ExSymbol).filter(*fts)))

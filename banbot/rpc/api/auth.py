@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.security.http import HTTPBasic, HTTPBasicCredentials
 from banbot.config import AppConfig
-from banbot.rpc.api.schemas import AccessAndRefreshToken, AccessToken
 
 
 logger = logging.getLogger(__name__)
@@ -82,7 +81,7 @@ def http_basic_or_jwt_token(form_data: HTTPBasicCredentials = Depends(httpbasic)
     )
 
 
-@router_login.post('/token/login', response_model=AccessAndRefreshToken)
+@router_login.post('/token/login')
 def token_login(form_data: HTTPBasicCredentials = Depends(HTTPBasic())):
     config = AppConfig.get()
     api_config = config.get('api_server')
@@ -92,7 +91,7 @@ def token_login(form_data: HTTPBasicCredentials = Depends(HTTPBasic())):
         refresh_token = create_token(token_data, api_config.get('jwt_secret_key', 'super-secret'),
                                      token_type="refresh")
         return {
-            "name": config.get('name', 'noname'),
+            "name": config.get('name') or 'noname',
             "access_token": access_token,
             "refresh_token": refresh_token,
         }
@@ -103,7 +102,7 @@ def token_login(form_data: HTTPBasicCredentials = Depends(HTTPBasic())):
         )
 
 
-@router_login.post('/token/refresh', response_model=AccessToken)
+@router_login.post('/token/refresh')
 def token_refresh(token: str = Depends(oauth2_scheme)):
     api_config = AppConfig.get().get('api_server')
     u = get_user_from_token(token, api_config.get(

@@ -74,6 +74,10 @@ class DBSessionAsyncMeta(type):
             raise RuntimeError('db sess not loaded')
         return session
 
+    @classmethod
+    def new_session(cls, **kwargs):
+        return _DbSessionAsync(**kwargs)
+
 
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
     _hold_map = dict()
@@ -98,7 +102,10 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             return
 
         if exc_type is not None:
-            await sess.rollback()
+            try:
+                await sess.rollback()
+            except Exception as e:
+                logger.error(f'rollback for exc fail: {exc_type} {exc_value}: {e}')
         elif self.commit_on_exit:
             await sess.commit()
 

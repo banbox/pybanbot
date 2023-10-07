@@ -254,7 +254,8 @@ order by time'''
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
             rows = await cls.query(exs, timeframe, end_ms, max_end_ms, limit)
         elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
-            un_bar, _ = await cls._get_unfinish(exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
+            sess = dba.session
+            un_bar, _ = await cls._get_unfinish(sess, exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
             if un_bar:
                 rows.append(list(un_bar))
         return rows
@@ -402,14 +403,13 @@ group by 1'''
         return '1m'
 
     @classmethod
-    async def force_insert(cls, sid: int, timeframe: str, rows: List[Tuple]):
+    async def force_insert(cls, sess: SqlSession, sid: int, timeframe: str, rows: List[Tuple]):
         ins_rows = []
         for r in rows:
             row_ts = btime.to_datetime(r[0])
             ins_rows.append(dict(
                 sid=sid, time=row_ts, open=r[1], high=r[2], low=r[3], close=r[4], volume=r[5],
             ))
-        sess = dba.session
         ins_tbl = cls.agg_map[timeframe].tbl
         ins_cols = "sid, time, open, high, low, close, volume"
         places = ":sid, :time, :open, :high, :low, :close, :volume"
@@ -426,7 +426,8 @@ group by 1'''
         await sess.commit()
 
     @classmethod
-    async def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True) -> int:
+    async def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True,
+                     sess: Optional[SqlSession] = None) -> int:
         '''
         单个bar插入，耗时约38ms
         '''
@@ -451,16 +452,17 @@ group by 1'''
                 rows = [r for r in rows if not (old_start <= r[0] < old_stop)]
         if not rows:
             return 0
-        await cls.force_insert(sid, timeframe, rows)
+        if not sess:
+            sess = dba.session
+        await cls.force_insert(sess, sid, timeframe, rows)
         # 更新区间
         n_start, n_end = await cls._update_range(sid, timeframe, start_ms, end_ms)
         # 刷新相关的连续聚合
-        tf_new_ranges = await cls._refresh_conti_agg(sid, timeframe, start_ms, end_ms, rows)
+        tf_new_ranges = await cls._refresh_conti_agg(sess, sid, timeframe, start_ms, end_ms, rows)
         if not old_stop or n_end > old_stop:
             tf_new_ranges.insert(0, (timeframe, old_stop or n_start, n_end))
         if tf_new_ranges and cls._listeners:
             # 有可能的监听者，发出查询数据发出事件
-            sess = dba.session
             exs: ExSymbol = await sess.get(ExSymbol, sid)
             exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
             for tf, n_start, n_end in tf_new_ranges:
@@ -501,7 +503,8 @@ group by 1'''
         await sess.commit()
 
     @classmethod
-    async def _refresh_conti_agg(cls, sid: int, from_level: str, start_ms: int, end_ms: int, sub_bars: List[tuple]) -> List[Tuple[str, int, int]]:
+    async def _refresh_conti_agg(cls, sess: SqlSession, sid: int, from_level: str, start_ms: int, end_ms: int,
+                                 sub_bars: List[tuple]) -> List[Tuple[str, int, int]]:
         '''
         刷新连续聚合。返回大周期有新数据的区间
         '''
@@ -528,7 +531,7 @@ group by 1'''
                 else:
                     stop_id = next((i for i, r in enumerate(rev_sub_bars) if r[0] < unbar_start_ms), len(sub_bars))
                     care_sub_bars = rev_sub_bars[:stop_id][::-1]
-                await cls._update_unfinish(item, sid, start_ms, end_ms, care_sub_bars)
+                await cls._update_unfinish(sess, item, sid, start_ms, end_ms, care_sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
             return []
@@ -551,7 +554,8 @@ group by 1'''
             # measure.print_all()
 
     @classmethod
-    async def _get_unfinish(cls, sid: int, timeframe: str, start_ts: int, end_ts: int, mode: str = 'query'):
+    async def _get_unfinish(cls, sess: SqlSession, sid: int, timeframe: str, start_ts: int, end_ts: int,
+                            mode: str = 'query'):
         '''
         查询给定周期的未完成bar。给定周期可以是保存的周期1m,5m,15m,1h,1d；也可以是聚合周期如4h,3d
         此方法两种用途：query用户查询最新数据（可能是聚合周期）；calc从子周期更新大周期的未完成bar（不可能是聚合周期）
@@ -563,7 +567,6 @@ group by 1'''
         '''
         if mode == 'calc' and timeframe not in cls.agg_map:
             raise RuntimeError(f'{timeframe} not allowed in `calc` mode')
-        sess = dba.session
         merge_rows = []
         tf_secs = tf_to_secs(timeframe)
         un_tf = timeframe
@@ -600,13 +603,12 @@ group by 1'''
         return cur_bar, bar_end_ms
 
     @classmethod
-    async def _update_unfinish(cls, item: BarAgg, sid: int, start_ms: int, end_ms: int, sml_bars: List[Tuple]):
+    async def _update_unfinish(cls, sess: SqlSession, item: BarAgg, sid: int, start_ms: int, end_ms: int, sml_bars: List[Tuple]):
         '''
         :param start_ms: 毫秒时间戳，子周期插入数据的开始时间
         :param end_ms: 毫秒时间戳，子周期bar的截止时间（非bar的开始时间）
         :param sml_bars: 子周期插入的bars，可能包含超出start范围的旧数据
         '''
-        sess = dba.session
         tf_secs = tf_to_secs(item.tf)
         tf_msecs = tf_secs * 1000
         bar_finish = end_ms % tf_msecs == 0
@@ -659,7 +661,7 @@ update "kline_un" set high={phigh},low={plow},
         # logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
         # 当快速更新不可用时，从子周期归集
         await sess.execute(sa.text(f"DELETE {from_where}"))
-        cur_bar, bar_end_ms = await cls._get_unfinish(sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')
+        cur_bar, bar_end_ms = await cls._get_unfinish(sess, sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')
         if not cur_bar:
             await sess.commit()
             return
@@ -717,7 +719,8 @@ ORDER BY sid, 2'''
         return new_start, new_end, old_start, old_end
 
     @classmethod
-    async def log_candles_conts(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, candles: list):
+    async def log_candles_conts(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, candles: list,
+                                sess: SqlSession = None):
         '''
         检查下载的蜡烛数据是否连续，如不连续记录到khole中
         '''
@@ -747,10 +750,11 @@ ORDER BY sid, 2'''
                 holes.append((prev_date + tf_msecs, end_ms))
         if not holes:
             return
+        if not sess:
+            sess = dba.session
         sid = exs.id
         holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
         holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
-        sess = dba.session
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
         stmt = select(KHole).where(*fts)
         old_holes: List[KHole] = list((await sess.scalars(stmt)).all())

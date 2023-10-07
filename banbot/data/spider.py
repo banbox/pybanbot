@@ -12,6 +12,7 @@ from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.storage import KLine, DisContiError
 from banbot.util.banio import ServerIO, BanConn
+from banbot.util.misc import BanLock
 from banbot.data.cache import BanCache
 
 
@@ -209,15 +210,16 @@ class WebsocketWatcher:
         while True:
             try:
                 sid, ohlcv, save_tf, skip_first = await cls.write_q.get()
-                async with dba():
-                    if sid not in cls.init_sid:
-                        await cls._save_init(sid, ohlcv, save_tf, skip_first)
-                    else:
-                        try:
-                            await KLine.insert(sid, save_tf, ohlcv)
-                        except DisContiError as e:
-                            logger.warning(f"Kline DisConti {e}, try fill...")
-                            await cls._save_init(sid, ohlcv, save_tf, False)
+                async with BanLock('spider_dba'):
+                    async with dba():
+                        if sid not in cls.init_sid:
+                            await cls._save_init(sid, ohlcv, save_tf, skip_first)
+                        else:
+                            try:
+                                await KLine.insert(sid, save_tf, ohlcv)
+                            except DisContiError as e:
+                                logger.warning(f"Kline DisConti {e}, try fill...")
+                                await cls._save_init(sid, ohlcv, save_tf, False)
                 cls.write_q.task_done()
             except Exception:
                 logger.exception("consume spider write_q error")
@@ -401,10 +403,11 @@ class LiveMiner:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
             measure.start_for(f'write_db:{len(ohlcvs)}')
-            async with dba():
-                sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
-                ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
-                await KLine.insert(sid, job.timeframe, ohlcvs)
+            async with BanLock('spider_dba'):
+                async with dba():
+                    sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
+                    ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
+                    await KLine.insert(sid, job.timeframe, ohlcvs)
             # 发布小间隔数据到订阅方
             measure.start_for('send_pub')
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
