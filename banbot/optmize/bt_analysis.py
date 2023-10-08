@@ -24,7 +24,7 @@ async def dump_orders(task_id: int, out_dir: str):
         return
     from banbot.storage.orders import get_db_orders
     from banbot.util import btime
-    iorders = await get_db_orders(task_id)
+    iorders = await get_db_orders(task_id=task_id)
     iorders = sorted(iorders, key=lambda x: x.enter_at)
     result = []
     for iod in iorders:

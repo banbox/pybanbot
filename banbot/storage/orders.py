@@ -4,12 +4,12 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 import copy
-import json
 import math
 from dataclasses import dataclass
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
+from banbot.storage.bot_task import BotTask
 from banbot.util.misc import del_dict_prefix
 from banbot.util import btime
 from banbot.storage.common import BotGlobal
@@ -481,11 +481,11 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     @classmethod
     async def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
-                   close_after: int = None)\
+                         close_after: int = None, sess: SqlSession = None)\
             -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
             from banbot.storage.bot_task import BotTask
-            return await get_db_orders(BotTask.cur_id, strategy, pairs, status, close_after)
+            return await get_db_orders(strategy, pairs, status, close_after, sess=sess)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -509,19 +509,27 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     @classmethod
     async def open_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None) -> List['InOutOrder']:
+        """
+        仅用于机器人交易和回测。兼容内存存储和数据库存储的订单。
+        api接口等应直接使用get_bot_orders从数据库查询订单.
+        """
         return await cls.get_orders(strategy, pairs, 'open')
 
     @classmethod
     async def his_orders(cls) -> List['InOutOrder']:
+        """
+        仅用于机器人交易和回测。兼容内存存储和数据库存储的订单。
+        api接口等应直接使用get_bot_orders从数据库查询订单.
+        """
         return await cls.get_orders(status='his')
 
     @classmethod
-    async def get_overall_performance(cls, minutes=None) -> List[Dict[str, Any]]:
+    async def get_overall_performance(cls, minutes=None, sess: SqlSession = None) -> List[Dict[str, Any]]:
         from itertools import groupby
         close_after = None
         if minutes:
             close_after = btime.utcstamp() - minutes * 60000
-        his_ods = await cls.get_orders(status='his', close_after=close_after)
+        his_ods = await cls.get_orders(status='his', close_after=close_after, sess=sess)
         his_ods = sorted(his_ods, key=lambda x: x.symbol)
         gps = groupby(his_ods, key=lambda x: x.symbol)
         result = []
@@ -609,12 +617,26 @@ def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, 
     return where_list
 
 
-async def get_db_orders(task_id: int, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
-                  close_after: int = None, filters=None, limit=0, offset=0, order_by=None) -> List[InOutOrder]:
+async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None,
+                        status: str = None, close_after: int = None, task_id: int = -1, filters=None,
+                        limit=0, offset=0, order_by=None, sess: SqlSession = None) -> List[InOutOrder]:
     '''
     此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
+    :param task_id: 任务ID，不提供时默认取BotTask.cur_id
+    :param strategy: 策略
+    :param pairs: 交易对，字符串或列表
+    :param status: open/his
+    :param close_after: 毫秒时间戳
+    :param filters: 额外筛选条件
+    :param limit:
+    :param offset:
+    :param order_by:
+    :param sess: 指定的Db会话
     '''
-    sess = dba.session
+    if task_id < 0:
+        task_id = BotTask.cur_id
+    if not sess:
+        sess = dba.session
     where_list = get_order_filters(task_id, strategy, pairs, status, close_after, filters)
     query = select(InOutOrder).where(*where_list)
     if order_by:

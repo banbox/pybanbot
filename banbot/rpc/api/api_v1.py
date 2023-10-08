@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query, Body
 from fastapi.exceptions import HTTPException
 
 from banbot import __version__
-from banbot.rpc import RPC, RPCException
+from banbot.rpc import RPC
 from banbot.config import AppConfig
 from banbot.rpc.api.schemas import *
 from banbot.storage import BotGlobal

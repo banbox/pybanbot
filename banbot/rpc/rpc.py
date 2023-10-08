@@ -86,7 +86,7 @@ class RPC:
         }
 
     async def open_num(self):
-        open_ods = await InOutOrder.open_orders()
+        open_ods = await get_db_orders(status='open')
         return dict(
             open_num=len(open_ods),
             max_num=self.bot.order_mgr.max_open_orders,
@@ -97,7 +97,7 @@ class RPC:
         return await InOutOrder.get_overall_performance()
 
     async def dash_statistics(self):
-        orders = await InOutOrder.get_orders()
+        orders = await get_db_orders()
 
         profit_all, profit_pct_all = [], []
         day_ts = []
@@ -200,7 +200,7 @@ class RPC:
         }
 
     async def stats(self) -> Dict[str, Any]:
-        orders = await InOutOrder.his_orders()
+        orders = await get_db_orders(status='his')
         # Duration
         dur: Dict[str, List[float]] = {'wins': [], 'draws': [], 'losses': []}
         # Exit reason
@@ -242,7 +242,7 @@ class RPC:
         if not (isinstance(timescale, int) and timescale > 0):
             raise RPCException('timescale must be an integer greater than 0')
 
-        his_ods = await InOutOrder.his_orders()
+        his_ods = await get_db_orders(status='his')
 
         if not his_ods:
             return []
@@ -271,19 +271,19 @@ class RPC:
             })
         return result
 
-    async def get_orders(self, status: str = None, limit: int = 0, offset: int = 0, with_total: bool = False,
-                   order_by_id: bool = False) -> Dict[str, Any]:
+    async def get_orders(self, status: str = None, limit: int = 0, offset: int = 0,
+                         with_total: bool = False, order_by_id: bool = False) -> Dict[str, Any]:
         '''
         筛选符合条件的订单列表。查未平仓订单和已平仓订单都经过此接口
         '''
+        sess = dba.session
         order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
-        orders = await get_db_orders(BotTask.cur_id, status=status, limit=limit, offset=offset, order_by=order_by)
+        orders = await get_db_orders(status=status, limit=limit, offset=offset, order_by=order_by)
 
         total_num = 0
         if with_total:
-            sess = dba.session
             fts = get_order_filters(task_id=BotTask.cur_id, status=status)
-            total_num = sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
+            total_num = await sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
 
         if not orders:
             return dict(data=[], total_num=total_num, offset=offset)
@@ -333,7 +333,7 @@ class RPC:
         from banbot.compute import TempContext
         self._force_entry_validations(pair, side)
 
-        open_ods = await InOutOrder.open_orders(pairs=pair)
+        open_ods = await get_db_orders(pairs=pair, status='open')
         if len(open_ods) >= self.bot.order_mgr.max_open_orders:
             raise RPCException("Maximum number of trades is reached.")
 
@@ -380,16 +380,15 @@ class RPC:
         tag = ExitTags.user_exit
         tag_msg = '用户通过管理面板取消'
         if order_id == 'all':
-            open_ods = await InOutOrder.open_orders()
-            for od in open_ods:
-                od.force_exit(tag, tag_msg)
-            return dict(close_num=len(open_ods))
-
-        od = await get_db_orders(BotTask.cur_id, filters=[InOutOrder.id == int(order_id)])
-        if not od:
+            args = dict(status='open')
+        else:
+            args = dict(filters=[InOutOrder.id == int(order_id)])
+        open_ods = await get_db_orders(**args)
+        if not open_ods:
             raise RPCException('invalid argument')
-        od[0].force_exit(tag, tag_msg)
-        return dict(close_num=1)
+        for od in open_ods:
+            od.force_exit(tag, tag_msg)
+        return dict(close_num=len(open_ods))
 
     def pairlist(self) -> Dict:
         """ Returns the currently active blacklist"""

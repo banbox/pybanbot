@@ -22,14 +22,16 @@ class Overlay(BaseDbModel):
     data = Column(sa.Text)
 
     @classmethod
-    async def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int) -> List[dict]:
+    async def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int,
+                  sess: SqlSession = None) -> List[dict]:
         import orjson
-        sess = dba.session
+        if not sess:
+            sess = dba.session
         sel_cols = [Overlay.id, Overlay.data]
         fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= end_ms]
         stat = select(*sel_cols).where(*fts).order_by(Overlay.id)
-        overlays = list(await sess.scalars(stat))
+        overlays = list((await sess.execute(stat)).all())
         result = []
         for row in overlays:
             if not row.data:
@@ -43,11 +45,12 @@ class Overlay(BaseDbModel):
         return result
 
     @classmethod
-    async def create(cls, user_id: int, sid: int, timeframe: str, data: dict):
+    async def create(cls, user_id: int, sid: int, timeframe: str, data: dict, sess: SqlSession = None):
         from banbot.util import btime
         import orjson
         olay_id = data.get('ban_id')
-        sess = dba.session
+        if not sess:
+            sess = dba.session
         points: List[dict] = data.get('points')
         if not points:
             logger.error(f'no points, skip overlay: {user_id}, {sid} {data}')
@@ -75,8 +78,9 @@ class Overlay(BaseDbModel):
         return olay.id
 
     @classmethod
-    async def delete_by_id(cls, user_id: int, id_list: List[int]) -> int:
-        sess = dba.session
+    async def delete_by_id(cls, user_id: int, id_list: List[int], sess: SqlSession = None) -> int:
+        if not sess:
+            sess = dba.session
         fts = [Overlay.user == user_id, Overlay.id.in_(set(id_list))]
         stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
         count = (await sess.execute(stat)).rowcount
@@ -84,9 +88,11 @@ class Overlay(BaseDbModel):
         return count
 
     @classmethod
-    async def delete(cls, user_id: int, sid: int, timeframe: str, start_ms: int, stop_ms: int):
+    async def delete(cls, user_id: int, sid: int, timeframe: str, start_ms: int, stop_ms: int,
+                     sess: SqlSession = None):
         from banbot.exchange.exchange_utils import tf_to_secs
-        sess = dba.session
+        if not sess:
+            sess = dba.session
         tf_msecs = tf_to_secs(timeframe) * 1000
         fts = [Overlay.user == user_id, Overlay.sid == sid, Overlay.tf_msecs == tf_msecs,
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= stop_ms]

@@ -105,7 +105,7 @@ class BanConn:
             while True:
                 data = await self.reader.readuntil(line_end)
                 data = data[:-len(line_end)]
-                logger.debug(f'%s receive %s', name, data)
+                # logger.debug(f'%s receive %s', name, data)
                 des_data = marshal.loads(data)
                 if not des_data or not hasattr(des_data, '__len__') or len(des_data) != 2:
                     logger.warning(f'{name} invalid msg: {data}')

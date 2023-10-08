@@ -207,8 +207,10 @@ CREATE TABLE "kline_un" (
         raise RuntimeError(f'unsupport timeframe {timeframe}')
 
     @classmethod
-    async def _query_hyper(cls, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable], **kwargs):
-        sess = dba.session
+    async def _query_hyper(cls, timeframe: str, dct_sql: str, gp_sql: Union[str, Callable],
+                           sess: Optional[SqlSession] = None, **kwargs):
+        if not sess:
+            sess = dba.session
         if timeframe in cls.agg_map:
             stmt = dct_sql.format(tbl=cls.agg_map[timeframe].tbl, **kwargs)
             return await sess.execute(sa.text(stmt))
@@ -221,8 +223,8 @@ CREATE TABLE "kline_un" (
             return await sess.execute(sa.text(stmt))
 
     @classmethod
-    async def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int,
-              limit: Optional[int] = None, with_unfinish: bool = False):
+    async def query(cls, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, limit: Optional[int] = None,
+                    with_unfinish: bool = False, sess: SqlSession = None):
         tf_secs = tf_to_secs(timeframe)
         tf_msecs = tf_secs * 1000
         max_end_ms = end_ms
@@ -248,20 +250,21 @@ order by time'''
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
                 group by gtime
                 order by gtime'''
-
-        rows = (await cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=exs.id)).all()
+        if not sess:
+            sess = dba.session
+        rows = (await cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=exs.id, sess=sess)).all()
         rows = [list(r) for r in rows]
         if not len(rows) and max_end_ms - end_ms > tf_msecs:
-            rows = await cls.query(exs, timeframe, end_ms, max_end_ms, limit)
+            rows = await cls.query(exs, timeframe, end_ms, max_end_ms, limit, sess=sess)
         elif with_unfinish and rows and rows[-1][0] // 1000 + tf_secs == unfinish_ts:
-            sess = dba.session
             un_bar, _ = await cls._get_unfinish(sess, exs.id, timeframe, unfinish_ts, unfinish_ts + tf_secs)
             if un_bar:
                 rows.append(list(un_bar))
         return rows
 
     @classmethod
-    async def query_batch(cls, exs_ids: Iterable[int], timeframe: str, start_ms: int, end_ms: int):
+    async def query_batch(cls, exs_ids: Iterable[int], timeframe: str, start_ms: int, end_ms: int,
+                          sess: SqlSession = None):
         '''
         批量查询sid的ohlcv。
         返回的按time, sid升序。
@@ -290,7 +293,7 @@ order by time, sid'''
                 order by gtime, sid'''
 
         sid_text = ', '.join(map(lambda x: str(x), exs_ids))
-        rows = (await cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=sid_text)).all()
+        rows = (await cls._query_hyper(timeframe, dct_sql, gen_gp_sql, sid=sid_text, sess=sess)).all()
         return [list(r) for r in rows]
 
     @classmethod
@@ -335,7 +338,8 @@ group by 1'''
         return result
 
     @classmethod
-    async def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int, force_new: bool = False)\
+    async def _update_range(cls, sid: int, timeframe: str, start_ms: int, end_ms: int, force_new: bool = False,
+                            sess: SqlSession = None)\
             -> Tuple[int, int]:
         '''
         更新sid+timeframe对应的数据区间。end_ms应为最后一个bar对应的结束时间，而非开始时间
@@ -344,41 +348,45 @@ group by 1'''
         cache_key = sid, timeframe
         if force_new:
             await cls._recalc_ranges(timeframe)
-        sess = dba.session
-        fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
-        stat = select(KInfo).where(*fts).limit(1)
-        kinfo: KInfo = (await sess.scalars(stat)).first()
-        if kinfo:
-            old_start, old_end = kinfo.start, kinfo.stop
+        if not sess:
+            sess = dba.session
+        old_start, old_end = await cls.query_range(sid, timeframe, sess)
+        if old_end or old_start:
             if start_ms >= old_start and end_ms <= old_end:
                 # 未超出已有范围，不更新直接返回
                 return old_start, old_end
             if old_end < start_ms or end_ms < old_start:
                 if not force_new:
                     logger.info('incontinus insert detect, try refresh range...')
-                    return await cls._update_range(sid, timeframe, start_ms, end_ms, True)
+                    return await cls._update_range(sid, timeframe, start_ms, end_ms, True, sess=sess)
                 raise DisContiError(cache_key, (old_start, old_end), (start_ms, end_ms))
             else:
-                kinfo.start = min(kinfo.start, start_ms)
-                kinfo.stop = max(kinfo.stop, end_ms)
+                fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
+                new_start = min(old_start, start_ms)
+                new_stop = max(old_end, end_ms)
+                upds = dict(start=new_start, stop=new_stop)
+                stmt = update(KInfo).where(*fts).values(**upds)
+                await sess.execute(stmt)
         else:
             kinfo = KInfo(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms)
             sess.add(kinfo)
-        new_start, new_stop = kinfo.start, kinfo.stop
+            new_start, new_stop = start_ms, end_ms
         await sess.commit()
         return new_start, new_stop
 
     @classmethod
-    async def query_range(cls, sid: int, timeframe: str) -> Tuple[Optional[int], Optional[int]]:
+    async def query_range(cls, sid: int, timeframe: str, sess: SqlSession = None) -> Tuple[Optional[int], Optional[int]]:
         if timeframe not in cls.agg_map:
             # 当查询聚合周期时，最小相邻周期计算
             timeframe = cls._get_sub_tf(timeframe)[0]
-        sess = dba.session
+        if not sess:
+            sess = dba.session
         fts = [KInfo.sid == sid, KInfo.timeframe == timeframe]
-        stmt = select(KInfo).where(*fts).limit(1)
-        kinfo: KInfo = await sess.scalar(stmt)
-        if kinfo:
-            return kinfo.start, kinfo.stop
+        stmt = select(KInfo.start, KInfo.stop).where(*fts).limit(1)
+        rows = await sess.execute(stmt)
+        row = rows.first()
+        if row:
+            return row[0], row[1]
         else:
             return None, None
 
@@ -443,7 +451,7 @@ group by 1'''
             if row_intv != intv_msecs:
                 raise ValueError(f'insert kline must be {timeframe} interval, current: {row_intv} s')
         start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
-        old_start, old_stop = await cls.query_range(sid, timeframe)
+        old_start, old_stop = await cls.query_range(sid, timeframe, sess=sess)
         if old_start and old_stop:
             # 插入的数据应该和已有数据连续，避免出现空洞。
             if old_stop < start_ms or end_ms < old_start:
@@ -456,7 +464,7 @@ group by 1'''
             sess = dba.session
         await cls.force_insert(sess, sid, timeframe, rows)
         # 更新区间
-        n_start, n_end = await cls._update_range(sid, timeframe, start_ms, end_ms)
+        n_start, n_end = await cls._update_range(sid, timeframe, start_ms, end_ms, sess=sess)
         # 刷新相关的连续聚合
         tf_new_ranges = await cls._refresh_conti_agg(sess, sid, timeframe, start_ms, end_ms, rows)
         if not old_stop or n_end > old_stop:
@@ -687,7 +695,7 @@ update "kline_un" set high={phigh},low={plow},
             # 前2个相等，说明：插入的数据所属bar尚未完成。
             # start_ms < org_start_ms说明：插入的数据不是所属bar的第一个数据
             return None, None, None, None
-        old_start, old_end = await cls.query_range(sid, tbl.tf)
+        old_start, old_end = await cls.query_range(sid, tbl.tf, sess)
         if old_start and old_end > old_start:
             # 避免出现空洞或数据错误
             agg_start = min(agg_start, old_end)
@@ -715,7 +723,7 @@ ORDER BY sid, 2'''
             # 如果遇到insert into with on conflict on compressed block 错误，可在启动时，调用Kline.pause_compress暂时解压缩
             logger.exception(f'refresh conti agg error: {e}, {sid} {tbl.tf}')
             return old_start, old_end, old_start, old_end
-        new_start, new_end = await cls._update_range(sid, tbl.tf, start_ms, end_ms)
+        new_start, new_end = await cls._update_range(sid, tbl.tf, start_ms, end_ms, sess=sess)
         return new_start, new_end, old_start, old_end
 
     @classmethod
@@ -837,8 +845,10 @@ class KHole(BaseDbModel):
     stop = Column(type_=sa.TIMESTAMP(timezone=True))  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
 
     @classmethod
-    async def get_down_range(cls, exs: ExSymbol, timeframe: str, start_ms: int, stop_ms: int) -> Tuple[int, int]:
-        sess = dba.session
+    async def get_down_range(cls, exs: ExSymbol, timeframe: str, start_ms: int, stop_ms: int,
+                             sess: SqlSession = None) -> Tuple[int, int]:
+        if not sess:
+            sess = dba.session
         start = btime.to_datetime(start_ms)
         stop = btime.to_datetime(stop_ms)
         fts = [KHole.sid == exs.id, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]

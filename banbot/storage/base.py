@@ -5,6 +5,7 @@
 # Date  : 2023/4/24
 import asyncio
 import os
+import threading
 import time
 import traceback
 from contextvars import ContextVar
@@ -25,10 +26,14 @@ from banbot.util.common import logger
 from banbot.util import btime
 
 _BaseDbModel = declarative_base()
-_db_engine_asy: Optional[AsyncEngine] = None
-_DbSessionAsync: Optional[async_sessionmaker] = None
 _db_sess_asy: ContextVar[Optional[AsyncSession]] = ContextVar('_db_sess_asy', default=None)
 db_slow_query_timeout = 1
+
+_db_engines: Dict[int, AsyncEngine] = dict()
+'维护连接池的字典，每个线程一个连接池'
+
+_DbSessionCls: Dict[int, async_sessionmaker] = dict()
+'维护_DbSession的类的字典，每个线程一个类'
 
 
 def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
@@ -39,9 +44,9 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     dba.session.connection().execution_options(isolation_level='AUTOCOMMIT')
     或engine.echo=True
     '''
-    global _db_engine_asy, _DbSessionAsync
-    if _db_engine_asy is not None:
-        return _db_engine_asy
+    thread_id = threading.get_ident()
+    if thread_id in _db_engines:
+        return _db_engines[thread_id]
     if not db_url:
         db_url = os.environ.get('ban_db_url')
     try:
@@ -60,10 +65,12 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     create_args['isolation_level'] = iso_level
     # 实例化异步engine
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
-    _db_engine_asy = create_async_engine(db_url, **create_args)
-    _DbSessionAsync = async_sessionmaker(_db_engine_asy, class_=AsyncSession, expire_on_commit=False)
-    set_engine_event(_db_engine_asy.sync_engine)
-    return _db_engine_asy
+    db_engine = create_async_engine(db_url, **create_args)
+    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    set_engine_event(db_engine.sync_engine)
+    _db_engines[thread_id] = db_engine
+    _DbSessionCls[thread_id] = DbSession
+    return db_engine
 
 
 class DBSessionAsyncMeta(type):
@@ -76,7 +83,11 @@ class DBSessionAsyncMeta(type):
 
     @classmethod
     def new_session(cls, **kwargs):
-        return _DbSessionAsync(**kwargs)
+        thread_id = threading.get_ident()
+        if thread_id not in _db_engines:
+            init_db()
+        DbSession = _DbSessionCls[thread_id]
+        return DbSession(**kwargs)
 
 
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
@@ -89,7 +100,11 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
 
     async def __aenter__(self):
         if _db_sess_asy.get() is None:
-            sess = _DbSessionAsync(**self.session_args)
+            thread_id = threading.get_ident()
+            if thread_id not in _db_engines:
+                init_db()
+            DbSession = _DbSessionCls[thread_id]
+            sess = DbSession(**self.session_args)
             self.token = _db_sess_asy.set(sess)
             self._hold_map[id(sess)] = (btime.time(), traceback.format_stack())
         return type(self)

@@ -14,6 +14,7 @@ from banbot.config.timerange import TimeRange
 from banbot.exchange.crypto_exchange import CryptoExchange
 from banbot.exchange.exchange_utils import *
 from banbot.storage.symbols import ExSymbol
+from banbot.storage.base import SqlSession
 from banbot.util.common import logger
 from banbot.util.misc import LazyTqdm
 
@@ -258,7 +259,8 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', is_parallel=False) -> int:
+                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', is_parallel=False,
+                         sess: SqlSession = None) -> int:
     '''
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
@@ -271,17 +273,20 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     measure.start_for('valid_start')
     start_ms = await exs.get_valid_start(start_ms)
     measure.start_for('down_range')
-    start_ms, end_ms = await KHole.get_down_range(exs, timeframe, start_ms, end_ms)
+    is_temp = False
+    if not sess:
+        sess = dba.new_session() if is_parallel else None
+        is_temp = True
+    start_ms, end_ms = await KHole.get_down_range(exs, timeframe, start_ms, end_ms, sess=sess)
     if not start_ms:
         return 0
     if isinstance(pbar, six.string_types) and pbar == 'auto':
         pbar = LazyTqdm()
-    cur_sess = dba.new_session() if is_parallel else None
     try:
         down_count = 0
         if check_exist:
             measure.start_for('query_range')
-            old_start, old_end = await KLine.query_range(exs.id, timeframe)
+            old_start, old_end = await KLine.query_range(exs.id, timeframe, sess=sess)
             if old_start and old_end > old_start:
                 if start_ms < old_start:
                     # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
@@ -289,9 +294,9 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                     measure.start_for('fetch_start')
                     predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
                     measure.start_for('insert_start')
-                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=cur_sess)
+                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
                     measure.start_for('candle_conts_start')
-                    await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata, sess=cur_sess)
+                    await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata, sess=sess)
                     start_ms = old_end
                 elif end_ms > old_end:
                     if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
@@ -301,9 +306,9 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                     measure.start_for('fetch_end')
                     predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
                     measure.start_for('insert_end')
-                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=cur_sess)
+                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
                     measure.start_for('candle_conts_end')
-                    await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata, sess=cur_sess)
+                    await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata, sess=sess)
                     return down_count
                 else:
                     # 要下载的数据全部存在，直接退出
@@ -311,13 +316,13 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
         measure.start_for('fetch_all')
         newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
         measure.start_for('insert_all')
-        down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist, sess=cur_sess)
+        down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist, sess=sess)
         measure.start_for('candle_conts_all')
-        await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata, sess=cur_sess)
+        await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata, sess=sess)
         measure.print_all(min_cost=0.01)
     finally:
-        if cur_sess:
-            await asyncio.shield(cur_sess.close())
+        if sess and is_temp:
+            await asyncio.shield(sess.close())
     return down_count
 
 
@@ -369,7 +374,7 @@ def parse_down_args(timeframe: str, start_ms: Optional[int] = None, end_ms: Opti
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
                            allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto',
-                           is_parallel=False):
+                           is_parallel=False, sess: SqlSession = None):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -389,8 +394,8 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit, with_unfinish)
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar,
-                         is_parallel=is_parallel)
-    return await KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish)
+                         is_parallel=is_parallel, sess=sess)
+    return await KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish, sess=sess)
 
 
 async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: str,
