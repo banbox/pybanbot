@@ -50,6 +50,8 @@ class ExitTags:
     '退出时交易所返回错误，无法追踪订单状态'
     pair_del = 'pair_del'
     '交易对删除时平仓'
+    unknown = 'unknown'
+    '未知原因'
 
 
 class Order(BaseDbModel):

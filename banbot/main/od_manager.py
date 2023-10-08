@@ -216,6 +216,8 @@ class OrderManager(metaclass=SingletonArg):
         elif 'exit_rate' in sigout:
             exit_amount = all_amount * sigout.pop('exit_rate')
         for od in order_list:
+            if not od.enter_amount:
+                continue
             cur_ext_rate = exit_amount / od.enter_amount
             if cur_ext_rate < 0.01:
                 break
@@ -1324,7 +1326,6 @@ class LiveOrderManager(OrderManager):
                     async with dba():
                         sess = dba.session
                         od = await InOutOrder.get(sess, job.od_id)
-                        in_sess1 = od in sess
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
                         elif job.action == OrderJob.ACT_EXIT:
@@ -1333,9 +1334,6 @@ class LiveOrderManager(OrderManager):
                             await self._edit_trigger_od(od, job.data)
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
-                        cur_in_sess = od in sess
-                        if not in_sess1 or not cur_in_sess:
-                            logger.error(f'before in sess: {in_sess1}, cur: {cur_in_sess}, {od}')
                         await sess.commit()
             except Exception as e:
                 if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
