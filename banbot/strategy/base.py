@@ -6,6 +6,7 @@
 from banbot.strategy.common import *
 from banbot.rpc import Notify, NotifyType  # noqa
 from banbot.storage import ExSymbol
+from banbot.main.addons import MarketPrice
 
 
 class BaseStrategy:
@@ -104,6 +105,7 @@ class BaseStrategy:
                 od_args['enter_price'] = price
         if amount:
             od_args['enter_amount'] = amount
+            od_args['legal_cost'] = amount * MarketPrice.get(self.symbol.symbol)
         else:
             if legal_cost:
                 od_args['legal_cost'] = legal_cost

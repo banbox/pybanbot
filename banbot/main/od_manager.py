@@ -396,7 +396,7 @@ class LocalOrderManager(OrderManager):
         enter_price = self.exchange.pres_price(od.symbol, price)
         sub_od = od.enter
         if not sub_od.amount:
-            if od.short and od.leverage == 1:
+            if od.short and self.market_type == 'spot' and od.leverage == 1:
                 # 现货空单，必须给定数量
                 raise ValueError('`enter_amount` is require for short order')
             ent_amount = od.quote_cost / enter_price
