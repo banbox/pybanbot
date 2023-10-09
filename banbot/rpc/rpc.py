@@ -66,7 +66,7 @@ class RPC:
         total = 0.0
 
         for coin, item in self.bot.wallets.data.items():
-            cur_total = item.total
+            cur_total = item.total()
             if not cur_total:
                 continue
             cur_total_fiat = cur_total * MarketPrice.get(coin)

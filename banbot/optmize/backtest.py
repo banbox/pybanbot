@@ -30,9 +30,19 @@ class BackTest(Trader):
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
-        await super(BackTest, self).on_data_feed(pair, timeframe, row)
+        try:
+            await super(BackTest, self).on_data_feed(pair, timeframe, row)
+        except AccountBomb as e:
+            date_str = btime.to_datestr(row[0])
+            if self.config.get('charge_on_bomb'):
+                self.reset_wallet(e.coin)
+                logger.error(f'wallet {e.coin} BOMB at {date_str}, reset wallet and continue...')
+            else:
+                BotGlobal.state = BotState.STOPPED
+                logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
+            return
         # 更新总资产
-        self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal()))
+        self.bar_assets.append((btime.to_datetime(row[0]), self.wallets.total_legal(with_upol=True)))
         # 更新最大最小余额
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
@@ -57,11 +67,16 @@ class BackTest(Trader):
             self.data_mgr.sub_pairs(pair_tfs)
         self.result['task_id'] = BotTask.cur_id
         # 初始化钱包余额
+        self.reset_wallet()
+        self.result['start_balance'] = self.order_mgr.get_legal_value()
+
+    def reset_wallet(self, *symbols):
         wallets = self.config.get('wallet_amounts')
         if not wallets:
             raise ValueError('wallet_amounts is required for backtesting...')
+        if symbols:
+            wallets = {k: v for k, v in wallets.items() if k in symbols}
         self.wallets.set_wallets(**wallets)
-        self.result['start_balance'] = self.order_mgr.get_legal_value()
 
     async def run(self):
         from banbot.optmize.reports import print_backtest

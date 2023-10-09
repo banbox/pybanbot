@@ -12,31 +12,114 @@ import ccxt
 from banbot.config import AppConfig
 from banbot.config.consts import MIN_STAKE_AMOUNT
 from banbot.exchange.crypto_exchange import CryptoExchange, loop_forever
-from banbot.storage import InOutOrder, ExSymbol, split_symbol
+from banbot.storage import InOutOrder, ExSymbol, split_symbol, ExitTags
 from banbot.main.addons import *
 from banbot.util import btime
 from banbot.util.common import logger
-from banbot.types import LackOfCash
+from banbot.types import *
 
 
 @dataclass
 class ItemWallet:
+    coin: str
+    '币代码，非交易对'
+
     available: float = 0
     '可用余额'
+
     pendings: Dict[str, float] = field(default_factory=dict)
     '买入卖出时锁定金额，键可以是订单id'
+
     frozens: Dict[str, float] = field(default_factory=dict)
     '空单等长期冻结金额，键可以是订单id'
 
-    @property
-    def total(self):
+    unrealized_pol: float = 0
+    '此币的公共未实现盈亏，合约用到，可抵扣其他订单保证金占用。每个bar重新计算'
+
+    used_upol: float = 0
+    '已占用的未实现盈亏（用作其他订单的保证金）'
+
+    def total(self, with_upol=False):
         sum_val = self.available
         for k, v in self.pendings.items():
             sum_val += v
         for k, v in self.frozens.items():
             sum_val += v
+        if with_upol:
+            sum_val += self.unrealized_pol
         return sum_val
 
+    def fiat_value(self, with_upol=False):
+        """
+        获取此钱包的法币价值
+        """
+        return self.total(with_upol) * MarketPrice.get(self.coin)
+
+    def set_margin(self, od_key: str, amount: float):
+        """
+        设置保证金占用。优先从unrealized_pol-used_upol中取。不足时从余额中取。
+        超出时释放到余额
+        """
+        # 提取旧保证金占用值
+        old_amt = self.frozens.get(od_key) or 0
+        ava_upol = self.unrealized_pol - self.used_upol
+        # logger.info(f'set margin: {od_key} {old_amt:.4f} -> {amount:.4f} upol: {ava_upol:.4f} ava: {self.available:.4f}')
+
+        upol_cost = 0
+        if ava_upol > 0:
+            # 优先使用可用的未实现盈亏余额
+            self.used_upol += amount
+            if self.used_upol <= self.unrealized_pol:
+                # 未实现盈亏足够，无需冻结
+                if od_key in self.frozens:
+                    del self.frozens[od_key]
+                return
+            else:
+                # 未实现盈亏不足，更新还需占用的
+                new_amount = self.used_upol - self.unrealized_pol
+                upol_cost = amount - new_amount
+                amount = new_amount
+                self.used_upol = self.unrealized_pol
+
+        add_val = amount - old_amt
+        if add_val <= 0:
+            # 已有保证金超过要求值，释放到余额
+            self.available -= add_val
+        else:
+            # 已有保证金不足，从余额中扣除
+            if self.available < add_val:
+                # 余额不足
+                self.used_upol -= upol_cost
+                err_msg = f'avaiable {self.coin} Insufficient, frozen require: {add_val:.5f}, {od_key}'
+                raise LackOfCash(add_val - self.available, err_msg)
+            self.available -= add_val
+        self.frozens[od_key] = amount
+
+    def set_frozen(self, od_key: str, amount: float, with_avaiable: bool = True):
+        """
+        设置冻结金额为固定值。可从余额或pending中同步。
+        不足则从另一侧取用，超出则添加到另一侧。
+        """
+        old_amt = self.frozens.get(od_key) or 0
+        add_val = amount - old_amt
+        if with_avaiable:
+            if add_val > 0 and self.available < add_val:
+                raise ValueError(f'avaiable {self.coin} Insufficient, frozen require: {add_val:.5f}, {od_key}')
+            self.available -= add_val
+        else:
+            pend_val = self.pendings.get(od_key) or 0
+            if add_val > 0 and pend_val < add_val:
+                raise ValueError(f'pending {self.coin} Insufficient, frozen require: {add_val:.5f}, {od_key}')
+            self.pendings[od_key] = pend_val - add_val
+        self.frozens[od_key] = amount
+
+    def reset(self):
+        logger.debug('reset wallet %s %s %s %s', self.coin, self.available, self.pendings, self.frozens)
+        self.available = 0
+        self.unrealized_pol = 0
+        self.used_upol = 0
+        self.frozens = dict()
+        self.pendings = dict()
 
 class WalletsLocal:
     obj: 'WalletsLocal' = None
@@ -45,14 +128,16 @@ class WalletsLocal:
         WalletsLocal.obj = self
         self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
-        self.refill_margin = AppConfig.get().get('refill_margin', True)
+        config = AppConfig.get()
+        self.margin_add_rate = config.get('margin_add_rate') or 0.667
+        '出现亏损时，在亏损百分比后追加保证金'
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
             if isinstance(val, ItemWallet):
                 self.data[key] = val
             elif isinstance(val, (int, float)):
-                self.data[key] = ItemWallet(available=val)
+                self.data[key] = ItemWallet(key, available=val)
             else:
                 raise ValueError(f'unsupport val type: {key} {type(val)}')
 
@@ -71,7 +156,7 @@ class WalletsLocal:
         if self.update_at + 1 < after_ts:
             logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
         if symbol not in self.data:
-            self.data[symbol] = ItemWallet()
+            self.data[symbol] = ItemWallet(symbol)
         wallet = self.data[symbol]
         src_amount = wallet.available
         if src_amount >= amount or negative:
@@ -81,8 +166,8 @@ class WalletsLocal:
             # 差额在近似允许范围内，扣除实际值
             real_cost = src_amount
         else:
-            raise LackOfCash(f'wallet {symbol} balance {src_amount:.5f} < {amount:.5f}')
-        # logger.info(f'cost_ava wallet {key}.{symbol} {wallet.available} - {real_cost}')
+            raise LackOfCash(amount, f'wallet {symbol} balance {src_amount:.5f} < {amount:.5f}')
+        logger.debug('cost_ava wallet %s.%s %f - %f', od_key, symbol, wallet.available, real_cost)
         wallet.available -= real_cost
         wallet.pendings[od_key] = real_cost
         self.update_at = btime.time()
@@ -90,6 +175,7 @@ class WalletsLocal:
 
     def cost_frozen(self, od_key: str, symbol: str, amount: float, after_ts: float = 0):
         '''
+        此方法不用于合约
         从frozen中扣除，如果不够，从available扣除剩余部分
         扣除后，添加到pending中
         '''
@@ -102,7 +188,7 @@ class WalletsLocal:
         if frozen_amt:
             del wallet.frozens[od_key]
         # 将冻结的剩余部分归还到available，正负都有可能
-        # logger.info(f'cost_frozen wallet {od_key}.{symbol} {wallet.available} + {frozen_amt - amount}')
+        logger.debug('cost_frozen wallet %s.%s %f + %f', od_key, symbol, wallet.available, frozen_amt - amount)
         wallet.available += frozen_amt - amount
         real_cost = amount
         if wallet.available < 0:
@@ -122,14 +208,14 @@ class WalletsLocal:
         if not src:
             return False
         if not tgt:
-            tgt = ItemWallet()
+            tgt = ItemWallet(tgt_key)
             self.data[tgt_key] = tgt
         pending_amt = src.pendings.get(od_key, 0)
         if not pending_amt:
             return False
         left_pending = pending_amt - src_amount
         del src.pendings[od_key]
-        # logger.info(f'confirm_pending wallet {od_key}.{src_key} {src.available} + {left_pending}')
+        logger.debug('confirm_pending wallet %s.%s %f + %f', od_key, src_key, src.available, left_pending)
         src.available += left_pending  # 剩余pending归还到available，（正负都可能）
         if to_frozen:
             tgt.frozens[od_key] = tgt_amount
@@ -153,6 +239,8 @@ class WalletsLocal:
         # logger.info(f'cancel wallet {od_key}.{symbol} {wallet.available} + {src_amount} + {add_amount}')
         src_amount += add_amount
         del src_dic[od_key]
+        tag = 'pending' if from_pending else 'frozen'
+        logger.debug('cancel %s %f, add to ava, %s, %s', tag, src_amount, od_key, symbol)
         wallet.available += src_amount
 
     def enter_od(self, exs: ExSymbol, sigin: dict, od_key: str, after_ts=0):
@@ -230,11 +318,6 @@ class WalletsLocal:
         sub_od = od.exit
         if exs.market == 'future':
             # 期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
-            if od.exit_tag == 'bomb':
-                # 爆仓，将利润置为0-全部占用保证金
-                wallet = self.data.get(exs.quote_code)
-                od.profit = 0 - wallet.frozens[od.key]
-                od.profit_rate = od.profit / (od.enter.price * od.enter.amount)
             self.cancel(od.key, exs.quote_code, add_amount=od.profit, from_pending=False)
         elif od.short:
             # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
@@ -266,51 +349,70 @@ class WalletsLocal:
             item.frozens[src_key] -= cut_amt
 
     def update_ods(self, od_list: List[InOutOrder]):
-        '''
+        """
         更新订单。目前只针对期货合约订单，需要更新合约订单的保证金比率。
+        传入的订单必然都是同一个定价币的订单
         保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
         钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
-        '''
-        if btime.prod_mode():
+        """
+        if not od_list:
             return
-        from banbot.exchange.crypto_exchange import get_exchange
-        bomb_ods = []
+        # 所有订单都是同一个定价币，提前获取此币的钱包
+        exs = ExSymbol.get_by_id(od_list[0].sid)
+        wallet = self.get(exs.quote_code)
+        # 计算是否爆仓
+        tot_profit = sum(od.profit for od in od_list)
+        wallet.unrealized_pol = tot_profit
+        wallet.used_upol = 0
+        if tot_profit < 0:
+            margin_ratio = abs(tot_profit) / wallet.total()
+            if margin_ratio > 0.99:
+                # 总亏损超过总资产，爆仓
+                self.on_acc_bomb(exs.quote_code, od_list)
+                return
+        from banbot.exchange import get_exchange
+        exchange = get_exchange(exs.exchange, exs.market)
         for od in od_list:
-            if not od.enter.filled or od.exit_tag == 'bomb':
+            if not od.enter.filled:
                 continue
-            exs = ExSymbol.get_by_id(od.sid)
-            exchange = get_exchange(exs.exchange, exs.market)
-            quote_amount = od.enter.filled * MarketPrice.get(exs.symbol)
-            min_margin = exchange.min_margin(quote_amount)  # 要求的最低保证金
-            wallet = self.get(exs.quote_code)
-            frozen_val = wallet.frozens.get(od.key)
-            if not frozen_val:
-                logger.error(f'no frozen_val for {od.key} {od.status} {wallet}')
-                continue
-            if self.refill_margin:
-                # 自动从可用余额中填补保证金
-                init_margin = od.enter.filled * od.enter.price / od.leverage  # 初始保证金
-                if frozen_val + od.profit < init_margin:
-                    # 合约亏损，从available中填充
-                    add_val = min(wallet.available, init_margin - (frozen_val + od.profit))
-                    frozen_val += add_val
-                    wallet.frozens[od.key] = frozen_val
-                    # logger.info(f'update_ods wallet {exs.quote_code} {wallet.available} - {add_val}, profit: {od.profit}')
-                    wallet.available -= add_val
-            # 这里分母不用再加钱包余额，上面自动从钱包扣除了。这里再加会导致多个订单重用余额
-            od.margin_ratio = min_margin / (frozen_val + od.profit)
-            if od.margin_ratio >= 0.999999:
-                # 保证金比率100%，爆仓
-                wallet.frozens[od.key] = 0
-                bomb_ods.append(od)
-                logger.info(f'bamb: {od.key}')
-        return bomb_ods
+            cur_price = MarketPrice.get(exs.symbol)
+            # 计算名义价值
+            quote_value = od.enter.filled * cur_price
+            # 计算当前所需保证金
+            cur_margin = quote_value / od.leverage
+            # 判断价格走势和开单方向是否相同
+            is_good = (cur_price - od.enter.price) * (-1 if od.short else 1)
+            if is_good < 0:
+                # 价格走势不同，产生亏损，判断是否自动补充保证金
+                if od.profit > 0:
+                    raise ValueError(f'od profit should < 0: {od}, profit: {od.profit}')
+                # 计算维持保证金=名义价值*维持保证金率-维持保证金额
+                min_margin = exchange.min_margin(quote_value)  # 要求的最低保证金
+                if abs(od.profit) >= (cur_margin - min_margin) * self.margin_add_rate:
+                    # 当亏损达到初始保证金比例时，为此订单增加保证金避免强平
+                    logger.info(f'{od} loss 2/3 {od.profit:.5f} {cur_margin:.5f}')
+                    cur_margin -= od.profit
+            # 价格走势和预期相同。所需保证金增长
+            try:
+                wallet.set_margin(od.key, cur_margin)
+            except LackOfCash as e:
+                logger.debug('cash lack, add margin fail: %s %.5f', od.key, e.amount)
+
+    def on_acc_bomb(self, coin: str, od_list: List[InOutOrder]):
+        """
+        账户爆仓，相关订单退出，钱包重置。
+        """
+        wallet = self.get(coin)
+        for od in od_list:
+            od.local_exit(ExitTags.bomb)
+        wallet.reset()
+        raise AccountBomb(coin)
 
     def get(self, symbol: str, after_ts: float = 0):
         if self.update_at + 1 < after_ts:
             logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
         if symbol not in self.data:
-            self.data[symbol] = ItemWallet()
+            self.data[symbol] = ItemWallet(symbol)
         return self.data[symbol]
 
     def get_amount_by_legal(self, symbol: str, legal_cost: float):
@@ -321,7 +423,7 @@ class WalletsLocal:
         '''
         return legal_cost / MarketPrice.get(symbol)
 
-    def total_legal(self, symbols: Iterable[str] = None):
+    def total_legal(self, symbols: Iterable[str] = None, with_upol=False):
         legal_sum = 0
         if symbols:
             data = {k: self.data[k] for k in symbols if k in self.data}
@@ -332,12 +434,13 @@ class WalletsLocal:
                 price = 1
             else:
                 price = MarketPrice.get(key)
-            legal_sum += item.total * price
+            legal_sum += item.total(with_upol) * price
         return legal_sum
 
     def _position(self, wallet: Optional[ItemWallet], prefix: str, side: str = None, enter_tag: str = None):
         if not wallet:
             return 0
+        # TODO: 这里需要更新仓位从订单计算
         amt_list = list(wallet.pendings.items()) + list(wallet.frozens.items())
         total_amount = 0
         for key, amount in amt_list:
@@ -367,7 +470,7 @@ class WalletsLocal:
             legal_cost += quote_amount * MarketPrice.get(quote_s)
         return legal_cost
 
-    def fiat_value(self, *symbols):
+    def fiat_value(self, *symbols, with_upol=False):
         '''
         返回给定币种的对法币价值。为空时返回所有币种
         '''
@@ -378,7 +481,7 @@ class WalletsLocal:
             item = self.data.get(symbol)
             if not item:
                 continue
-            total_val += item.total * MarketPrice.get(symbol)
+            total_val += item.fiat_value(with_upol)
         return total_val
 
     def __str__(self):
@@ -409,7 +512,7 @@ class CryptoWallet(WalletsLocal):
                 # 未开单时，free和used都是None，这时total就是free
                 free = state.get('total')
             key = 'pendings' if self.exchange.market_type == 'future' else 'frozens'
-            args = {'available': free, key: {'*': used}}
+            args = {'coin': symbol, 'available': free, key: {'*': used}}
             self.data[symbol] = ItemWallet(**args)
             if free + used < 0.00001:
                 continue

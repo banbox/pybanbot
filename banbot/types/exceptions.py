@@ -13,4 +13,12 @@ class NetError(Exception):
 
 
 class LackOfCash(Exception):
-    pass
+    def __init__(self, amount: float, *args):
+        super().__init__(*args)
+        self.amount = amount
+
+
+class AccountBomb(Exception):
+    def __init__(self, coin: str, *args):
+        super().__init__(*args)
+        self.coin = coin

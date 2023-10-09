@@ -52,6 +52,8 @@ class ExitTags:
     '交易对删除时平仓'
     unknown = 'unknown'
     '未知原因'
+    bomb = 'bomb'
+    '账户爆仓'
 
 
 class Order(BaseDbModel):
@@ -311,6 +313,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         返回入场手续费、出场手续费、净利润
         '''
         if not self.status or not self.enter.price or not self.enter.filled:
+            logger.info(f'skip profit calc: {self.status} {self.enter.price} {self.enter.filled}')
             return 0, 0, 0
         if price is None:
             price = self.exit.price if self.exit and self.exit.price else self.enter.price
@@ -321,13 +324,13 @@ class InOutOrder(BaseDbModel, InfoPart):
             # 期货市场，手续费以定价币计算
             get_amount = self.enter.filled
             ent_fee = ent_quote_value * ent_fee_rate
+            ext_val = get_amount * price
             if self.status == InOutStatus.FullExit and self.exit:
-                ext_val = get_amount * price
                 ext_fee = ext_val * self.exit.fee
-                clean_profit = ext_val - ent_quote_value
-                if self.short:
-                    clean_profit = 0 - clean_profit
-                profit_val = clean_profit - ent_fee - ext_fee
+            clean_profit = ext_val - ent_quote_value
+            if self.short:
+                clean_profit = 0 - clean_profit
+            profit_val = clean_profit - ent_fee - ext_fee
         else:
             get_amount = self.enter.filled * (1 - ent_fee_rate)  # 入场后的数量
             ent_fee = (self.enter.filled - get_amount) * self.enter.price
@@ -336,7 +339,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                 fee_amt = get_amount * self.exit.fee
                 ext_fee = fee_amt * price
                 get_amount -= fee_amt  # 出场后的数量
-                profit_val = get_amount * price - ent_quote_value
+            profit_val = get_amount * price - ent_quote_value
         return ent_fee, ext_fee, profit_val
 
     def update_by_price(self, price: float):
@@ -412,11 +415,12 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     def local_exit(self, tag: str, price: float = None, status_msg: str = None):
         '''
-        在本地强制退出订单。这里不涉及钱包更新，钱包需要自行更新。
+        在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
         '''
         amount = self.enter.filled
         if not price:
-            price = self.enter.average or self.enter.price or self.init_price
+            from banbot.main.addons import MarketPrice
+            price = MarketPrice.get(self.symbol) or self.enter.average or self.enter.price or self.init_price
         if not self.exit_at:
             self.exit_at = btime.time_ms()
         self.update_exit(
@@ -436,6 +440,8 @@ class InOutOrder(BaseDbModel, InfoPart):
     def force_exit(self, tag: str = None, status_msg: str = None):
         '''
         强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
+        生成模式：提交请求到交易所。
+        模拟模式：在下一个bar出现后完成退出
         '''
         from banbot.main.od_manager import LiveOrderManager, LocalOrderManager
         if not tag:

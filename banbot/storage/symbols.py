@@ -44,6 +44,14 @@ class ExSymbol(BaseDbModel):
         data['short_name'] = to_short_symbol(self.symbol)
         return data
 
+    def quote_suffix(self) -> str:
+        """
+        返回定价后缀，可用于判断其他交易对是否和当前交易对同属一个定价币。
+        """
+        pair_arr = self.symbol.split('/')
+        suffix = '/'.join(pair_arr[1:])
+        return '/' + suffix
+
     def __eq__(self, other):
         if not isinstance(other, ExSymbol):
             return False

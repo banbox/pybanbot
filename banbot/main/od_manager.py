@@ -275,16 +275,23 @@ class OrderManager(metaclass=SingletonArg):
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
         exs, _ = get_cur_symbol()
-        op_orders = await InOutOrder.open_orders(pairs=exs.symbol)
+        op_orders = await InOutOrder.open_orders()
+        cur_orders = [od for od in op_orders if od.symbol == exs.symbol]
         # 更新订单利润
         close_price = float(row[ccol])
-        for od in op_orders:
+        for od in cur_orders:
             od.update_by_price(close_price)
-        if self.market_type == 'future' and not btime.prod_mode():
-            # 期货合约需要计算更新保证金
-            bomb_ods = self.wallets.update_ods(op_orders)
-            for od in bomb_ods:
-                await self.exit_order(od, dict(tag='bomb'), price=close_price)
+        if op_orders and self.market_type == 'future' and not btime.prod_mode():
+            # 为合约更新此定价币的所有订单保证金和钱包情况
+            quote_suffix = exs.quote_suffix()
+            quote_orders = [od for od in op_orders if od.symbol.endswith(quote_suffix)]
+            try:
+                self.wallets.update_ods(quote_orders)
+            except AccountBomb:
+                # 保存订单状态
+                for od in quote_orders:
+                    await od.save()
+                raise
 
     async def on_lack_of_cash(self):
         pass
@@ -320,28 +327,29 @@ class OrderManager(metaclass=SingletonArg):
         fin_loss = abs(fin_loss)
         return fin_loss / (fin_loss + self.get_legal_value())
 
-    def _get_legal_value(self, symbol: str):
+    def _get_legal_value(self, symbol: str, with_upol=False):
         if symbol not in self.wallets.data:
             return 0
-        amount = self.wallets.data[symbol].total
+        amount = self.wallets.data[symbol].total(with_upol)
         if symbol.find('USD') >= 0:
             return amount
         elif not amount:
             return 0
         return amount * MarketPrice.get(symbol)
 
-    def get_legal_value(self, symbol: str = None):
+    def get_legal_value(self, symbol: str = None, with_upol=False):
         '''
         获取某个产品的法定价值。USDT直接返回。BTC等需要计算。
         :param symbol:
+        :param with_upol: 是否计算未实现盈亏
         :return:
         '''
         if symbol:
-            return self._get_legal_value(symbol)
+            return self._get_legal_value(symbol, with_upol)
         else:
             result = 0
             for key in self.wallets.data:
-                result += self._get_legal_value(key)
+                result += self._get_legal_value(key, with_upol)
             return result
 
     def cleanup(self):
@@ -360,12 +368,12 @@ class LocalOrderManager(OrderManager):
         self.network_cost = 3.  # 模拟网络延迟
 
     async def update_by_bar(self, row):
-        await super(LocalOrderManager, self).update_by_bar(row)
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
             affect_num = await self.fill_pending_orders(exs.symbol, timeframe, row)
             if affect_num:
                 logger.debug("wallets: %s", self.wallets)
+        await super(LocalOrderManager, self).update_by_bar(row)
 
     async def on_lack_of_cash(self):
         lack_num = 0
@@ -406,7 +414,7 @@ class LocalOrderManager(OrderManager):
                 err_msg = f'{od} pres enter amount fail: {od.quote_cost} {ent_amount} : {e}'
                 logger.warning(err_msg)
                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                await dba.session.commit()
+                await od.save()
                 return
         ctx = self.get_context(od)
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)

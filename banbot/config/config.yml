@@ -8,7 +8,8 @@ max_market_rate: 0.0001  # 手续费率超过此值，使用限价单
 odbook_ttl: 1000  # 订单簿过期时间
 order_type: market  # 下单类型：market市价单  limit限价单
 prefire: false  # 是否在bar即将完成时，提前10%时间触发
-refill_margin: true  # 交易合约时，如保证金不足是否自动从余额扣除填补
+margin_add_rate: 0.6666  # 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
+charge_on_bomb: false  # 回测出现爆仓时，是否重新充值继续测试，默认否，退出回测
 take_over_stgy: null  # 接管非当前机器人的下单的策略
 stake_amount: 15  # 单笔订单默认本金
 max_open_orders: 100  # 最大开单数量，默认100
