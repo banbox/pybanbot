@@ -93,7 +93,7 @@ class DBSessionAsyncMeta(type):
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
     _hold_map = dict()
 
-    def __init__(self, session_args: Dict = None, commit_on_exit: bool = False):
+    def __init__(self, session_args: Dict = None, commit_on_exit: bool = True):
         self.token = None
         self.session_args = session_args or {}
         self.commit_on_exit = commit_on_exit
@@ -116,15 +116,16 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         if not sess:
             return
 
-        if exc_type is not None:
+        if sess.in_transaction():
             try:
-                await sess.rollback()
+                if exc_type is not None:
+                    await sess.rollback()
+                elif self.commit_on_exit:
+                    await sess.commit()
+                await asyncio.shield(sess.close())
             except Exception as e:
-                logger.error(f'rollback for exc fail: {exc_type} {exc_value}: {e}')
-        elif self.commit_on_exit:
-            await sess.commit()
+                logger.error(f'dbsess fail: {exc_type} {exc_value}: {e}')
 
-        await asyncio.shield(sess.close())
         _db_sess_asy.set(None)
         self.token = None
         sess_key = id(sess)

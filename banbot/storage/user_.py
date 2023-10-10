@@ -55,7 +55,7 @@ class DbUser(BaseDbModel):
             dict(user_name='anyongjin', mobile='18932531737', mobile_verified=True),
         ]
         await sess.execute(sa.text(insert_sql), result)
-        await sess.commit()
+        await sess.flush()
 
 
 class ExgUser(BaseDbModel):

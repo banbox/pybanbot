@@ -73,7 +73,7 @@ async def load_file_signal(xls_path: str, timezone_off: int = 0):
             bar_ms=(create_ts // tf_msecs) * tf_msecs,
             price=row['open']
         ))
-    await sess.commit()
+    await sess.flush()
     return df
 
 
@@ -127,7 +127,6 @@ async def fix_symbol_wrong():
                 continue
             res = await sess.execute(sa.text(f'update tdsignal set symbol_id={true_row.id} where symbol_id={s.id}'))
             print(f'[{i}]change signal id {s.id} > {true_row.id}, num: {res.rowcount}')
-            await sess.commit()
 
 
 if __name__ == '__main__':

@@ -90,5 +90,42 @@ async def only_run_once(name: str):
         logger.info(f'{name} complete')
 
 
+async def test_db_read():
+    """
+    测试异步数据库连接，如果不commit，重复执行查询，是否有脏读的问题。
+    因异步连接commit后，此session会失效。
+    验证结果：不存在脏读
+    """
+    from banbot.storage import dba, select, TdSignal
+    async with dba():
+        sess = dba.session
+        while True:
+            print('======')
+            print(sess.in_transaction())
+            stmt = select(TdSignal).order_by(TdSignal.id.desc()).limit(1)
+            result = (await sess.scalars(stmt)).first()
+            print(result.dict())
+            print(sess.in_transaction())
+            await sess.commit()
+            print(sess.in_transaction())
+            await asyncio.sleep(3)
+
+
+async def test_db_flush():
+    """
+    测试sess.add后，是否自动执行了flush，可以获取到id
+    结论：针对sess.add未自动flush
+    """
+    from banbot.storage import dba, select, TdSignal
+    async with dba():
+        sess = dba.session
+        obj = TdSignal(strategy='fd', symbol_id=12, timeframe='1m', action='dfv', create_at=123, bar_ms=42)
+        sess.add(obj)
+        print(obj.id)
+        await sess.flush()
+        print(obj.id)
+    print(obj.id)
+
+
 if __name__ == '__main__':
-    asyncio.run(test_ban_lock())
+    asyncio.run(test_db_flush())

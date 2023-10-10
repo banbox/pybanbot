@@ -19,7 +19,6 @@ async def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start
            TdSignal.bar_ms >= start_ms, TdSignal.bar_ms < end_ms]
     exc_res = await sess.execute(delete(TdSignal).where(*fts).execution_options(synchronize_session=False))
     logger.info(f'delete old: {exc_res.rowcount}')
-    await sess.commit()
     tf_msecs = tf_to_secs(timeframe) * 1000
     # 多往前取200个，做预热
     fetch_start = start_ms - tf_msecs * 200
@@ -44,7 +43,6 @@ async def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start
         stg.on_bot_stop()
         sess.add_all(td_signals)
         logger.info(f'insert {len(td_signals)} signals')
-    await sess.commit()
 
 
 async def _test_strategy():

@@ -765,7 +765,7 @@ class CryptoExchange:
                         await sess.delete(od.enter)
                 if od.status in {InOutStatus.Init, InOutStatus.PartExit, InOutStatus.PartEnter}:
                     open_pairs.add(od.symbol)
-            await sess.commit()
+            await sess.flush()
         success_cnt = 0
         for symbol in open_pairs:
             # 这里不要使用fetch_open_orders不带参数一次性获取，有1200s频率限制

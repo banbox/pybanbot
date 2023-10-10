@@ -153,7 +153,7 @@ async def _sync_kline_sid(sid: int, tf_list: List[Tuple[str, int, int, int]]):
             min_time, max_time, _, _ = await KLine.refresh_agg(sess, agg_tbl, sid, pend, end)
         if min_time:
             tf_list[cur_id] = (ptf, psec, min_time, max_time)
-    await sess.commit()
+    await sess.flush()
 
 
 async def correct_ohlcvs():
@@ -248,7 +248,7 @@ async def _correct_ohlcv_range(sid: int, timeframe: str, ohlcvs: List[Tuple], ag
         logger.info(f'update {exc_res.rowcount} bar: {sid} {timeframe} {agg_bar} for {cur_bar}')
         agg_id += 1
         cur_id += 1
-    await sess.commit()
+    await sess.flush()
     if agg_id < len(agg_ohlcvs):
         ins_rows.extend(agg_ohlcvs[agg_id:])
     if ins_rows:
@@ -265,4 +265,3 @@ async def purge_kline_un():
     sql = 'delete from kline_un'
     exc_res = await sess.execute(sa.text(sql))
     logger.info(f'kline_un delete {exc_res.rowcount} records')
-    await sess.commit()

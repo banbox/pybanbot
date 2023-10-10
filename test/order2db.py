@@ -73,8 +73,7 @@ async def convert():
             if od.exit:
                 od.exit.inout_id = od.id
                 sess.add(od.exit)
-            await sess.commit()
-        await sess.commit()
+            await sess.flush()
 
 
 async def test_main():

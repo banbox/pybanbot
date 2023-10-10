@@ -128,12 +128,12 @@ ORDER BY sid, 2'''
         ]
         for stat in statements:
             await sess.execute(sa.text(stat))
-            await sess.commit()
+            await sess.flush()
         # 设置数据丢弃
         db_retention = AppConfig.get()['database'].get('retention')
         if db_retention and db_retention != 'all':
             await sess.execute(sa.text(f"SELECT add_retention_policy('{tbl.tbl}', INTERVAL '{tbl.retention}');"))
-            await sess.commit()
+            await sess.flush()
 
     @classmethod
     async def init_tbl(cls, sess: SqlSession):
@@ -143,7 +143,7 @@ ORDER BY sid, 2'''
             if not item.is_view:
                 create_sql = f'CREATE TABLE {item.tbl} (LIKE {cls._tname} INCLUDING ALL);'
                 await sess.execute(sa.text(create_sql))
-                await sess.commit()
+                await sess.flush()
                 # 初始化超表
                 await cls._init_hypertbl(sess, item)
                 continue
@@ -160,9 +160,9 @@ SELECT add_continuous_aggregate_policy('kline_{item.tf}',
   end_offset => INTERVAL '{item.agg_end}',
   schedule_interval => INTERVAL '{item.agg_every}');'''
             await sess.execute(sa.text(stat_create))
-            await sess.commit()
+            await sess.flush()
             await sess.execute(sa.text(stat_policy))
-            await sess.commit()
+            await sess.flush()
         # 创建未完成kline表，存储所有币的所有周期未完成bar；不需要是超表
         exc_sqls = [
             'DROP TABLE IF EXISTS "kline_un";',
@@ -183,7 +183,7 @@ CREATE TABLE "kline_un" (
         ]
         for stat in exc_sqls:
             await sess.execute(sa.text(stat))
-        await sess.commit()
+        await sess.flush()
 
     @classmethod
     async def drop_tbl(cls, sess: SqlSession):
@@ -322,7 +322,7 @@ group by 1'''
                 min_time, max_time = int(min_time), int(max_time)
                 result[cache_key] = min_time, max_time
                 sess.add(KInfo(sid=sid, timeframe=tf, start=min_time, stop=max_time))
-        await sess.commit()
+        await sess.flush()
         return result
 
     @classmethod
@@ -368,10 +368,9 @@ group by 1'''
                 stmt = update(KInfo).where(*fts).values(**upds)
                 await sess.execute(stmt)
         else:
-            kinfo = KInfo(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms)
-            sess.add(kinfo)
+            stmt = insert(KInfo).values(sid=sid, timeframe=timeframe, start=start_ms, stop=end_ms)
+            await sess.execute(stmt)
             new_start, new_stop = start_ms, end_ms
-        await sess.commit()
         return new_start, new_stop
 
     @classmethod
@@ -431,7 +430,7 @@ group by 1'''
                 logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} sid:{sid} {start_ms}-{end_ms}")
             else:
                 raise
-        await sess.commit()
+        await sess.flush()
 
     @classmethod
     async def insert(cls, sid: int, timeframe: str, rows: List[Tuple], skip_in_range=True,
@@ -497,7 +496,7 @@ group by 1'''
                 result.append(job_id)
             else:
                 logger.warning(f"no compress job id found {tbl}")
-        await sess.commit()
+        await sess.flush()
         return result
 
     @classmethod
@@ -508,7 +507,7 @@ group by 1'''
         for job_id in jobs:
             # 启动压缩任务（不会立刻执行压缩）
             await sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => true);'))
-        await sess.commit()
+        await sess.flush()
 
     @classmethod
     async def _refresh_conti_agg(cls, sess: SqlSession, sid: int, from_level: str, start_ms: int, end_ms: int,
@@ -625,7 +624,7 @@ group by 1'''
         if bar_finish:
             # 当前周期已完成，kline_un中删除即可
             await sess.execute(sa.text(f"DELETE {from_where}"))
-            await sess.commit()
+            await sess.flush()
             return
         bar_start_ts = start_ms // tf_msecs * tf_secs
         bar_end_ts = end_ms // tf_msecs * tf_secs
@@ -649,7 +648,7 @@ group by 1'''
 update "kline_un" set high={phigh},low={plow},
   close={pclose},volume={vol_sum},stop_ms={end_ms}
   {where_sql}'''))
-                    await sess.commit()
+                    await sess.flush()
                     return
             elif start_ms % tf_msecs == 0:
                 # 当插入的bar是第一个时，也认为有效。直接插入
@@ -664,14 +663,14 @@ update "kline_un" set high={phigh},low={plow},
                              f"{new_un[4]}, {new_un[5]}, '{item.tf}'"
                     insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
                     await sess.execute(sa.text(insert_sql))
-                    await sess.commit()
+                    await sess.flush()
                     return
         # logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
         # 当快速更新不可用时，从子周期归集
         await sess.execute(sa.text(f"DELETE {from_where}"))
         cur_bar, bar_end_ms = await cls._get_unfinish(sess, sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')
         if not cur_bar:
-            await sess.commit()
+            await sess.flush()
             return
         ins_cols = "sid, start_ms, stop_ms, open, high, low, close, volume, timeframe"
         places = f"{sid}, {cur_bar[0]}, {bar_end_ms}, {cur_bar[1]}, {cur_bar[2]}, {cur_bar[3]}, " \
@@ -680,7 +679,7 @@ update "kline_un" set high={phigh},low={plow},
         # 先删除旧的无效的记录
         await sess.execute(sa.text(f"DELETE {from_where}"))
         await sess.execute(sa.text(insert_sql))
-        await sess.commit()
+        await sess.flush()
 
     @classmethod
     async def refresh_agg(cls, sess: Union[SqlSession, AsyncConnection], tbl: BarAgg, sid: int,
@@ -786,7 +785,7 @@ ORDER BY sid, 2'''
             if not m.id:
                 assert m.stop <= btime.now(), 'hole.stop exceed cur time'
                 sess.add(m)
-        await sess.commit()
+        await sess.flush()
 
     @classmethod
     async def wait_bars(cls, exg_name: str, market: str, pair: str, timeframe: str):

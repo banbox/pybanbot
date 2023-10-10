@@ -76,7 +76,6 @@ class BotTask(BaseDbModel, InfoPart):
         cls.cur_id = task.id
         logger.info(f"init task ok, id: {task.id} hash: {task.stg_hash}")
         cls.obj = task
-        await sess.commit()
 
     @classmethod
     async def update(cls, **kwargs):
@@ -85,7 +84,6 @@ class BotTask(BaseDbModel, InfoPart):
         sess = dba.session
         await sess.refresh(cls.obj)
         cls.obj.update_props(**kwargs)
-        await sess.commit()
 
     def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None):
         data = super().dict(only, skips)

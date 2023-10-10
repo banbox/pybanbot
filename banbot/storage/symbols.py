@@ -106,7 +106,7 @@ class ExSymbol(BaseDbModel):
             sess.add(obj)
             result.append(obj)
             add_items.append((key, obj))
-        await sess.commit()
+        await sess.flush()
         for key, obj in add_items:
             detach_obj(sess, obj)
             cls._object_map[key] = obj
@@ -151,7 +151,6 @@ class ExSymbol(BaseDbModel):
                 logger.warning(f'no candles found for {self.exchange}/{self.symbol}')
                 return
             inst.list_dt = btime.to_datetime(candles[0][0])
-            await sess.commit()
         self.list_dt = inst.list_dt
 
     @classmethod
@@ -170,7 +169,6 @@ class ExSymbol(BaseDbModel):
             except ccxt.BadSymbol:
                 obj.delist_dt = btime.now()
         cost = time.monotonic() - start
-        await sess.commit()
         if cost > 0.5:
             logger.info(f'fill_list_dts cost: {cost:.2f} s')
 

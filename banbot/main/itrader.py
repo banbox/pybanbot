@@ -52,7 +52,6 @@ class Trader:
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
         BotGlobal.last_bar_ms = btime.time_ms()
-        pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
             self.last_process = btime.utcstamp()
@@ -65,6 +64,14 @@ class Trader:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         # 更新最新价格
         MarketPrice.set_bar_price(pair, float(row[ccol]))
+        try:
+            async with dba():
+                await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
+        finally:
+            self.order_mgr.unready_ids = set()
+
+    async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
+        pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         edit_triggers = []
         with TempContext(pair_tf):
             # 策略计算部分，会用到上下文变量

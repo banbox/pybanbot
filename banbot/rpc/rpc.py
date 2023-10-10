@@ -362,12 +362,10 @@ class RPC:
             ctx = get_context(pair_tf)
             od = self.bot.order_mgr.enter_order(ctx, job[0], enter_dic, do_check=False)
             start = time.time()
-            sess = dba.session
             while time.time() - start < 10:
-                od = await InOutOrder.get(sess, od.id)
+                od = await InOutOrder.get(od.id)
                 if not od.enter.order_id and not od.exit_tag and not od.exit:
                     await asyncio.sleep(1)
-                    await sess.commit()
                     continue
                 break
             return od.dict(flat_sub=True)

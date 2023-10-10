@@ -396,7 +396,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                 if not self.exit.inout_id:
                     self.exit.inout_id = self.id
                 sess.add(self.exit)
-        await sess.commit()
+        await sess.flush()
 
     def _save_to_mem(self):
         if self.status < InOutStatus.FullExit:
@@ -462,7 +462,6 @@ class InOutOrder(BaseDbModel, InfoPart):
                 LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
                 LocalOrderManager.obj.exit_order(self, exit_dic)
-        dba.session.commit()
 
     def detach(self, sess: SqlSession):
         detach_obj(sess, self)
@@ -581,8 +580,9 @@ class InOutOrder(BaseDbModel, InfoPart):
         return result
 
     @classmethod
-    async def get(cls, sess: SqlSession, od_id: int):
+    async def get(cls, od_id: int):
         if btime.run_mode in btime.LIVE_MODES:
+            sess = dba.session
             op_od = await sess.get(InOutOrder, od_id)
             if not op_od:
                 return op_od
@@ -699,5 +699,4 @@ async def insert_orders_to_db(orders: List[InOutOrder]):
             od.exit.inout_id = od.id
             sess.add(od.exit)
     await sess.flush()
-    await sess.commit()
 

@@ -67,14 +67,14 @@ class Overlay(BaseDbModel):
                 olay.stop_ms = stop_ms
                 olay.update_at = cur_time
                 olay.data = save_data
-                await sess.commit()
+                await sess.flush()
                 return olay.id
         from banbot.exchange.exchange_utils import tf_to_secs
         tf_msecs = tf_to_secs(timeframe) * 1000
         olay = Overlay(user=user_id, sid=sid, start_ms=start_ms, stop_ms=stop_ms, tf_msecs=tf_msecs,
                        update_at=cur_time, data=save_data)
         sess.add(olay)
-        await sess.commit()
+        await sess.flush()
         return olay.id
 
     @classmethod
@@ -84,7 +84,7 @@ class Overlay(BaseDbModel):
         fts = [Overlay.user == user_id, Overlay.id.in_(set(id_list))]
         stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
         count = (await sess.execute(stat)).rowcount
-        await sess.commit()
+        await sess.flush()
         return count
 
     @classmethod
@@ -98,5 +98,5 @@ class Overlay(BaseDbModel):
                Overlay.start_ms >= start_ms, Overlay.stop_ms <= stop_ms]
         stat = delete(Overlay).where(*fts).execution_options(synchronize_session=False)
         count = (await sess.execute(stat)).rowcount
-        await sess.commit()
+        await sess.flush()
         return count

@@ -56,6 +56,7 @@ class OrderManager(metaclass=SingletonArg):
         '全局止损时禁止时间，默认8小时'
         self.forbid_pairs = set()
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
+        self.unready_ids = set()  # 向order_q添加任务后，尚未commit保存，所以也暂存到un_ready_ids
 
     def _load_fatal_stop(self):
         fatal_cfg = self.config.get('fatal_stop')
@@ -127,7 +128,6 @@ class OrderManager(metaclass=SingletonArg):
         if btime.run_mode in btime.LIVE_MODES:
             enter_ods = [od.detach(sess) for od in enter_ods if od]
             exit_ods = [od.detach(sess) for od in exit_ods if od]
-            await sess.commit()  # 保存到db，确保order_q取到的是最新的
         for od, prefix in edit_triggers:
             if od in exit_ods or od.enter.status < OrderStatus.PartOk:
                 # 订单未成交时，不应该挂止损
@@ -186,7 +186,7 @@ class OrderManager(metaclass=SingletonArg):
         is_exact = False
         if 'order_id' in sigout:
             is_exact = True
-            order_list = [await InOutOrder.get(dba.session, sigout.pop('order_id'))]
+            order_list = [await InOutOrder.get(sigout.pop('order_id'))]
         else:
             order_list = await InOutOrder.open_orders(strategy, pairs)
         result = []
@@ -648,7 +648,7 @@ class LiveOrderManager(OrderManager):
                 long_pos['contracts'] = long_pos_amt
             if short_pos:
                 short_pos['contracts'] = short_pos_amt
-            await sess.commit()
+            await sess.flush()
         if not self.take_over_stgy:
             return
         if long_pos and long_pos['contracts'] > min_dust:
@@ -896,7 +896,6 @@ class LiveOrderManager(OrderManager):
             # 期货市场未返回trades
             await self._update_order_res(od, is_enter, order)
         self._consume_unmatchs(sub_od)
-        await dba.session.commit()
 
     async def _finish_order(self, od: InOutOrder):
         await super(LiveOrderManager, self)._finish_order(od)
@@ -1009,6 +1008,7 @@ class LiveOrderManager(OrderManager):
         elif action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
             logger.debug('edit push: %s %s', od, tg_price)
+        self.unready_ids.add(od.id)
         self.order_q.put_nowait(OrderJob(od.id, action, data))
 
     async def _update_bnb_order(self, od: Order, data: dict):
@@ -1055,10 +1055,7 @@ class LiveOrderManager(OrderManager):
         else:
             logger.error('unknown bnb order status: %s, %s', state, data)
             return
-        # 将sub_od的修改保存
-        sess = dba.session
-        await sess.commit()
-        inout_od: InOutOrder = await InOutOrder.get(sess, od.inout_id)
+        inout_od: InOutOrder = await InOutOrder.get(od.inout_id)
         if inout_status:
             inout_od.status = inout_status
         if inout_status == InOutStatus.FullExit:
@@ -1103,11 +1100,9 @@ class LiveOrderManager(OrderManager):
                     sub_od: Order = await sess.get(Order, sub_id)
                     await self._update_order(sub_od, data)
                     related_ods.add(sub_od)
-                    await sess.commit()
             for sub_od in related_ods:
                 async with BanLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
                     self._consume_unmatchs(sub_od)
-            await sess.commit()
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -1321,6 +1316,8 @@ class LiveOrderManager(OrderManager):
     async def consume_queue(self):
         while True:
             job: OrderJob = await self.order_q.get()
+            while job.od_id in self.unready_ids:
+                await asyncio.sleep(0.005)
             await self.exec_od_job(job)
             self.order_q.task_done()
             if BotGlobal.state == BotState.STOPPED and not self.order_q.qsize():
@@ -1332,8 +1329,7 @@ class LiveOrderManager(OrderManager):
             try:
                 async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
                     async with dba():
-                        sess = dba.session
-                        od = await InOutOrder.get(sess, job.od_id)
+                        od = await InOutOrder.get(job.od_id)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
                         elif job.action == OrderJob.ACT_EXIT:
@@ -1342,18 +1338,13 @@ class LiveOrderManager(OrderManager):
                             await self._edit_trigger_od(od, job.data)
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
-                        await sess.commit()
             except Exception as e:
                 if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                     err_msg = str(e)
                     async with dba():
-                        od = await InOutOrder.get(sess, job.od_id)
-                        if job.action == OrderJob.ACT_ENTER:
-                            od.force_exit(status_msg=err_msg)
-                        else:
-                            # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
-                            od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                        await dba.session.commit()
+                        od = await InOutOrder.get(job.od_id)
+                        # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
+                        od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
                     logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                 else:
                     logger.exception('consume order exception: %s', job)
@@ -1448,7 +1439,7 @@ class LiveOrderManager(OrderManager):
                 sub_od.create_at = btime.time()
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
-                await sess.commit()
+                await sess.flush()
         from banbot.rpc import Notify, NotifyType
         if unsubmits and Notify.instance:
             Notify.send(type=NotifyType.EXCEPTION, status=f'超时未提交订单：{unsubmits}')

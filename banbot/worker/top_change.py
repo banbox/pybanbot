@@ -60,7 +60,6 @@ where exchange=:exchange and market=:market;'''
             short_name = to_short_symbol(new_p[1])
             change_list.append((new_p[0], short_name, new_p[2], chg_rate, vol_r[1], vol_r[2], 0))
         change_list = sorted(change_list, key=lambda x: x[1])
-        await sess.commit()
         return change_list
 
     async def run(self):
