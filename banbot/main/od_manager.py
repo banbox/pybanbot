@@ -1275,6 +1275,7 @@ class LiveOrderManager(OrderManager):
             await sess.delete(od)
             if od.enter:
                 await sess.delete(od.enter)
+            await sess.flush()
         try:
             await self._create_exg_order(od, True)
         except ccxt.InsufficientFunds:

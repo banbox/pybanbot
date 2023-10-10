@@ -312,6 +312,7 @@ group by 1'''
         tf_texts = ', '.join([f"'{tf}'" for tf in tf_list])
         del_sql = f"delete from kinfo where timeframe in ({tf_texts})"
         await sess.execute(sa.text(del_sql))
+        await sess.flush()
         for tf in tf_list:
             sql_text = dct_sql.format(tbl=f'kline_{tf}')
             rows = (await sess.execute(sa.text(sql_text))).fetchall()
@@ -654,6 +655,7 @@ update "kline_un" set high={phigh},low={plow},
                 # 当插入的bar是第一个时，也认为有效。直接插入
                 if len(rows):
                     await sess.execute(sa.text(f"DELETE {from_where}"))
+                    await sess.flush()
                 from banbot.data.tools import build_ohlcvc
                 cur_bars, last_finish = build_ohlcvc(sml_bars, tf_secs)
                 if len(cur_bars) == 1:
@@ -668,6 +670,7 @@ update "kline_un" set high={phigh},low={plow},
         # logger.info(f'slow kline_un: {sid} {item.tf} {start_ms} {end_ms}')
         # 当快速更新不可用时，从子周期归集
         await sess.execute(sa.text(f"DELETE {from_where}"))
+        await sess.flush()
         cur_bar, bar_end_ms = await cls._get_unfinish(sess, sid, item.tf, bar_end_ts, bar_end_ts + tf_secs, 'calc')
         if not cur_bar:
             await sess.flush()
@@ -678,6 +681,7 @@ update "kline_un" set high={phigh},low={plow},
         insert_sql = f"insert into kline_un ({ins_cols}) values ({places})"
         # 先删除旧的无效的记录
         await sess.execute(sa.text(f"DELETE {from_where}"))
+        await sess.flush()
         await sess.execute(sa.text(insert_sql))
         await sess.flush()
 
@@ -778,6 +782,7 @@ ORDER BY sid, 2'''
                     old_h, hole = h, prev
                 if hole.id:
                     await sess.delete(hole)
+                    await sess.flush()
                 if hole.stop > old_h.stop:
                     old_h.stop = hole.stop
                 merged[-1] = old_h

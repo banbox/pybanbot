@@ -264,4 +264,5 @@ async def purge_kline_un():
     sess = dba.session
     sql = 'delete from kline_un'
     exc_res = await sess.execute(sa.text(sql))
+    await sess.flush()
     logger.info(f'kline_un delete {exc_res.rowcount} records')
