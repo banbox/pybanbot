@@ -467,15 +467,10 @@ group by 1'''
         # 更新区间
         n_start, n_end = await cls._update_range(sid, timeframe, start_ms, end_ms, sess=sess)
         # 刷新相关的连续聚合
-        tf_new_ranges = await cls._refresh_conti_agg(sess, sid, timeframe, start_ms, end_ms, rows)
+        tf_new_ranges = []
         if not old_stop or n_end > old_stop:
-            tf_new_ranges.insert(0, (timeframe, old_stop or n_start, n_end))
-        if tf_new_ranges and cls._listeners:
-            # 有可能的监听者，发出查询数据发出事件
-            exs: ExSymbol = await sess.get(ExSymbol, sid)
-            exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
-            for tf, n_start, n_end in tf_new_ranges:
-                cls._on_new_bars(exg_name, market, symbol, tf)
+            tf_new_ranges.append((timeframe, old_stop or n_start, n_end))
+        await cls._refresh_conti_agg(sess, sid, timeframe, start_ms, end_ms, rows, tf_new_ranges)
         return len(rows)
 
     @classmethod
@@ -513,7 +508,7 @@ group by 1'''
 
     @classmethod
     async def _refresh_conti_agg(cls, sess: SqlSession, sid: int, from_level: str, start_ms: int, end_ms: int,
-                                 sub_bars: List[tuple]) -> List[Tuple[str, int, int]]:
+                                 sub_bars: List[tuple], tf_new_ranges):
         '''
         刷新连续聚合。返回大周期有新数据的区间
         '''
@@ -543,26 +538,29 @@ group by 1'''
                 await cls._update_unfinish(sess, item, sid, start_ms, end_ms, care_sub_bars)
         agg_keys.remove(from_level)
         if not agg_keys:
-            return []
+            return
         measure.start_for(f'get_db')
 
         async def commit_cb():
-            logger.info(f'run auto commit after sess commit: {id(sess)}')
             async with dba.new_session() as dbsess:
                 async with dbsess.begin():
                     # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit
-                    dbsess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+                    await dbsess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
                     # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
-                    tf_ins_list = []
                     for tf in agg_keys:
                         measure.start_for(f'refresh_agg_{tf}')
                         args = [dbsess, cls.agg_map[tf], sid, start_ms, end_ms]
                         n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
                         if not o_end or n_end > o_end:
                             # 记录有新数据的周期
-                            tf_ins_list.append((tf, o_end or n_start, n_end))
+                            tf_new_ranges.append((tf, o_end or n_start, n_end))
                     measure.start_for(f'commit')
-                    return tf_ins_list
+                    if tf_new_ranges and cls._listeners:
+                        # 有可能的监听者，发出查询数据发出事件
+                        exs: ExSymbol = await ExSymbol.safe_get_by_id(sid, dbsess)
+                        exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
+                        for tf, n_start, n_end in tf_new_ranges:
+                            cls._on_new_bars(exg_name, market, symbol, tf)
                 # measure.print_all()
 
         dba.add_callback(sess, commit_cb)

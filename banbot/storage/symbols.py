@@ -125,6 +125,20 @@ class ExSymbol(BaseDbModel):
         return cache_val
 
     @classmethod
+    async def safe_get_by_id(cls, sid: int, sess: SqlSession = None) -> 'ExSymbol':
+        try:
+            return cls.get_by_id(sid)
+        except ValueError:
+            if not sess:
+                sess = dba.session
+            exs: ExSymbol = await sess.get(ExSymbol, sid)
+            detach_obj(sess, exs)
+            key = f'{exs.exchange}:{exs.market}:{exs.symbol}'
+            cls._object_map[key] = exs
+            cls._id_map[exs.id] = exs
+            return exs
+
+    @classmethod
     def search(cls, keyword: str) -> List['ExSymbol']:
         if not keyword:
             return [item for key, item in cls._object_map.items()]

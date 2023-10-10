@@ -126,7 +126,6 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
 
         key = id(sess)
         if key in self._callbacks:
-            logger.info(f'sess {key} is close, run {len(self._callbacks[key])} callbacks')
             from banbot.util.misc import run_async
             for cb in self._callbacks[key]:
                 try:
