@@ -437,39 +437,6 @@ class WalletsLocal:
             legal_sum += item.total(with_upol) * price
         return legal_sum
 
-    def _position(self, wallet: Optional[ItemWallet], prefix: str, side: str = None, enter_tag: str = None):
-        if not wallet:
-            return 0
-        # TODO: 这里需要更新仓位从订单计算
-        amt_list = list(wallet.pendings.items()) + list(wallet.frozens.items())
-        total_amount = 0
-        for key, amount in amt_list:
-            if key.startswith(prefix):
-                continue
-            ent_side, tag, ent_at = key.split('|')[2:]
-            if side and side != ent_side:
-                continue
-            if enter_tag and enter_tag != tag:
-                continue
-            total_amount += amount
-        return total_amount
-
-    def position(self, symbol: str, strategy: str, side: str = None, enter_tag: str = None):
-        '''
-        获取指定条件的仓位；仅支持回测
-        '''
-        prefix = f'{symbol}|{strategy}|'
-        base_s, quote_s = split_symbol(symbol)
-        base_item = self.data.get(base_s)
-        base_amount = base_item.available if base_item else 0
-        quote_amount = self._position(self.data.get(quote_s), prefix, side, enter_tag)
-        legal_cost = 0
-        if base_amount:
-            legal_cost += base_amount * MarketPrice.get(symbol)
-        if quote_amount:
-            legal_cost += quote_amount * MarketPrice.get(quote_s)
-        return legal_cost
-
     def fiat_value(self, *symbols, with_upol=False):
         '''
         返回给定币种的对法币价值。为空时返回所有币种
