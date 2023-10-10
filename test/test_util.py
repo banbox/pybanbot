@@ -127,5 +127,22 @@ async def test_db_flush():
     print(obj.id)
 
 
+async def test_detach_commit():
+    """
+    测试add对象后，再flush，再detach，再commit，是否会被保存
+    结论：会保存flush之前的信息。detach后再修改的，不会保存
+    """
+    from banbot.storage import dba, TdSignal, detach_obj
+    async with dba():
+        sess = dba.session
+        obj = TdSignal(strategy='alimama', symbol_id=1, timeframe='1m', action='dfv', create_at=123, bar_ms=42)
+        sess.add(obj)
+        print(obj.id)
+        await sess.flush()
+        print(obj.id)
+        detach_obj(sess, obj)
+        obj.timeframe = '32m'
+
+
 if __name__ == '__main__':
-    asyncio.run(test_db_flush())
+    asyncio.run(test_detach_commit())

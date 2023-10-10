@@ -126,6 +126,7 @@ class OrderManager(metaclass=SingletonArg):
         else:
             enter_ods, exit_ods = [], []
         if btime.run_mode in btime.LIVE_MODES:
+            await sess.flush()
             enter_ods = [od.detach(sess) for od in enter_ods if od]
             exit_ods = [od.detach(sess) for od in exit_ods if od]
         for od, prefix in edit_triggers:
