@@ -38,8 +38,10 @@ class OrderBook:
 
 
 class OrderManager(metaclass=SingletonArg):
-    def __init__(self, config: dict, wallets: WalletsLocal, data_hd: DataProvider, callback: Callable):
+    def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal,
+                 data_hd: DataProvider, callback: Callable):
         self.config = config
+        self.exchange = exchange
         self.market_type = config.get('market_type')
         self.leverage = config.get('leverage', 3)  # 杠杆倍数
         self.name = data_hd.exg_name
@@ -133,7 +135,7 @@ class OrderManager(metaclass=SingletonArg):
             if od in exit_ods or od.enter.status < OrderStatus.PartOk:
                 # 订单未成交时，不应该挂止损
                 continue
-            await self._put_order(od, OrderJob.ACT_EDITTG, prefix)
+            self._put_order(od, OrderJob.ACT_EDITTG, prefix)
         return enter_ods, exit_ods
 
     async def enter_order(self, ctx: Context, strategy: str, sigin: dict, do_check=True) -> Optional[InOutOrder]:
@@ -173,13 +175,14 @@ class OrderManager(metaclass=SingletonArg):
             init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
             strategy=strategy
         )
+        od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
         await od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
-        await self._put_order(od, OrderJob.ACT_ENTER)
+        self._put_order(od, OrderJob.ACT_ENTER)
         return od
 
-    async def _put_order(self, od: InOutOrder, action: str, data: str = None):
+    def _put_order(self, od: InOutOrder, action: str, data: str = None):
         pass
 
     async def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
@@ -258,7 +261,7 @@ class OrderManager(metaclass=SingletonArg):
         await od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od, od.exit_tag)
-        await self._put_order(od, OrderJob.ACT_EXIT)
+        self._put_order(od, OrderJob.ACT_EXIT)
         return od
 
     async def _finish_order(self, od: InOutOrder):
@@ -362,7 +365,7 @@ class LocalOrderManager(OrderManager):
 
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: WalletsLocal, data_hd: DataProvider,
                  callback: Callable):
-        super(LocalOrderManager, self).__init__(config, wallets, data_hd, callback)
+        super(LocalOrderManager, self).__init__(config, exchange, wallets, data_hd, callback)
         LocalOrderManager.obj = self
         self.stake_currency = config.get('stake_currency') or []
         self.exchange = exchange
@@ -533,7 +536,7 @@ class LiveOrderManager(OrderManager):
 
     def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
                  callback: Callable):
-        super(LiveOrderManager, self).__init__(config, wallets, data_hd, callback)
+        super(LiveOrderManager, self).__init__(config, exchange, wallets, data_hd, callback)
         LiveOrderManager.obj = self
         self.exchange = exchange
         self.wallets: CryptoWallet = wallets
@@ -1000,13 +1003,10 @@ class LiveOrderManager(OrderManager):
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
 
-    async def _put_order(self, od: InOutOrder, action: str, data: str = None):
+    def _put_order(self, od: InOutOrder, action: str, data: str = None):
         if not btime.prod_mode():
             return
-        if action == OrderJob.ACT_ENTER:
-            od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
-            await od.save()
-        elif action == OrderJob.ACT_EDITTG:
+        if action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
             logger.debug('edit push: %s %s', od, tg_price)
         self.unready_ids.add(od.id)
@@ -1343,10 +1343,11 @@ class LiveOrderManager(OrderManager):
             except Exception as e:
                 if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                     err_msg = str(e)
-                    async with dba():
-                        od = await InOutOrder.get(job.od_id)
-                        # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
-                        od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                    async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
+                        async with dba():
+                            od = await InOutOrder.get(job.od_id)
+                            # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
+                            od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
                     logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                 else:
                     logger.exception('consume order exception: %s', job)

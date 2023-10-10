@@ -7,9 +7,8 @@ import asyncio
 import os
 import threading
 import time
-import traceback
 from contextvars import ContextVar
-from typing import Optional, List, Union, Type, Dict
+from typing import Optional, List, Union, Type, Dict, Callable
 
 import six
 import sqlalchemy as sa
@@ -75,7 +74,7 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
 
 class DBSessionAsyncMeta(type):
     @property
-    def session(cls) -> AsyncSession:
+    def session(cls) -> SqlSession:
         session = _db_sess_asy.get()
         if session is None:
             raise RuntimeError('db sess not loaded')
@@ -91,7 +90,7 @@ class DBSessionAsyncMeta(type):
 
 
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
-    _hold_map = dict()
+    _callbacks: Dict[int, List[Callable]] = dict()
 
     def __init__(self, session_args: Dict = None, commit_on_exit: bool = True):
         self.token = None
@@ -106,7 +105,6 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             DbSession = _DbSessionCls[thread_id]
             sess = DbSession(**self.session_args)
             self.token = _db_sess_asy.set(sess)
-            self._hold_map[id(sess)] = (btime.time(), traceback.format_stack())
         return type(self)
 
     async def __aexit__(self, exc_type, exc_value, traceback):
@@ -126,31 +124,29 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             except Exception as e:
                 logger.error(f'dbsess fail: {exc_type} {exc_value}: {e}')
 
+        key = id(sess)
+        if key in self._callbacks:
+            logger.info(f'sess {key} is close, run {len(self._callbacks[key])} callbacks')
+            from banbot.util.misc import run_async
+            for cb in self._callbacks[key]:
+                try:
+                    await run_async(cb)
+                except Exception:
+                    logger.exception('run callback after session commit error')
+            del self._callbacks[key]
+
         _db_sess_asy.set(None)
         self.token = None
-        sess_key = id(sess)
-        if sess_key in self._hold_map:
-            del self._hold_map[sess_key]
 
     @classmethod
-    async def chec_sess_timeouts(cls):
-        while True:
-            await asyncio.sleep(60)
-            cur_time = btime.time()
-            bad_list = []
-            sess_ids = set(cls._hold_map.keys())
-            for key in sess_ids:
-                if key not in cls._hold_map:
-                    continue
-                item = cls._hold_map[key]
-                if cur_time - item[0] > 300:
-                    bad_list.append(f'[{key}] {btime.to_datestr(item[0])} {item[1]}')
-            if bad_list:
-                bad_text = "\n".join(bad_list)
-                logger.warning(f'timeout db sess: {bad_text}')
+    def add_callback(cls, sess: SqlSession, cb: Callable):
+        key = id(sess)
+        if key not in cls._callbacks:
+            cls._callbacks[key] = []
+        cls._callbacks[key].append(cb)
 
 
-dba: DBSessionAsyncMeta = DBSessionAsync
+dba = DBSessionAsync
 
 
 class IntEnum(TypeDecorator):

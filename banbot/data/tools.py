@@ -258,6 +258,60 @@ async def fetch_api_ohlcv(exchange: CryptoExchange, pair: str, timeframe: str, s
     return result[:end_pos + 1]
 
 
+async def _do_download_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int,
+                          check_exist=True, allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto',
+                          sess: SqlSession = None):
+    from banbot.util.common import MeasureTime
+    measure = MeasureTime()
+    measure.start_for('valid_start')
+    start_ms = await exs.get_valid_start(start_ms)
+    measure.start_for('down_range')
+    from banbot.storage.klines import KLine, KHole
+    start_ms, end_ms = await KHole.get_down_range(exs, timeframe, start_ms, end_ms, sess=sess)
+    if not start_ms:
+        return 0
+    if isinstance(pbar, six.string_types) and pbar == 'auto':
+        pbar = LazyTqdm()
+    down_count = 0
+    if check_exist:
+        measure.start_for('query_range')
+        old_start, old_end = await KLine.query_range(exs.id, timeframe, sess=sess)
+        if old_start and old_end > old_start:
+            if start_ms < old_start:
+                # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
+                cur_end = round(old_start)
+                measure.start_for('fetch_start')
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
+                measure.start_for('insert_start')
+                down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
+                measure.start_for('candle_conts_start')
+                await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata, sess=sess)
+                start_ms = old_end
+            elif end_ms > old_end:
+                if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
+                    # 最新部分缺失的较少，不再请求交易所，节省时间
+                    return down_count
+                # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
+                measure.start_for('fetch_end')
+                predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
+                measure.start_for('insert_end')
+                down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
+                measure.start_for('candle_conts_end')
+                await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata, sess=sess)
+                return down_count
+            else:
+                # 要下载的数据全部存在，直接退出
+                return down_count
+    measure.start_for('fetch_all')
+    newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
+    measure.start_for('insert_all')
+    down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist, sess=sess)
+    measure.start_for('candle_conts_all')
+    await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata, sess=sess)
+    measure.print_all(min_cost=0.01)
+    return down_count
+
+
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
                          allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', is_parallel=False,
                          sess: SqlSession = None) -> int:
@@ -265,61 +319,16 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     从交易所下载K线数据到数据库。
     跳过已有部分，同时保持数据连续
     '''
-    from banbot.storage.klines import KLine, KHole, dba
+    from banbot.storage.klines import KLine, dba
     if timeframe not in KLine.down_tfs:
         raise RuntimeError(f'can only download kline: {KLine.down_tfs}, current: {timeframe}')
-    from banbot.util.common import MeasureTime
-    measure = MeasureTime()
-    measure.start_for('valid_start')
-    start_ms = await exs.get_valid_start(start_ms)
-    measure.start_for('down_range')
     is_temp = False
     if not sess:
         sess = dba.new_session() if is_parallel else None
         is_temp = True
-    start_ms, end_ms = await KHole.get_down_range(exs, timeframe, start_ms, end_ms, sess=sess)
-    if not start_ms:
-        return 0
-    if isinstance(pbar, six.string_types) and pbar == 'auto':
-        pbar = LazyTqdm()
     try:
-        down_count = 0
-        if check_exist:
-            measure.start_for('query_range')
-            old_start, old_end = await KLine.query_range(exs.id, timeframe, sess=sess)
-            if old_start and old_end > old_start:
-                if start_ms < old_start:
-                    # 直接抓取start_ms - old_start的数据，避免出现空洞；可能end_ms>old_end，还需要下载后续数据
-                    cur_end = round(old_start)
-                    measure.start_for('fetch_start')
-                    predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, cur_end, pbar)
-                    measure.start_for('insert_start')
-                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
-                    measure.start_for('candle_conts_start')
-                    await KLine.log_candles_conts(exs, timeframe, start_ms, cur_end, predata, sess=sess)
-                    start_ms = old_end
-                elif end_ms > old_end:
-                    if (end_ms - old_end) / (end_ms - start_ms) <= allow_lack:
-                        # 最新部分缺失的较少，不再请求交易所，节省时间
-                        return down_count
-                    # 直接抓取old_end - end_ms的数据，避免出现空洞；前面没有需要再下次的数据了。可直接退出
-                    measure.start_for('fetch_end')
-                    predata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, old_end, end_ms, pbar)
-                    measure.start_for('insert_end')
-                    down_count += await KLine.insert(exs.id, timeframe, predata, sess=sess)
-                    measure.start_for('candle_conts_end')
-                    await KLine.log_candles_conts(exs, timeframe, old_end, end_ms, predata, sess=sess)
-                    return down_count
-                else:
-                    # 要下载的数据全部存在，直接退出
-                    return down_count
-        measure.start_for('fetch_all')
-        newdata = await fetch_api_ohlcv(exchange, exs.symbol, timeframe, start_ms, end_ms, pbar)
-        measure.start_for('insert_all')
-        down_count += await KLine.insert(exs.id, timeframe, newdata, check_exist, sess=sess)
-        measure.start_for('candle_conts_all')
-        await KLine.log_candles_conts(exs, timeframe, start_ms, end_ms, newdata, sess=sess)
-        measure.print_all(min_cost=0.01)
+        down_count = await _do_download_db(exchange, exs, timeframe, start_ms, end_ms,
+                                           check_exist, allow_lack, pbar, sess)
     finally:
         if sess and is_temp:
             await asyncio.shield(sess.close())

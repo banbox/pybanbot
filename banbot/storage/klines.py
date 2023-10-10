@@ -297,14 +297,15 @@ order by time, sid'''
         return [list(r) for r in rows]
 
     @classmethod
-    async def _recalc_ranges(cls, *tf_list: str) -> Dict[Tuple[int, str], Tuple[int, int]]:
+    async def _recalc_ranges(cls, *tf_list: str, sess: SqlSession = None) -> Dict[Tuple[int, str], Tuple[int, int]]:
         dct_sql = '''
 select sid,
 (extract(epoch from min(time)) * 1000)::bigint, 
 (extract(epoch from max(time)) * 1000)::bigint 
 from {tbl}
 group by 1'''
-        sess = dba.session
+        if not sess:
+            sess = dba.session
         if not tf_list:
             tf_list = [item.tf for item in cls.agg_list]
         # 删除旧的kinfo
@@ -331,7 +332,7 @@ group by 1'''
         sess = dba.session
         rows: Iterable[KInfo] = (await sess.scalars(select(KInfo))).all()
         if not rows:
-            return await cls._recalc_ranges()
+            return await cls._recalc_ranges(sess=sess)
         result = dict()
         for row in rows:
             cache_key = row.sid, row.timeframe
@@ -347,10 +348,10 @@ group by 1'''
         :param force_new: 是否强制刷新范围后，再尝试更新
         '''
         cache_key = sid, timeframe
-        if force_new:
-            await cls._recalc_ranges(timeframe)
         if not sess:
             sess = dba.session
+        if force_new:
+            await cls._recalc_ranges(timeframe, sess=sess)
         old_start, old_end = await cls.query_range(sid, timeframe, sess)
         if old_end or old_start:
             if start_ms >= old_start and end_ms <= old_end:
@@ -544,22 +545,27 @@ group by 1'''
         if not agg_keys:
             return []
         measure.start_for(f'get_db')
-        async with init_db().connect() as conn:
-            # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
-            bak_iso_level = await conn.get_isolation_level()
-            await conn.execution_options(isolation_level='AUTOCOMMIT')
-            tf_ins_list = []
-            for tf in agg_keys:
-                measure.start_for(f'refresh_agg_{tf}')
-                n_start, n_end, o_start, o_end = await cls.refresh_agg(conn, cls.agg_map[tf], sid, start_ms, end_ms)
-                if not o_end or n_end > o_end:
-                    # 记录有新数据的周期
-                    tf_ins_list.append((tf, o_end or n_start, n_end))
-            measure.start_for(f'commit')
-            await conn.commit()
-            await conn.execution_options(isolation_level=bak_iso_level)
-            return tf_ins_list
-            # measure.print_all()
+
+        async def commit_cb():
+            logger.info(f'run auto commit after sess commit: {id(sess)}')
+            async with dba.new_session() as dbsess:
+                async with dbsess.begin():
+                    # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit
+                    dbsess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+                    # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
+                    tf_ins_list = []
+                    for tf in agg_keys:
+                        measure.start_for(f'refresh_agg_{tf}')
+                        args = [dbsess, cls.agg_map[tf], sid, start_ms, end_ms]
+                        n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
+                        if not o_end or n_end > o_end:
+                            # 记录有新数据的周期
+                            tf_ins_list.append((tf, o_end or n_start, n_end))
+                    measure.start_for(f'commit')
+                    return tf_ins_list
+                # measure.print_all()
+
+        dba.add_callback(sess, commit_cb)
 
     @classmethod
     async def _get_unfinish(cls, sess: SqlSession, sid: int, timeframe: str, start_ts: int, end_ts: int,
@@ -686,7 +692,7 @@ update "kline_un" set high={phigh},low={plow},
         await sess.flush()
 
     @classmethod
-    async def refresh_agg(cls, sess: Union[SqlSession, AsyncConnection], tbl: BarAgg, sid: int,
+    async def refresh_agg(cls, sess: SqlSession, tbl: BarAgg, sid: int,
                           org_start_ms: int, org_end_ms: int, agg_from: str = None):
         tf_msecs = tbl.secs * 1000
         start_ms = org_start_ms // tf_msecs * tf_msecs
