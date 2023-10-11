@@ -223,17 +223,65 @@ class BaseDbModel(_BaseDbModel):
 
 def set_engine_event(engine):
 
+    @db_event.listens_for(engine, 'checkin')
+    def receive_checkin(dbapi_connection, connection_record):
+        logger.debug('[db] conn return to pool: %s %s', dbapi_connection, connection_record)
+
+    @db_event.listens_for(engine, 'checkout')
+    def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+        logger.debug('[db] conn retrieve from pool: %s %s %s', dbapi_connection, connection_record, connection_proxy)
+
+    @db_event.listens_for(engine, 'close')
+    def receive_close(dbapi_connection, connection_record):
+        logger.debug('[db] conn closed: %s %s', dbapi_connection, connection_record)
+
+    @db_event.listens_for(engine, 'close_detached')
+    def receive_close_detached(dbapi_connection):
+        logger.debug('[db] conn close_detached: %s', dbapi_connection)
+
+    @db_event.listens_for(engine, 'connect')
+    def receive_connect(dbapi_connection, connection_record):
+        logger.debug('[db] conn connect: %s %s', dbapi_connection, connection_record)
+
+    @db_event.listens_for(engine, 'detach')
+    def receive_detach(dbapi_connection, connection_record):
+        logger.debug('[db] conn detach: %s %s', dbapi_connection, connection_record)
+
+    @db_event.listens_for(engine, 'first_connect')
+    def receive_first_connect(dbapi_connection, connection_record):
+        logger.debug('[db] conn first_connect: %s %s', dbapi_connection, connection_record)
+
+    @db_event.listens_for(engine, 'invalidate')
+    def receive_invalidate(dbapi_connection, connection_record, exception):
+        logger.debug('[db] conn invalidate: %s %s %s', dbapi_connection, connection_record, exception)
+
+    @db_event.listens_for(engine, 'reset')
+    def receive_reset(dbapi_connection, connection_record, reset_state):
+        logger.debug('[db] conn reset: %s %s %s', dbapi_connection, connection_record, reset_state)
+
+    @db_event.listens_for(engine, 'soft_invalidate')
+    def receive_soft_invalidate(dbapi_connection, connection_record, exception):
+        logger.debug('[db] conn soft_invalidate: %s %s %s', dbapi_connection, connection_record, exception)
+
     @db_event.listens_for(engine, 'before_cursor_execute')
-    def before_cursor_execute(conn: AsyncConnection, *args, **kwargs):
-        conn.info['query_start_time'] = time.monotonic()
+    def before_cursor_execute(conn: AsyncConnection, cursor, statement, parameters, context, executemany):
+        try:
+            args = [conn, cursor, statement, parameters, context, executemany]
+            logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s', *args)
+            conn.info['query_start_time'] = time.monotonic()
+        except Exception:
+            logger.exception(f'log sql execute start time fail: {statement}')
 
     @db_event.listens_for(engine, "after_cursor_execute")
-    def after_cursor_execute(conn: AsyncConnection, cursor, statement, *args, **kwargs):
-        total = time.monotonic() - conn.info['query_start_time']
-        if total > db_slow_query_timeout:
-            if not str(statement).lower().strip().startswith('select'):
-                return
-            logger.warn(f'Slow Query Found！Cost {total * 1000:.1f} ms: {statement}')
+    def after_cursor_execute(conn: AsyncConnection, cursor, statement, parameters, context, executemany):
+        try:
+            total = time.monotonic() - conn.info['query_start_time']
+            if total > db_slow_query_timeout:
+                if not str(statement).lower().strip().startswith('select'):
+                    return
+                logger.warn(f'Slow Query Found！Cost {total * 1000:.1f} ms: {statement}')
+        except Exception:
+            logger.exception(f'measure execute cost fail: {statement}')
 
 
 def detach_obj(sess: SqlSession, obj: BaseDbModel):

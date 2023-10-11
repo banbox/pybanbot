@@ -564,10 +564,11 @@ class InOutOrder(BaseDbModel, InfoPart):
             amount_sum = sum(od.enter_cost_real for od in gp_items)
             if key in all_pairs:
                 all_pairs.remove(key)
+            profit_pct = profit_sum / amount_sum if amount_sum else 0
             result.append(dict(
                 pair=key,
                 profit_sum=profit_sum,
-                profit_pct=profit_sum / amount_sum,
+                profit_pct=profit_pct,
                 close_num=len(gp_items)
             ))
         for pair in all_pairs:
