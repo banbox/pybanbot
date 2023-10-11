@@ -70,6 +70,9 @@ def calc_candles_score(exs: ExSymbol, candles: List[Tuple], pip_chg: float) -> f
                 jump_rates.append(abs(prow[ccol] - row[ocol]) / ner_max_chg)
         prow = row
     chg_score = fin_score / total_val
+    if not jump_rates:
+        logger.warning(f'no jump_rates for {exs}, use chg_score for tf_score')
+        return chg_score
     # 取平方，扩大分数差距
     jrate_score = pow(1 - sum(jump_rates) / len(jump_rates), 2)
     return round(chg_score * 0.7 + jrate_score * 0.3, 3)

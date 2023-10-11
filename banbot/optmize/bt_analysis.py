@@ -73,18 +73,26 @@ async def dump_orders(task_id: int, out_dir: str):
     df.to_csv(out_path, sep=',')
 
 
-def dump_hist_assets(assets: List[Tuple[datetime.datetime, float]], out_dir: str, max_num: int = 600):
+def dump_graph(assets: Dict[str, List[Tuple[datetime.datetime, float]]], out_dir: str, max_num: int = 600):
     '''
     输出总资产曲线
     '''
-    if len(assets) > max_num * 2:
-        step = round(len(assets) / max_num)
-        assets = [r for i, r in enumerate(assets) if i % step == 0]
-    x_dates, y_values = list(zip(*assets))
     import plotly.graph_objects as go
+    import plotly.express as px
+    plot_data = []
+    colors = px.colors.qualitative.Plotly
+    idx = -1
+    for key, data in assets.items():
+        idx += 1
+        if len(data) > max_num * 2:
+            step = round(len(data) / max_num)
+            data = [r for i, r in enumerate(data) if i % step == 0]
+        x_dates, y_values = list(zip(*data))
+        color = colors[idx % len(colors)]
+        plot_data.append(go.Scatter(x=x_dates, y=y_values, line=dict(color=color), name=key))
     fig = go.Figure(
-        data=[go.Scatter(x=x_dates, y=y_values, line=dict(color='blue'))],
-        layout=dict(title=dict(text='总资产曲线'))
+        data=plot_data,
+        layout=dict(title=dict(text='实时资产/利润/余额/提现'))
     )
     out_path = os.path.join(out_dir, 'assets.html')
     fig.write_html(out_path)
@@ -105,7 +113,7 @@ class BTAnalysis:
         # 保存订单记录到CSV
         await dump_orders(task_id, task_dir)
         # 保存总资产曲线
-        dump_hist_assets(self.result['bar_assets'], task_dir)
+        dump_graph(self.result['graph_data'], task_dir)
 
     @staticmethod
     async def load(save_dir: str) -> 'BTAnalysis':

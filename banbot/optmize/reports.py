@@ -80,7 +80,7 @@ def text_bt_metrics(data: dict):
         ('Backtest To', data['date_to']),
         ('Max open trades', data['max_open_orders']),
         ('Total Trade/Bar Num', f"{data['orders_num']}/{data['bar_num']}"),
-        ('Starting Balance', data['start_balance']),
+        ('Total Investment', data['total_invest']),
         ('Finish Balance', data['final_balance']),
         ('Absolute profit', data['abs_profit']),
         ('Total Fee', data['total_fee']),

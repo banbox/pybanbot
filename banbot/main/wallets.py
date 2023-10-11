@@ -39,6 +39,9 @@ class ItemWallet:
     used_upol: float = 0
     '已占用的未实现盈亏（用作其他订单的保证金）'
 
+    withdraw: float = 0
+    '从余额提现的，不会用于交易。'
+
     def total(self, with_upol=False):
         sum_val = self.available
         for k, v in self.pendings.items():
@@ -423,19 +426,46 @@ class WalletsLocal:
         '''
         return legal_cost / MarketPrice.get(symbol)
 
-    def total_legal(self, symbols: Iterable[str] = None, with_upol=False):
-        legal_sum = 0
+    def _calc_legal(self, item_amt: Callable, symbols: Iterable[str] = None):
         if symbols:
             data = {k: self.data[k] for k in symbols if k in self.data}
         else:
             data = self.data
+        amounts, coins, prices = [], [], []
         for key, item in data.items():
             if key.find('USD') >= 0:
                 price = 1
             else:
                 price = MarketPrice.get(key)
-            legal_sum += item.total(with_upol) * price
-        return legal_sum
+            amounts.append(item_amt(item) * price)
+            coins.append(key)
+            prices.append(price)
+        return amounts, coins, prices
+
+    def ava_legal(self, symbols: Iterable[str] = None):
+        return sum(self._calc_legal(lambda x: x.available, symbols)[0])
+
+    def total_legal(self, symbols: Iterable[str] = None, with_upol=False):
+        return sum(self._calc_legal(lambda x: x.total(with_upol), symbols)[0])
+
+    def profit_legal(self, symbols: Iterable[str] = None):
+        return sum(self._calc_legal(lambda x: x.unrealized_pol, symbols)[0])
+
+    def get_withdraw_legal(self, symbols: Iterable[str] = None):
+        return sum(self._calc_legal(lambda x: x.withdraw, symbols)[0])
+
+    def withdraw_legal(self, amount: float, symbols: Iterable[str] = None):
+        """
+        从余额提现，从而禁止一部分钱开单。
+        """
+        amounts, coins, prices = self._calc_legal(lambda x: x.available, symbols)
+        total = sum(amounts)
+        draw_amts = [(a / total) * amount / prices[i] for i, a in enumerate(amounts)]
+        for i, amt in enumerate(draw_amts):
+            item = self.get(coins[i])
+            draw_amt = min(amt, item.available)
+            item.withdraw += draw_amt
+            item.available -= draw_amt
 
     def fiat_value(self, *symbols, with_upol=False):
         '''

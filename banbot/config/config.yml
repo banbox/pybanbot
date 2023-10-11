@@ -15,6 +15,7 @@ stake_amount: 15  # 单笔订单默认本金
 max_open_orders: 100  # 最大开单数量，默认100
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000
+draw_balance_over: 0  # 余额超出此值时提出来，仅用于回测
 stake_currency: [USDT, TUSD]  # 限定只交易定价币为这些的交易对
 fatal_stop:  # 全局止损，当全局损失达到限制时，禁止下单
   '1440': 0.1  # 一天损失10%

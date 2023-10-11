@@ -329,32 +329,8 @@ class OrderManager(metaclass=SingletonArg):
         if fin_loss >= 0:
             return 0
         fin_loss = abs(fin_loss)
-        return fin_loss / (fin_loss + self.get_legal_value())
-
-    def _get_legal_value(self, symbol: str, with_upol=False):
-        if symbol not in self.wallets.data:
-            return 0
-        amount = self.wallets.data[symbol].total(with_upol)
-        if symbol.find('USD') >= 0:
-            return amount
-        elif not amount:
-            return 0
-        return amount * MarketPrice.get(symbol)
-
-    def get_legal_value(self, symbol: str = None, with_upol=False):
-        '''
-        获取某个产品的法定价值。USDT直接返回。BTC等需要计算。
-        :param symbol:
-        :param with_upol: 是否计算未实现盈亏
-        :return:
-        '''
-        if symbol:
-            return self._get_legal_value(symbol, with_upol)
-        else:
-            result = 0
-            for key in self.wallets.data:
-                result += self._get_legal_value(key, with_upol)
-            return result
+        total_legal = self.wallets.total_legal()
+        return fin_loss / (fin_loss + total_legal)
 
     def cleanup(self):
         pass
@@ -372,12 +348,12 @@ class LocalOrderManager(OrderManager):
         self.network_cost = 3.  # 模拟网络延迟
 
     async def update_by_bar(self, row):
+        await super(LocalOrderManager, self).update_by_bar(row)
         if not btime.prod_mode():
             exs, timeframe = get_cur_symbol()
             affect_num = await self.fill_pending_orders(exs.symbol, timeframe, row)
             if affect_num:
                 logger.debug("wallets: %s", self.wallets)
-        await super(LocalOrderManager, self).update_by_bar(row)
 
     async def on_lack_of_cash(self):
         lack_num = 0
