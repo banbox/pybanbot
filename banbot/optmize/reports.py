@@ -82,6 +82,7 @@ def text_bt_metrics(data: dict):
         ('Total Trade/Bar Num', f"{data['orders_num']}/{data['bar_num']}"),
         ('Total Investment', data['total_invest']),
         ('Finish Balance', data['final_balance']),
+        ('Finish WithDraw', data['final_withdraw']),
         ('Absolute profit', data['abs_profit']),
         ('Total Fee', data['total_fee']),
         ('Total profit %', data['total_profit_pct']),

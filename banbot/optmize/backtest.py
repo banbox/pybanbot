@@ -126,6 +126,7 @@ class BackTest(Trader):
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
         self.max_balance = max(self.max_balance, quote_legal)
+        self.result['final_withdraw'] = self.wallets.get_withdraw_legal(self.quote_symbols)
         quote_s = 'USD'
         timerange = self.config['timerange']
         self.result['date_from'] = btime.to_datestr(timerange.startts)
