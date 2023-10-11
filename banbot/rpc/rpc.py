@@ -271,18 +271,18 @@ class RPC:
             })
         return result
 
-    async def get_orders(self, status: str = None, limit: int = 0, offset: int = 0,
+    async def get_orders(self, status: str = None, symbol: str = None, limit: int = 0, offset: int = 0,
                          with_total: bool = False, order_by_id: bool = False) -> Dict[str, Any]:
         '''
         筛选符合条件的订单列表。查未平仓订单和已平仓订单都经过此接口
         '''
         sess = dba.session
         order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
-        orders = await get_db_orders(status=status, limit=limit, offset=offset, order_by=order_by)
+        orders = await get_db_orders(status=status, pairs=symbol, limit=limit, offset=offset, order_by=order_by)
 
         total_num = 0
         if with_total:
-            fts = get_order_filters(task_id=BotTask.cur_id, status=status)
+            fts = get_order_filters(task_id=BotTask.cur_id, status=status, pairs=symbol)
             total_num = await sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
 
         if not orders:
@@ -387,6 +387,12 @@ class RPC:
         for od in open_ods:
             od.force_exit(tag, tag_msg)
         return dict(close_num=len(open_ods))
+
+    async def calc_profits(self, status: str):
+        od_list = await get_db_orders(status=status)
+        for od in od_list:
+            od.update_by_price(MarketPrice.get(od.symbol))
+        return dict(num=len(od_list))
 
     def pairlist(self) -> Dict:
         """ Returns the currently active blacklist"""

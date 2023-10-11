@@ -29,7 +29,7 @@ class LiveTrader(Trader):
     def order_callback(self, od: InOutOrder, is_enter: bool):
         msg_type = NotifyType.ENTRY if is_enter else NotifyType.EXIT
         sub_od = od.enter if is_enter else od.exit
-        if sub_od.status != OrderStatus.Close:
+        if sub_od.status != OrderStatus.Close or not sub_od.amount:
             return
         if is_enter:
             action = '开空' if od.short else '开多'

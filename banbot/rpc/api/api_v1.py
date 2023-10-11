@@ -76,12 +76,12 @@ async def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = 
 
 
 @router.get('/orders', tags=['info'])
-async def orders(status: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depends(get_rpc)):
+async def orders(status: str = None, symbol: str = None, limit: int = 0, offset: int = 0, rpc: RPC = Depends(get_rpc)):
     '''
     查询订单列表。status=open表示查询未平仓订单；status=his查询已平仓订单
     '''
     with_total = limit > 0
-    return await rpc.get_orders(status, limit, offset, with_total, order_by_id=True)
+    return await rpc.get_orders(status, symbol, limit, offset, with_total, order_by_id=True)
 
 
 # /forcebuy is deprecated with short addition. use /forceentry instead
@@ -101,6 +101,11 @@ async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
 @router.post('/forceexit', tags=['trading'])
 async def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
     return await rpc.force_exit(payload.order_id)
+
+
+@router.post('/calc_profits', tags=['info'])
+async def calc_profits(status: str = Body(..., embed=True), rpc: RPC = Depends(get_rpc)):
+    return await rpc.calc_profits(status)
 
 
 @router.get('/pairlist', tags=['info', 'pairlist'])
