@@ -1090,6 +1090,8 @@ class LiveOrderManager(OrderManager):
         '''
         尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
         '''
+        if not iod.enter.filled:
+            return filled, iod
         if iod.exit and iod.exit.amount:
             ava_amount = iod.exit.amount - iod.exit.filled
         else:
