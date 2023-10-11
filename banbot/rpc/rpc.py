@@ -7,6 +7,7 @@ import asyncio
 import time
 
 import psutil
+from starlette.concurrency import run_in_threadpool
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 from banbot.storage.common import *
@@ -271,18 +272,34 @@ class RPC:
             })
         return result
 
-    async def get_orders(self, status: str = None, symbol: str = None, limit: int = 0, offset: int = 0,
-                         with_total: bool = False, order_by_id: bool = False) -> Dict[str, Any]:
+    async def get_orders(self, source: str = 'bot', status: str = None, symbol: str = None,
+                         start_time: int = 0, stop_time: int = 0, limit: int = 0, offset: int = 0,
+                         with_total: bool = False) -> Dict[str, Any]:
+        if source == 'bot':
+            return await self.get_ban_orders(status, symbol, start_time, stop_time,
+                                             limit, offset, with_total)
+        else:
+            return await self.get_exg_orders(symbol, start_time, limit or 10)
+
+    async def get_ban_orders(self, status: str = None, symbol: str = None,
+                             start_time: int = 0, stop_time: int = 0, limit: int = 0, offset: int = 0,
+                             with_total: bool = False) -> Dict[str, Any]:
         '''
         筛选符合条件的订单列表。查未平仓订单和已平仓订单都经过此接口
         '''
         sess = dba.session
-        order_by = InOutOrder.id if order_by_id else InOutOrder.exit_at.desc()
-        orders = await get_db_orders(status=status, pairs=symbol, limit=limit, offset=offset, order_by=order_by)
+        order_by = InOutOrder.enter_at.desc()
+        filters = []
+        if start_time:
+            filters.append(InOutOrder.enter_at >= start_time)
+        if stop_time:
+            filters.append(InOutOrder.exit_at >= stop_time)
+        orders = await get_db_orders(status=status, pairs=symbol, filters=filters,
+                                     limit=limit, offset=offset, order_by=order_by)
 
         total_num = 0
         if with_total:
-            fts = get_order_filters(task_id=BotTask.cur_id, status=status, pairs=symbol)
+            fts = get_order_filters(task_id=BotTask.cur_id, status=status, pairs=symbol, filters=filters)
             total_num = await sess.scalar(sa.select(sa.func.count(InOutOrder.id)).filter(*fts))
 
         if not orders:
@@ -301,6 +318,13 @@ class RPC:
             ))
             results.append(od_dict)
         return dict(data=results, total_num=total_num, offset=offset)
+
+    async def get_exg_orders(self, symbol: str, start_time: int, limit: int):
+        async def run_data():
+            return await self.bot.exchange.fetch_orders(symbol, start_time, limit)
+        fut = asyncio.run_coroutine_threadsafe(run_data(), BotGlobal.bot_loop)
+        od_list = await run_in_threadpool(fut.result)
+        return dict(data=od_list)
 
     def _force_entry_validations(self, pair: str, order_side: str):
         if order_side not in {'long', 'short'}:

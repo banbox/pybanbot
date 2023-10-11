@@ -56,6 +56,7 @@ class LiveTrader(Trader):
         )
 
     async def init(self):
+        BotGlobal.bot_loop = asyncio.get_running_loop()
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         async with dba():

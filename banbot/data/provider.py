@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/28
 import time
-
+from sqlalchemy import exc
 from banbot.data.feeder import *
 from banbot.storage import *
 from banbot.util.common import logger
@@ -24,6 +24,9 @@ class DataProvider:
         async def handler(*args, **kwargs):
             try:
                 await callback(*args, **kwargs)
+            except exc.SQLAlchemyError:
+                sess = dba.session
+                logger.exception('LiveData Callback SQLAlchemyError %s %s %s', sess, args, kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler

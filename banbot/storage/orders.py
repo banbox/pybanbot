@@ -665,7 +665,7 @@ async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = Non
         sess = dba.session
     where_list = get_order_filters(task_id, strategy, pairs, status, close_after, filters)
     query = select(InOutOrder).where(*where_list)
-    if order_by:
+    if order_by is not None:
         query = query.order_by(order_by)
     if offset:
         query = query.offset(offset)
