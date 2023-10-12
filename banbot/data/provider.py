@@ -24,9 +24,6 @@ class DataProvider:
         async def handler(*args, **kwargs):
             try:
                 await callback(*args, **kwargs)
-            except exc.SQLAlchemyError:
-                sess = dba.session
-                logger.exception('LiveData Callback SQLAlchemyError %s %s %s', sess, args, kwargs)
             except Exception:
                 logger.exception('LiveData Callback Exception %s %s', args, kwargs)
         self._callback = handler

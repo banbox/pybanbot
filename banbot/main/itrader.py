@@ -66,7 +66,11 @@ class Trader:
         MarketPrice.set_bar_price(pair, float(row[ccol]))
         try:
             async with dba():
-                await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
+                try:
+                    await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
+                except exc.SQLAlchemyError:
+                    sess = dba.session
+                    logger.exception('itrader run_bar SQLAlchemyError %s %s %s', sess, pair, timeframe)
         finally:
             self.order_mgr.unready_ids = set()
 
