@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Callable
 
 from banbot.cmds.cli_options import *
 
-ARGS_COMMON = ["config", "logfile", "data_dir", "no_db", "debug", "nocompress"]
+ARGS_COMMON = ["config", "logfile", "data_dir", "no_db", "debug", "nocompress", "cprofile"]
 
 
 class Arguments:
@@ -71,7 +71,7 @@ def _reg_trade(subparsers, **kwargs):
 
 def _reg_backtest(subparsers, **kwargs):
     from banbot.cmds.entrys import start_backtesting
-    opts = ["timerange", "stake_amount", "fee", "pairs", "cprofile", "stg_dir"]
+    opts = ["timerange", "stake_amount", "fee", "pairs", "stg_dir"]
     _reg_sub(subparsers, 'backtest', opts, start_backtesting, help='backtest', **kwargs)
 
 

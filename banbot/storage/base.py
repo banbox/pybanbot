@@ -134,7 +134,7 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
                     success = True
                 await asyncio.shield(sess.close())
             except Exception as e:
-                logger.error(f'dbsess fail: {sess} {exc_type} {exc_value}: {e}')
+                logger.exception(f'dbsess fail: {e} {sess} {exc_type} {exc_value} inexc: {traceback}')
 
         key = id(sess)
         if key in self._callbacks:
