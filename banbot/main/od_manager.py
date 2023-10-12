@@ -59,7 +59,6 @@ class OrderManager(metaclass=SingletonArg):
         '全局止损时禁止时间，默认8小时'
         self.forbid_pairs = set()
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
-        self.unready_ids = set()  # 向order_q添加任务后，尚未commit保存，所以也暂存到un_ready_ids
 
     def _load_fatal_stop(self):
         fatal_cfg = self.config.get('fatal_stop')
@@ -986,8 +985,12 @@ class LiveOrderManager(OrderManager):
         if action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
             logger.debug('edit push: %s %s', od, tg_price)
-        self.unready_ids.add(od.id)
-        self.order_q.put_nowait(OrderJob(od.id, action, data))
+
+        def do_put(success: bool):
+            if success:
+                self.order_q.put_nowait(OrderJob(od.id, action, data))
+
+        dba.add_callback(dba.session, do_put)
 
     async def _update_bnb_order(self, od: Order, data: dict):
         info: dict = data['info']
@@ -1297,8 +1300,6 @@ class LiveOrderManager(OrderManager):
     async def consume_queue(self):
         while True:
             job: OrderJob = await self.order_q.get()
-            while job.od_id in self.unready_ids:
-                await asyncio.sleep(0.005)
             await self.exec_od_job(job)
             self.order_q.task_done()
             if BotGlobal.state == BotState.STOPPED and not self.order_q.qsize():

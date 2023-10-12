@@ -541,7 +541,9 @@ group by 1'''
             return
         measure.start_for(f'get_db')
 
-        async def commit_cb():
+        async def commit_cb(success):
+            if not success:
+                return
             async with dba.new_session() as dbsess:
                 async with dbsess.begin():
                     # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit

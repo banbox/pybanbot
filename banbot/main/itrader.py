@@ -64,15 +64,12 @@ class Trader:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
         # 更新最新价格
         MarketPrice.set_bar_price(pair, float(row[ccol]))
-        try:
-            async with dba():
-                try:
-                    await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
-                except exc.SQLAlchemyError:
-                    sess = dba.session
-                    logger.exception('itrader run_bar SQLAlchemyError %s %s %s', sess, pair, timeframe)
-        finally:
-            self.order_mgr.unready_ids = set()
+        async with dba():
+            try:
+                await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
+            except exc.SQLAlchemyError:
+                sess = dba.session
+                logger.exception('itrader run_bar SQLAlchemyError %s %s %s', sess, pair, timeframe)
 
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'

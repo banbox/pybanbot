@@ -114,12 +114,15 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         if not sess:
             return
 
+        success = True
         if sess.in_transaction():
+            success = False
             try:
                 if exc_type is not None:
                     await sess.rollback()
                 elif self.commit_on_exit:
                     await sess.commit()
+                    success = True
                 await asyncio.shield(sess.close())
             except Exception as e:
                 logger.error(f'dbsess fail: {exc_type} {exc_value}: {e}')
@@ -129,7 +132,7 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             from banbot.util.misc import run_async
             for cb in self._callbacks[key]:
                 try:
-                    await run_async(cb)
+                    await run_async(cb, success)
                 except Exception:
                     logger.exception('run callback after session commit error')
             del self._callbacks[key]
