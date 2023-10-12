@@ -8,6 +8,7 @@ import contextlib
 import os
 import threading
 import time
+import traceback
 from contextvars import ContextVar
 from typing import Optional, List, Union, Type, Dict, Callable
 
@@ -67,7 +68,7 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
     db_engine = create_async_engine(db_url, **create_args)
     DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
-    set_engine_event(db_engine.sync_engine)
+    set_db_events(db_engine.sync_engine, DbSession)
     _db_engines[thread_id] = db_engine
     _DbSessionCls[thread_id] = DbSession
     return db_engine
@@ -114,14 +115,16 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             DbSession = _DbSessionCls[thread_id]
             sess = DbSession(**self.session_args)
             self.token = _db_sess_asy.set(sess)
+            logger.debug('dbsess create %s %s', id(sess), traceback.format_stack()[-2])
         return type(self)
 
-    async def __aexit__(self, exc_type, exc_value, traceback):
+    async def __aexit__(self, exc_type, exc_value, traceinfo):
         if not self.token:
             return
         sess = _db_sess_asy.get()
         if not sess:
             return
+        logger.debug('dbsess exit %s %s', id(sess), traceback.format_stack()[-2])
 
         success = True
         if sess.in_transaction():
@@ -134,7 +137,8 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
                     success = True
                 await asyncio.shield(sess.close())
             except Exception as e:
-                logger.exception(f'dbsess fail: {e} {sess} {exc_type} {exc_value} inexc: {traceback}')
+                stack = "\n".join(traceback.format_stack())
+                logger.exception(f'dbsess fail: {e} {sess.connection()} {exc_type} {exc_value} inexc: {traceinfo} {stack}')
 
         key = id(sess)
         if key in self._callbacks:
@@ -233,7 +237,7 @@ class BaseDbModel(_BaseDbModel):
             setattr(self, k, v)
 
 
-def set_engine_event(engine):
+def set_db_events(engine, Session):
 
     @db_event.listens_for(engine, 'checkin')
     def receive_checkin(dbapi_connection, connection_record):
@@ -274,6 +278,38 @@ def set_engine_event(engine):
     @db_event.listens_for(engine, 'soft_invalidate')
     def receive_soft_invalidate(dbapi_connection, connection_record, exception):
         logger.debug('[db] conn soft_invalidate: %s %s %s', dbapi_connection, connection_record, exception)
+
+    @db_event.listens_for(Session, 'after_begin')
+    def receive_after_begin(session, transaction, connection):
+        logger.debug('[db] sess after_begin: %s %s %s', session, transaction, connection)
+
+    @db_event.listens_for(Session, 'after_commit')
+    def receive_after_commit(session):
+        logger.debug('[db] sess after_commit: %s', session)
+
+    @db_event.listens_for(Session, 'after_flush')
+    def receive_after_flush(session, flush_context):
+        logger.debug('[db] sess after_flush: %s %s', session, flush_context)
+
+    @db_event.listens_for(Session, 'after_rollback')
+    def receive_after_rollback(session):
+        logger.debug('[db] sess after_rollback: %s', session)
+
+    @db_event.listens_for(Session, 'after_soft_rollback')
+    def receive_after_soft_rollback(session, previous_transaction):
+        logger.debug('[db] sess after_soft_rollback: %s %s', session, previous_transaction)
+
+    @db_event.listens_for(Session, 'after_transaction_create')
+    def receive_after_transaction_create(session, transaction):
+        logger.debug('[db] sess after_transaction_create: %s %s', session, transaction)
+
+    @db_event.listens_for(Session, 'after_transaction_end')
+    def receive_after_transaction_end(session, transaction):
+        logger.debug('[db] sess after_transaction_end: %s %s', session, transaction)
+
+    @db_event.listens_for(Session, 'do_orm_execute')
+    def receive_do_orm_execute(orm_execute_state):
+        logger.debug('[db] sess do_orm_execute: %s', orm_execute_state)
 
     @db_event.listens_for(engine, 'before_cursor_execute')
     def before_cursor_execute(conn: AsyncConnection, cursor, statement, parameters, context, executemany):

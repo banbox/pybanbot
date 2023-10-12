@@ -331,6 +331,7 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
                                            check_exist, allow_lack, pbar, sess)
     finally:
         if sess and is_temp:
+            await sess.commit()
             await asyncio.shield(sess.close())
     return down_count
 
