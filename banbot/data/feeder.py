@@ -23,6 +23,7 @@ class DataFeeder(Watcher):
         super(DataFeeder, self).__init__(callback)
         self.pair = pair
         self.states: List[PairTFCache] = []
+        self.next_at: int = 0  # 下一次期望收到bar的毫秒时间
         self.auto_prefire = auto_prefire
         self.sub_tflist(*tf_warms.keys())
         self.wait_bar = None  # 外部用作缓存，记录未完成的bar
@@ -103,6 +104,8 @@ class DataFeeder(Watcher):
             return False
         # 子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
         min_finished = await self._on_state_ohlcv(self.pair, state, ohlcvs, last_finish)
+        if min_finished:
+            self.next_at = state.latest[0] + state.tf_secs * 2000
         if len(self.states) > 1:
             # 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
             # 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
@@ -235,6 +238,8 @@ class DBDataFeeder(HistDataFeeder):
             end = int(self.timerange.stopts * 1000)
             min_tf = self.states[0].timeframe
             self._cache_arr = await KLine.query(self.exs, min_tf, self._offset_ts, end, self._batch_size)
+            args = (self.exs.symbol, min_tf, self._offset_ts, end, len(self._cache_arr))
+            logger.debug('feeder load %s %s %s %s, len: %d', *args)
             self._row_id = 0
             if not self._cache_arr:
                 self.total_len = self.row_id

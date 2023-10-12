@@ -71,6 +71,7 @@ class LiveTrader(Trader):
             await self.wallets.init(cur_pairs)
             await self.exchange.init(cur_pairs)
             pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
+            await self._init_strategies()
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         Notify.startup_msg()
@@ -78,6 +79,19 @@ class LiveTrader(Trader):
             type=NotifyType.STATUS,
             status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}，已开启{len(open_ods)}单'
         )
+
+    async def _init_strategies(self):
+        open_ods = await InOutOrder.open_orders()
+        for stg_name, pair, tf in BotGlobal.stg_symbol_tfs:
+            cur_ods = [od for od in open_ods if od.symbol == pair and od.timeframe == tf]
+            if not cur_ods:
+                continue
+            stg_list = BotGlobal.pairtf_stgs[f'{pair}_{tf}']
+            stg = next((s for s in stg_list if s.name == stg_name), None)
+            if not stg:
+                logger.error(f'stg not found: {stg_name}')
+                continue
+            stg.enter_num = len(cur_ods)
 
     async def run(self):
         self.start_heartbeat_check(3)
@@ -104,6 +118,8 @@ class LiveTrader(Trader):
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
+                # K线延迟预警，预期时间内未收到发出错误
+                asyncio.create_task(self.data_mgr.run_checks_forever()),
                 # 监听钱包更新
                 asyncio.create_task(self.wallets.watch_balance_forever()),
                 # 监听订单更新

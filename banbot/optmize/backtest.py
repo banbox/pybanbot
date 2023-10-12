@@ -95,6 +95,7 @@ class BackTest(Trader):
         # 轮训数据
         async with dba():
             await self.data_mgr.down_data()
+        async with dba():
             bt_start = time.monotonic()
             await self.data_mgr.loop_main()
             bt_cost = time.monotonic() - bt_start

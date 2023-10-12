@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/28
 import time
-from sqlalchemy import exc
 from banbot.data.feeder import *
 from banbot.storage import *
 from banbot.util.common import logger
@@ -207,6 +206,23 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         market = self.config['market_type']
         pairs = [hold.pair for hold in removed]
         await self.unwatch_klines(self.exg_name, market, pairs)
+
+    @loop_forever
+    async def run_checks_forever(self):
+        min_tfsecs = sys.maxsize
+        cur_ms = btime.utcstamp()
+        delays = dict()
+        for feed in self.holders:
+            if not feed.next_at:
+                continue
+            delay_min = (cur_ms - feed.next_at) / 6000
+            if delay_min > 1:
+                delays[feed.pair] = round(delay_min)
+            min_tfsecs = min(min_tfsecs, feed.states[0].tf_secs)
+        if delays:
+            logger.error(f'Ohlcv Delays: (Pair: Mins) {delays}')
+        min_tfsecs = max(min_tfsecs, 300)
+        await asyncio.sleep(min_tfsecs)
 
     @classmethod
     async def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],

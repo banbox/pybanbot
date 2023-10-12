@@ -309,6 +309,7 @@ class OhlcvWatcher(WebsocketWatcher):
                 finish_bars.append(self.pbar)
             self.pbar = cur_bar
         if finish_bars:
+            logger.debug('watch ohlcv: %s %s %s', self.pair, self.state_ws.timeframe, finish_bars)
             # 发送已完成数据
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
             await self.spider.broadcast(pub_key, (finish_bars, self.state_ws.tf_secs))
