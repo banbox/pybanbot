@@ -281,6 +281,10 @@ def set_engine_event(engine):
             if isinstance(parameters, (list, tuple)) and len(parameters) > 30:
                 if isinstance(parameters[0], (list, tuple, dict)):
                     parameters = f'[{parameters[0]}, len: {len(parameters)}]'
+                elif len(parameters) > 300:
+                    parameters = f'({parameters[:300]}, len: {len(parameters)})'
+            if statement and len(statement) > 300:
+                statement = f'{str(statement)[:300]}... len: {len(statement)}'
             args = [conn, cursor, statement, parameters, context, executemany]
             logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s', *args)
             conn.info['query_start_time'] = time.monotonic()
