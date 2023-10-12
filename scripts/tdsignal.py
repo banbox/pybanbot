@@ -96,12 +96,12 @@ async def load_signals(timezone_off: int, *xls_paths: str):
     state.close()
 
 
-def load_signals_from_dir():
+async def load_signals_from_dir():
     par_xls_dir = r'E:/Data/SignalData/'
     fnames = os.listdir(par_xls_dir)
     async with dba():
         path_list = [par_xls_dir + n for n in fnames]
-        asyncio.run(load_signals(8, *path_list))
+        await load_signals(8, *path_list)
 
 
 async def fix_symbol_wrong():
@@ -131,9 +131,7 @@ async def fix_symbol_wrong():
 
 if __name__ == '__main__':
     import os
-    from banbot.storage.base import init_db
     from banbot.config import AppConfig
     AppConfig.init_by_args()
-    init_db()
-    load_signals_from_dir()
+    asyncio.run(load_signals_from_dir())
     

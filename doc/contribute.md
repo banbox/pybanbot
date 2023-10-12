@@ -25,11 +25,7 @@
 
 
 # 性能测试优化
-如需测试各个函数耗时，可在`cmds/entrys.py`中执行下面命令：
-```python
-import cProfile
-cProfile.runctx('asyncio.run(backtesting.run())', globals(), locals(), sort='tottime')
-```
+如需测试各个函数耗时，可在启动时添加`--cprofile`参数
 
 
 # 部署

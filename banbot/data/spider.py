@@ -90,18 +90,15 @@ async def down_pairs_by_config(config: Config):
     await exchange.close()
 
 
-def run_down_pairs(args: Dict[str, Any]):
+async def run_down_pairs(args: Dict[str, Any]):
     '''
     解析命令行参数并下载交易对数据
     '''
     config = AppConfig.init_by_args(args)
 
-    async def run_download():
-        from banbot.storage import dba
-        async with dba():
-            await down_pairs_by_config(config)
-
-    asyncio.run(run_download())
+    from banbot.storage import dba
+    async with dba():
+        await down_pairs_by_config(config)
 
 
 class MinerJob(PairTFCache):

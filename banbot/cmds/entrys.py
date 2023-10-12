@@ -47,13 +47,13 @@ async def start_trading(args: Dict[str, Any]) -> int:
     except KeyboardInterrupt:
         logger.info('SIGINT received, aborting ...')
         BotGlobal.state = BotState.STOPPED
-        asyncio.run(trader.cleanup())
+        await trader.cleanup()
     finally:
         logger.info("worker found ... calling exit")
     return 0
 
 
-def start_backtesting(args: Dict[str, Any]) -> None:
+async def start_backtesting(args: Dict[str, Any]) -> None:
     """
     Start Backtesting script
     :param args: Cli args from Arguments()
@@ -66,12 +66,7 @@ def start_backtesting(args: Dict[str, Any]) -> None:
     btime.run_mode = btime.RunMode.BACKTEST
     backtesting = BackTest(config)
     try:
-        if args.get('cprofile'):
-            cmd_line = 'asyncio.run(backtesting.run())'
-            import cProfile
-            cProfile.runctx(cmd_line, globals(), locals(), sort='tottime')
-        else:
-            asyncio.run(backtesting.run())
+        await backtesting.run()
     except Exception as e:
         logger.error(str(e))
         logger.exception("Fatal exception!")

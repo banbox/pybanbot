@@ -5,7 +5,7 @@
 # Date  : 2023/4/24
 import math
 import collections
-from typing import Callable, Tuple, ClassVar, Iterable, Deque
+from typing import Tuple, ClassVar, Iterable, Deque
 
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
@@ -474,10 +474,25 @@ group by 1'''
         return len(rows)
 
     @classmethod
-    async def pause_compress(cls, tbl_list: List[str] = None) -> List[int]:
+    @contextlib.asynccontextmanager
+    async def decompress(cls, tbl_list: List[str] = None):
+        logger.info('pause compress ing...')
+        start = time.monotonic()
+        async with dba.autocommit(dba.new_session()) as sess:
+            jobs = await cls._pause_compress(sess, tbl_list)
+        cost = time.monotonic() - start
+        logger.info(f'pause compress ok, cost: {cost:.3f} secs')
+        try:
+            yield
+        finally:
+            logger.info('restore compress ...')
+            async with dba.autocommit(dba.new_session()) as sess:
+                await cls._restore_compress(sess, jobs)
+
+    @classmethod
+    async def _pause_compress(cls, sess: SqlSession, tbl_list: List[str] = None) -> List[int]:
         if not tbl_list:
             tbl_list = [t.tbl for t in KLine.agg_list]
-        sess = dba.session
         result = []
         for tbl in tbl_list:
             get_job_id = f"""
@@ -497,10 +512,9 @@ group by 1'''
         return result
 
     @classmethod
-    async def restore_compress(cls, jobs: List[int]):
+    async def _restore_compress(cls, sess: SqlSession, jobs: List[int]):
         if not jobs:
             return
-        sess = dba.session
         for job_id in jobs:
             # 启动压缩任务（不会立刻执行压缩）
             await sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => true);'))
@@ -544,25 +558,21 @@ group by 1'''
         async def commit_cb(success):
             if not success:
                 return
-            async with dba.new_session() as dbsess:
-                async with dbsess.begin():
-                    # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit
-                    await dbsess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
-                    # 这里必须从连接池重新获取连接，不能使用sess的连接，否则会导致sess无效
-                    for tf in agg_keys:
-                        measure.start_for(f'refresh_agg_{tf}')
-                        args = [dbsess, cls.agg_map[tf], sid, start_ms, end_ms]
-                        n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
-                        if not o_end or n_end > o_end:
-                            # 记录有新数据的周期
-                            tf_new_ranges.append((tf, o_end or n_start, n_end))
-                    measure.start_for(f'commit')
-                    if tf_new_ranges and cls._listeners:
-                        # 有可能的监听者，发出查询数据发出事件
-                        exs: ExSymbol = await ExSymbol.safe_get_by_id(sid, dbsess)
-                        exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
-                        for tf, n_start, n_end in tf_new_ranges:
-                            cls._on_new_bars(exg_name, market, symbol, tf)
+            async with dba.autocommit(dba.new_session()) as dbsess:
+                for tf in agg_keys:
+                    measure.start_for(f'refresh_agg_{tf}')
+                    args = [dbsess, cls.agg_map[tf], sid, start_ms, end_ms]
+                    n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
+                    if not o_end or n_end > o_end:
+                        # 记录有新数据的周期
+                        tf_new_ranges.append((tf, o_end or n_start, n_end))
+                measure.start_for(f'commit')
+                if tf_new_ranges and cls._listeners:
+                    # 有可能的监听者，发出查询数据发出事件
+                    exs: ExSymbol = await ExSymbol.safe_get_by_id(sid, dbsess)
+                    exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
+                    for tf, n_start, n_end in tf_new_ranges:
+                        cls._on_new_bars(exg_name, market, symbol, tf)
                 # measure.print_all()
 
         dba.add_callback(sess, commit_cb)

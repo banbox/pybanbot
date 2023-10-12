@@ -96,12 +96,8 @@ class HistDataProvider(DataProvider):
             self.plast = pg_num
 
     async def down_data(self):
-        timeframes = {s.timeframe for hold in self.holders for s in hold.states}
-        tbls = [item.tbl for item in KLine.agg_list if item.tf in timeframes]
-        jobs = await KLine.pause_compress(tbls)
         for hold in self.holders:
             await hold.down_if_need()
-        await KLine.restore_compress(jobs)
 
     async def loop_main(self):
         try:

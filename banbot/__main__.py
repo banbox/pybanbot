@@ -11,18 +11,14 @@ from banbot.cmds.arguments import *
 from banbot.util.common import logger, set_log_level
 
 
-async def pause_compress():
-    from banbot.storage import KLine, dba
-    from banbot.storage.base import init_db
-    init_db()
-    async with dba():
-        return await KLine.pause_compress()
-
-
-async def restore_compress(prs_res):
-    from banbot.storage import KLine, dba
-    async with dba():
-        await KLine.restore_compress(prs_res)
+async def _run_main(run_func: Callable, nocompress: bool, args):
+    from banbot.util.misc import run_async
+    from banbot.storage import KLine
+    if nocompress:
+        async with KLine.decompress():
+            await run_async(run_func, args)
+    else:
+        await run_async(run_func, args)
 
 
 def main(sysargv: Optional[List[str]] = None) -> None:
@@ -43,15 +39,13 @@ def main(sysargv: Optional[List[str]] = None) -> None:
         if 'func' in args:
             run_func = args['func']
             nocompress = args.get('nocompress')
-            prs_res = None
-            if nocompress:
-                prs_res = asyncio.run(pause_compress())
-            if asyncio.iscoroutinefunction(run_func):
-                return_code = asyncio.run(run_func(args))
+
+            if args.get('cprofile'):
+                cmd_line = 'asyncio.run(_run_main(run_func, nocompress, args))'
+                import cProfile
+                cProfile.runctx(cmd_line, globals(), locals(), sort='tottime')
             else:
-                return_code = run_func(args)
-            if nocompress and prs_res:
-                asyncio.run(restore_compress(prs_res))
+                asyncio.run(_run_main(run_func, nocompress, args))
         else:
             # No subcommand was issued.
             raise RuntimeError(

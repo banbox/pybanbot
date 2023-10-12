@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/4/24
 import asyncio
+import contextlib
 import os
 import threading
 import time
@@ -87,6 +88,14 @@ class DBSessionAsyncMeta(type):
             init_db()
         DbSession = _DbSessionCls[thread_id]
         return DbSession(**kwargs)
+
+    @contextlib.asynccontextmanager
+    async def autocommit(cls, sess: SqlSession):
+        async with sess:
+            async with sess.begin():
+                # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit
+                await sess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
+                yield sess
 
 
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
