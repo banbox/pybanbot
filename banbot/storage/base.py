@@ -17,14 +17,13 @@ import sqlalchemy as sa
 from sqlalchemy import create_engine, pool, Column, orm, select, update, delete, insert  # noqa
 from sqlalchemy import event as db_event
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm.session import make_transient
+from sqlalchemy.orm.session import make_transient, sessionmaker, Session
 from sqlalchemy.types import TypeDecorator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncConnection, AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncSession as SqlSession
 
 from banbot.config import AppConfig
 from banbot.util.common import logger
-from banbot.util import btime
 
 _BaseDbModel = declarative_base()
 _db_sess_asy: ContextVar[Optional[AsyncSession]] = ContextVar('_db_sess_asy', default=None)
@@ -67,8 +66,10 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     # 实例化异步engine
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
     db_engine = create_async_engine(db_url, **create_args)
-    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
-    set_db_events(db_engine.sync_engine, DbSession)
+    SyncSession = sessionmaker(db_engine.sync_engine, class_=Session, expire_on_commit=False)
+    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False,
+                                   sync_session_class=SyncSession)
+    set_db_events(db_engine.sync_engine, SyncSession)
     _db_engines[thread_id] = db_engine
     _DbSessionCls[thread_id] = DbSession
     return db_engine

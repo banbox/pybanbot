@@ -110,8 +110,8 @@ class LiveTrader(Trader):
                 asyncio.create_task(self.order_mgr.listen_orders_forever()),
                 # 跟踪监听未成交订单，及时更新价格确保成交
                 asyncio.create_task(self.order_mgr.trail_open_orders_forever()),
-                # 处理未匹配订单，跟踪用户下单
-                asyncio.create_task(self.order_mgr.trail_unmatches_forever()),
+                # 处理未匹配订单，跟踪用户下单 TODO: 启用
+                # asyncio.create_task(self.order_mgr.trail_unmatches_forever()),
                 # 跟踪账户杠杆倍数和保证金配置
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
                 # 跟踪所有币的最新价格

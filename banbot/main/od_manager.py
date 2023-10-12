@@ -1368,7 +1368,7 @@ class LiveOrderManager(OrderManager):
                 await self._handle_unmatches()
         except Exception:
             logger.exception('trail_unmatches_forever error')
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
     @loop_forever
     async def trail_open_orders_forever(self):
