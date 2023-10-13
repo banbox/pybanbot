@@ -44,7 +44,6 @@ class BarAgg:
         self.agg_every = agg_every
         self.comp_before = comp_before
         self.retention = retention
-        self.is_view = comp_before is None  # 超表可压缩，故传入压缩参数的认为是超表
 
     def has_finish(self, start_ms: int, end_ms: int):
         start_align = start_ms // 1000 // self.secs * self.secs
@@ -140,29 +139,11 @@ ORDER BY sid, 2'''
         await cls._init_hypertbl(sess, cls.agg_list[0])
         # 创建连续聚合及更新策略
         for item in cls.agg_list[1:]:
-            if not item.is_view:
-                create_sql = f'CREATE TABLE {item.tbl} (LIKE {cls._tname} INCLUDING ALL);'
-                await sess.execute(sa.text(create_sql))
-                await sess.flush()
-                # 初始化超表
-                await cls._init_hypertbl(sess, item)
-                continue
-            stat_create = f'''
-CREATE MATERIALIZED VIEW kline_{item.tf} 
-WITH (timescaledb.continuous) AS 
-SELECT sid, time_bucket(INTERVAL '{item.tf}', time) AS time, {cls._candle_agg}
-FROM {item.agg_from}
-GROUP BY sid, 2 
-ORDER BY sid, 2'''
-            stat_policy = f'''
-SELECT add_continuous_aggregate_policy('kline_{item.tf}',
-  start_offset => INTERVAL '{item.agg_start}',
-  end_offset => INTERVAL '{item.agg_end}',
-  schedule_interval => INTERVAL '{item.agg_every}');'''
-            await sess.execute(sa.text(stat_create))
+            create_sql = f'CREATE TABLE {item.tbl} (LIKE {cls._tname} INCLUDING ALL);'
+            await sess.execute(sa.text(create_sql))
             await sess.flush()
-            await sess.execute(sa.text(stat_policy))
-            await sess.flush()
+            # 初始化超表
+            await cls._init_hypertbl(sess, item)
         # 创建未完成kline表，存储所有币的所有周期未完成bar；不需要是超表
         exc_sqls = [
             'DROP TABLE IF EXISTS "kline_un";',
@@ -191,10 +172,7 @@ CREATE TABLE "kline_un" (
         删除所有的K线数据表；超表+连续聚合
         '''
         for tbl in cls.agg_list[::-1]:
-            if tbl.is_view:
-                await sess.execute(sa.text(f"drop MATERIALIZED view if exists {tbl.tbl} CASCADE"))
-            else:
-                await sess.execute(sa.text(f"drop table if exists {tbl.tbl}"))
+            await sess.execute(sa.text(f"drop table if exists {tbl.tbl}"))
 
     @classmethod
     def _get_sub_tf(cls, timeframe: str) -> Tuple[str, str]:
@@ -478,7 +456,7 @@ group by 1'''
     async def decompress(cls, tbl_list: List[str] = None):
         logger.info('pause compress ing...')
         start = time.monotonic()
-        async with dba.autocommit(dba.new_session()) as sess:
+        async with dba.autocommit() as sess:
             jobs = await cls._pause_compress(sess, tbl_list)
         cost = time.monotonic() - start
         logger.info(f'pause compress ok, cost: {cost:.3f} secs')
@@ -486,7 +464,7 @@ group by 1'''
             yield
         finally:
             logger.info('restore compress ...')
-            async with dba.autocommit(dba.new_session()) as sess:
+            async with dba.autocommit() as sess:
                 await cls._restore_compress(sess, jobs)
 
     @classmethod
@@ -555,27 +533,21 @@ group by 1'''
             return
         measure.start_for(f'get_db')
 
-        async def commit_cb(success):
-            if not success:
-                return
-            async with dba.autocommit(dba.new_session()) as dbsess:
-                for tf in agg_keys:
-                    measure.start_for(f'refresh_agg_{tf}')
-                    args = [dbsess, cls.agg_map[tf], sid, start_ms, end_ms]
-                    n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
-                    if not o_end or n_end > o_end:
-                        # 记录有新数据的周期
-                        tf_new_ranges.append((tf, o_end or n_start, n_end))
-                measure.start_for(f'commit')
-                if tf_new_ranges and cls._listeners:
-                    # 有可能的监听者，发出查询数据发出事件
-                    exs: ExSymbol = await ExSymbol.safe_get_by_id(sid, dbsess)
-                    exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
-                    for tf, n_start, n_end in tf_new_ranges:
-                        cls._on_new_bars(exg_name, market, symbol, tf)
-                # measure.print_all()
-
-        dba.add_callback(sess, commit_cb)
+        for tf in agg_keys:
+            measure.start_for(f'refresh_agg_{tf}')
+            args = [sess, cls.agg_map[tf], sid, start_ms, end_ms]
+            n_start, n_end, o_start, o_end = await cls.refresh_agg(*args)
+            if not o_end or n_end > o_end:
+                # 记录有新数据的周期
+                tf_new_ranges.append((tf, o_end or n_start, n_end))
+        measure.start_for(f'commit')
+        if tf_new_ranges and cls._listeners:
+            # 有可能的监听者，发出查询数据发出事件
+            exs: ExSymbol = await ExSymbol.safe_get_by_id(sid, sess)
+            exg_name, market, symbol = exs.exchange, exs.market, exs.symbol
+            for tf, n_start, n_end in tf_new_ranges:
+                cls._on_new_bars(exg_name, market, symbol, tf)
+        # measure.print_all()
 
     @classmethod
     async def _get_unfinish(cls, sess: SqlSession, sid: int, timeframe: str, start_ts: int, end_ts: int,
@@ -723,19 +695,15 @@ update "kline_un" set high={phigh},low={plow},
             agg_from = 'kline_' + tbl.agg_from
         win_start = f"to_timestamp({agg_start / 1000})"
         win_end = f"to_timestamp({end_ms / 1000})"
-        if tbl.is_view:
-            # 刷新连续聚合（连续聚合不支持按sid筛选刷新，性能批量插入历史数据时性能较差）
-            stmt = f"CALL refresh_continuous_aggregate('{tbl.tbl}', {win_start}, {win_end});"
-        else:
-            # 聚合数据到超表中
-            select_sql = f'''
+        # 聚合数据到超表中
+        select_sql = f'''
 SELECT sid, time_bucket(INTERVAL '{tbl.tf}', time) AS time, {cls._candle_agg}
 FROM {agg_from}
 where sid={sid} and time >= {win_start} and time < {win_end}
 GROUP BY sid, 2 
 ORDER BY sid, 2'''
-            ins_cols = "sid, time, open, high, low, close, volume"
-            stmt = f'''INSERT INTO {tbl.tbl} ({ins_cols}) {select_sql} {cls._insert_conflict};'''
+        ins_cols = "sid, time, open, high, low, close, volume"
+        stmt = f'''INSERT INTO {tbl.tbl} ({ins_cols}) {select_sql} {cls._insert_conflict};'''
         try:
             await sess.execute(sa.text(stmt))
         except Exception as e:

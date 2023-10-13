@@ -313,7 +313,7 @@ async def _do_download_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int
 
 
 async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int, end_ms: int, check_exist=True,
-                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', is_parallel=False,
+                         allow_lack: float = 0., pbar: Union[LazyTqdm, str] = 'auto', new_sess=False,
                          sess: SqlSession = None) -> int:
     '''
     从交易所下载K线数据到数据库。
@@ -322,15 +322,13 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     from banbot.storage.klines import KLine, dba
     if timeframe not in KLine.down_tfs:
         raise RuntimeError(f'can only download kline: {KLine.down_tfs}, current: {timeframe}')
-    is_temp = False
     if not sess:
-        sess = dba.new_session() if is_parallel else None
-        is_temp = True
+        sess = dba.new_session() if new_sess else None
     try:
         down_count = await _do_download_db(exchange, exs, timeframe, start_ms, end_ms,
                                            check_exist, allow_lack, pbar, sess)
     finally:
-        if sess and is_temp:
+        if sess and new_sess:
             await sess.commit()
             await asyncio.shield(sess.close())
     return down_count
@@ -384,7 +382,7 @@ def parse_down_args(timeframe: str, start_ms: Optional[int] = None, end_ms: Opti
 async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Optional[int] = None,
                            end_ms: Optional[int] = None, limit: Optional[int] = None,
                            allow_lack: float = 0., with_unfinish: bool = False, pbar: Union[LazyTqdm, str] = 'auto',
-                           is_parallel=False, sess: SqlSession = None):
+                           new_sess=False, sess: SqlSession = None):
     '''
     获取给定交易对，给定时间维度，给定范围的K线数据。
     先尝试从本地读取，不存在时从交易所下载，然后返回。
@@ -397,14 +395,14 @@ async def auto_fetch_ohlcv(exchange, exs: ExSymbol, timeframe: str, start_ms: Op
     :param allow_lack: 最大允许缺失的最新数据比例。设置此项避免对很小数据缺失时的不必要网络请求
     :param with_unfinish: 是否附加未完成的数据
     :param pbar: 进度条
-    :param is_parallel: 如果是并发执行，写入时需要单独的session
+    :param new_sess: 如果是并发执行，写入时需要单独的session
     :return:
     '''
     from banbot.storage import KLine
     start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit, with_unfinish)
     down_tf = KLine.get_down_tf(timeframe)
     await download_to_db(exchange, exs, down_tf, start_ms, end_ms, allow_lack=allow_lack, pbar=pbar,
-                         is_parallel=is_parallel, sess=sess)
+                         new_sess=new_sess, sess=sess)
     return await KLine.query(exs, timeframe, start_ms, end_ms, with_unfinish=with_unfinish, sess=sess)
 
 
@@ -434,7 +432,7 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
         from banbot.util.misc import parallel_jobs
         pbar = LazyTqdm()
         kwargs['pbar'] = pbar
-        kwargs['is_parallel'] = True
+        kwargs['new_sess'] = True
         down_tf = KLine.get_down_tf(timeframe)
         for rid in range(0, len(down_pairs), MAX_CONC_OHLCV):
             # 批量下载，提升效率
@@ -477,12 +475,12 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     pbar = LazyTqdm()
     if isinstance(kwargs, dict):
         kwargs['pbar'] = pbar
-        kwargs['is_parallel'] = True
+        kwargs['new_sess'] = True
         kwargs = [kwargs] * len(symbols)
     else:
         for kw in kwargs:
             kw['pbar'] = pbar
-            kw['is_parallel'] = True
+            kw['new_sess'] = True
     sess = dba.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
     exs_list = list(await sess.scalars(select(ExSymbol).filter(*fts)))

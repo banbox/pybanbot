@@ -144,5 +144,18 @@ async def test_detach_commit():
         obj.timeframe = '32m'
 
 
+async def test_autocommit():
+    crt_sql = 'create table temp1 (name varchar(10));'
+    from banbot.storage import dba, SqlSession, sa
+    async with dba():
+        sess: SqlSession = dba.session
+        print(sess, id(sess))
+        await sess.execute(sa.text(crt_sql))
+    crt_sql = 'create table temp2 (name varchar(10));'
+    async with dba.autocommit() as sess:
+        print(sess, id(sess))
+        await sess.execute(sa.text(crt_sql))
+
+
 if __name__ == '__main__':
-    asyncio.run(test_detach_commit())
+    asyncio.run(test_autocommit())

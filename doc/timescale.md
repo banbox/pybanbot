@@ -1,4 +1,4 @@
-# 安装
+# TimeScaleDb安装
 ## Windows安装
 如安装Postgresql 15及之后版本，需要先安装[OpenSSL 1.1.1](https://slproweb.com/products/Win32OpenSSL.html)  
 ## Linux中安装
@@ -52,3 +52,5 @@ python -m banbot dbcmd --force --action=rebuild -c /root/bantd/config.json
 ```sql
 SELECT setval('tdsignal_id_seq', (SELECT max(id) FROM tdsignal));
 ```
+### 使用超表还是连续聚合
+全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差

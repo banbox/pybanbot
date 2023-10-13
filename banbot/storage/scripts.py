@@ -36,9 +36,7 @@ async def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True)
         tables = all_tables
     engine = init_db()
     bandb = engine.sync_engine
-    async with engine.connect() as conn:
-        bak_iso_level = await conn.get_isolation_level()
-        await conn.execution_options(isolation_level='AUTOCOMMIT')
+    async with dba.autocommit() as sess:
         exist_tbls = [tbl for tbl in tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
         if skip_exist and exist_tbls:
             tables = list(set(tables) - set(exist_tbls))
@@ -59,7 +57,7 @@ async def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True)
             left_tbls = []
             for t in exist_tbls:
                 if hasattr(t, 'drop_tbl'):
-                    await t.drop_tbl(conn)
+                    await t.drop_tbl(sess)
                 else:
                     left_tbls.append(t)
             if left_tbls:
@@ -68,8 +66,7 @@ async def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True)
         # 执行表的初始化
         for t in tables:
             if hasattr(t, 'init_tbl'):
-                await t.init_tbl(conn)
-        await conn.execution_options(isolation_level=bak_iso_level)
+                await t.init_tbl(sess)
     bandb.echo = False
     logger.info('rebuild db complete')
 

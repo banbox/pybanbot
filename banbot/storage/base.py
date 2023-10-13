@@ -35,8 +35,14 @@ _db_engines: Dict[int, AsyncEngine] = dict()
 _DbSessionCls: Dict[int, async_sessionmaker] = dict()
 '维护_DbSession的类的字典，每个线程一个类'
 
+_db_engine_ac: Optional[AsyncEngine] = None
+'开启了AutoCommit的连接池，且使用NullPoll，可多线程访问'
 
-def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
+_DbSessionClsAC: Optional[async_sessionmaker] = None
+'_db_engine_ac的Session类，可多线程访问'
+
+
+def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     '''
     初始化数据库客户端（并未连接到数据库）
     传入的参数将针对所有连接生效。
@@ -44,6 +50,7 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     dba.session.connection().execution_options(isolation_level='AUTOCOMMIT')
     或engine.echo=True
     '''
+    global _db_engine_ac, _DbSessionClsAC
     thread_id = threading.get_ident()
     if thread_id in _db_engines:
         return _db_engines[thread_id]
@@ -62,7 +69,6 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     create_args = dict(pool_recycle=3600, poolclass=pool.QueuePool, pool_size=pool_size, max_overflow=0)
     if debug is not None:
         create_args['echo'] = debug
-    create_args['isolation_level'] = iso_level
     # 实例化异步engine
     db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
     db_engine = create_async_engine(db_url, **create_args)
@@ -72,6 +78,17 @@ def init_db(iso_level: Optional[str] = None, debug: Optional[bool] = None, db_ur
     set_db_events(db_engine.sync_engine, SyncSession)
     _db_engines[thread_id] = db_engine
     _DbSessionCls[thread_id] = DbSession
+    if _db_engine_ac is None:
+        # 初始化跨进程AUTOCOMMIT连接池
+        create_args = dict(
+            poolclass=pool.NullPool,
+            isolation_level='AUTOCOMMIT'
+        )
+        _db_engine_ac = create_async_engine(db_url, **create_args)
+        SyncSession = sessionmaker(_db_engine_ac.sync_engine, class_=Session, expire_on_commit=False)
+        _DbSessionClsAC = async_sessionmaker(_db_engine_ac, class_=AsyncSession, expire_on_commit=False,
+                                             sync_session_class=SyncSession)
+        set_db_events(_db_engine_ac.sync_engine, SyncSession)
     return db_engine
 
 
@@ -92,12 +109,9 @@ class DBSessionAsyncMeta(type):
         return DbSession(**kwargs)
 
     @contextlib.asynccontextmanager
-    async def autocommit(cls, sess: SqlSession):
-        async with sess:
-            async with sess.begin():
-                # https://docs.sqlalchemy.org/en/20/orm/session_transaction.html#setting-transaction-isolation-levels-dbapi-autocommit
-                await sess.connection(execution_options={"isolation_level": "AUTOCOMMIT"})
-                yield sess
+    async def autocommit(cls, **kwargs):
+        async with _DbSessionClsAC(**kwargs) as sess:
+            yield sess
 
 
 class DBSessionAsync(metaclass=DBSessionAsyncMeta):
