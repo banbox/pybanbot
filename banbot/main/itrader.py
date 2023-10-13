@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/17
 from __future__ import annotations
-
+from sqlalchemy import exc
 from banbot.compute.tools import append_new_bar
 from banbot.main.od_manager import *
 from banbot.strategy.resolver import StrategyResolver
@@ -69,7 +69,13 @@ class Trader:
                 await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
             except exc.SQLAlchemyError:
                 sess = dba.session
-                logger.exception('itrader run_bar SQLAlchemyError %s %s %s', sess, pair, timeframe)
+                try:
+                    sync_sess = sess.sync_session
+                    conn = await sess.connection()
+                except Exception as ex:
+                    conn = str(ex)
+                    sync_sess = None
+                logger.exception('itrader run_bar SQLAlchemyError %s %s %s %s %s', sess, sync_sess, conn, pair, timeframe)
 
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
         pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'

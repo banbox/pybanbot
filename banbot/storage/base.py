@@ -128,6 +128,12 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         logger.debug('dbsess exit %s %s', id(sess), traceback.format_stack()[-2])
 
         success = True
+        try:
+            sync_sess = sess.sync_session
+            conn = await sess.connection()
+        except Exception as ex:
+            conn = str(ex)
+            sync_sess = None
         if sess.in_transaction():
             success = False
             try:
@@ -139,7 +145,7 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
                 await asyncio.shield(sess.close())
             except Exception as e:
                 stack = "\n".join(traceback.format_stack())
-                logger.exception(f'dbsess fail: {e} {sess.connection()} {exc_type} {exc_value} inexc: {traceinfo} {stack}')
+                logger.exception(f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
 
         key = id(sess)
         if key in self._callbacks:

@@ -1308,9 +1308,9 @@ class LiveOrderManager(OrderManager):
     async def exec_od_job(self, job: OrderJob):
         try:
             od: Optional[InOutOrder] = None
-            try:
-                async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
-                    async with dba():
+            async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
+                async with dba():
+                    try:
                         od = await InOutOrder.get(job.od_id)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
@@ -1320,17 +1320,15 @@ class LiveOrderManager(OrderManager):
                             await self._edit_trigger_od(od, job.data)
                         else:
                             logger.error(f'unsupport order job type: {job.action}')
-            except Exception as e:
-                if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
-                    err_msg = str(e)
-                    async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
-                        async with dba():
+                    except Exception as e:
+                        if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
+                            err_msg = str(e)
                             od = await InOutOrder.get(job.od_id)
                             # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                             od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                    logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
-                else:
-                    logger.exception('consume order exception: %s', job)
+                            logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
+                        else:
+                            logger.exception('consume order exception: %s', job)
         except Exception:
             logger.exception("consume order_q error")
 
