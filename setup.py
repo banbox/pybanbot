@@ -24,7 +24,6 @@ setup(
             'TA-Lib',
             'pandas-ta',
             'technical',
-            'aiofiles',
             'pandas',
             'plotly',
             'scikit_learn'

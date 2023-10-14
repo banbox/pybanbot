@@ -9,7 +9,6 @@
 import datetime
 import os.path
 
-import aiofiles as aiof
 import orjson
 import pandas as pd
 
@@ -108,18 +107,18 @@ class BTAnalysis:
         if not os.path.isdir(task_dir):
             os.mkdir(task_dir)
         dump_path = os.path.join(task_dir, 'result.json')
-        async with aiof.open(dump_path, 'wb') as fout:
-            await fout.write(orjson.dumps(self.result))
+        with open(dump_path, 'wb') as fout:
+            fout.write(orjson.dumps(self.result))
         # 保存订单记录到CSV
         await dump_orders(task_id, task_dir)
         # 保存总资产曲线
         dump_graph(self.result['graph_data'], task_dir)
 
     @staticmethod
-    async def load(save_dir: str) -> 'BTAnalysis':
+    def load(save_dir: str) -> 'BTAnalysis':
         dump_path = os.path.join(save_dir, 'backtest.json')
-        async with aiof.open(dump_path, 'rb') as fout:
-            data: dict = orjson.loads(await fout.read())
+        with open(dump_path, 'rb') as fout:
+            data: dict = orjson.loads(fout.read())
             return BTAnalysis(**data)
 
 

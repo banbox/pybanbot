@@ -5,6 +5,7 @@
 # Date  : 2023/4/24
 import asyncio
 import contextlib
+import copy
 import os
 import threading
 import time
@@ -42,6 +43,27 @@ _DbSessionClsAC: Optional[async_sessionmaker] = None
 '_db_engine_ac的Session类，可多线程访问'
 
 
+def get_db_cfg(db_url: str = None, for_async=True) -> dict:
+    db_cfg = AppConfig.get().get('database')
+    if not db_cfg:
+        db_cfg = dict()
+    else:
+        db_cfg = copy.copy(db_cfg)
+        if 'retention' in db_cfg:
+            db_cfg.pop('retention')
+    if not db_cfg.get('url'):
+        if not db_url:
+            db_url = os.environ.get('ban_db_url')
+            if not db_url:
+                raise ValueError('`database` is required in config. or set env: `ban_db_url`')
+        db_cfg['url'] = db_url
+    if for_async:
+        db_cfg['url'] = db_cfg['url'].replace('postgresql:', 'postgresql+asyncpg:')
+    if not db_cfg.get('pool_size'):
+        db_cfg['pool_size'] = 20
+    return db_cfg
+
+
 def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     '''
     初始化数据库客户端（并未连接到数据库）
@@ -54,24 +76,15 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     thread_id = threading.get_ident()
     if thread_id in _db_engines:
         return _db_engines[thread_id]
-    if not db_url:
-        db_url = os.environ.get('ban_db_url')
-    try:
-        db_cfg = AppConfig.get()['database']
-    except Exception:
-        assert db_url, '`db_url` is required if config not avaiable'
-        db_cfg = dict(url=db_url)
-    if not db_url:
-        db_url = db_cfg['url']
-    pool_size = db_cfg.get('pool_size', 20)
+    db_cfgs = get_db_cfg(db_url)
+    db_url = db_cfgs['url']
     logger.info(f'db url:{db_url}')
     # pool_recycle 连接过期时间，根据mysql服务器端连接的存活时间wait_timeout略小些
-    create_args = dict(pool_recycle=3600, poolclass=pool.QueuePool, pool_size=pool_size, max_overflow=0)
+    create_args = dict(**db_cfgs, pool_recycle=3600, poolclass=pool.QueuePool, max_overflow=0)
     if debug is not None:
         create_args['echo'] = debug
     # 实例化异步engine
-    db_url = db_url.replace('postgresql:', 'postgresql+asyncpg:')
-    db_engine = create_async_engine(db_url, **create_args)
+    db_engine = create_async_engine(**create_args)
     SyncSession = sessionmaker(db_engine.sync_engine, class_=Session, expire_on_commit=False)
     DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False,
                                    sync_session_class=SyncSession)
@@ -81,10 +94,11 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     if _db_engine_ac is None:
         # 初始化跨进程AUTOCOMMIT连接池
         create_args = dict(
+            url=db_url,
             poolclass=pool.NullPool,
             isolation_level='AUTOCOMMIT'
         )
-        _db_engine_ac = create_async_engine(db_url, **create_args)
+        _db_engine_ac = create_async_engine(**create_args)
         SyncSession = sessionmaker(_db_engine_ac.sync_engine, class_=Session, expire_on_commit=False)
         _DbSessionClsAC = async_sessionmaker(_db_engine_ac, class_=AsyncSession, expire_on_commit=False,
                                              sync_session_class=SyncSession)

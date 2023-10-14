@@ -417,11 +417,12 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
     exs_list = await ExSymbol.ensures(exg.name, exg.market_type, symbols)
     exs_map = {item.id: item for item in exs_list}
     item_ranges = await KLine.load_kline_ranges()
-    start_ms, end_ms = parse_down_args(timeframe, start_ms, end_ms, limit)
+    down_tf = KLine.get_down_tf(timeframe)
+    start_ms, end_ms = parse_down_args(down_tf, start_ms, end_ms, limit)
     # 筛选需要下载的币种
     down_pairs = []
     for sid, tf in item_ranges:
-        if tf != timeframe or sid not in exs_map:
+        if tf != down_tf or sid not in exs_map:
             continue
         cur_start, cur_stop = item_ranges[(sid, tf)]
         if cur_start <= start_ms <= end_ms <= cur_stop:
@@ -433,7 +434,6 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
         pbar = LazyTqdm()
         kwargs['pbar'] = pbar
         kwargs['new_sess'] = True
-        down_tf = KLine.get_down_tf(timeframe)
         for rid in range(0, len(down_pairs), MAX_CONC_OHLCV):
             # 批量下载，提升效率
             batch = down_pairs[rid: rid + MAX_CONC_OHLCV]

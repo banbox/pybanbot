@@ -6,9 +6,10 @@
 
 from banbot.storage import *
 from banbot import storage
-from banbot.storage.base import BaseDbModel, sa, init_db
+from banbot.storage.base import BaseDbModel, sa, init_db, get_db_cfg
 from banbot.util.common import logger
 from banbot.util.misc import get_module_classes
+from sqlalchemy import create_engine, pool
 
 
 all_tables = get_module_classes(storage, BaseDbModel)
@@ -34,8 +35,8 @@ async def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True)
     logger.info('start rebuild tables...')
     if not tables:
         tables = all_tables
-    engine = init_db()
-    bandb = engine.sync_engine
+    db_cfg = get_db_cfg(for_async=False)
+    bandb = create_engine(db_cfg['url'], poolclass=pool.NullPool, isolation_level='AUTOCOMMIT')
     async with dba.autocommit() as sess:
         exist_tbls = [tbl for tbl in tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
         if skip_exist and exist_tbls:
