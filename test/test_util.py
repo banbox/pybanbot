@@ -157,5 +157,31 @@ async def test_autocommit():
         await sess.execute(sa.text(crt_sql))
 
 
+async def test_context_vars():
+    from contextvars import ContextVar
+    name = ContextVar('name', default=None)
+    name.set('main')
+
+    async def loop():
+        print(f'loop init: {name.get()}')
+        name.set('a')
+        while True:
+            val = name.get()
+            print(f'loop val: {val}')
+            name.set(val + 'c')
+            await asyncio.sleep(random.randrange(1, 3))
+
+    asyncio.create_task(loop())
+
+    while True:
+        print(f'main init: {name.get()}')
+        name.set('m')
+        while True:
+            val = name.get()
+            print(f'main val: {val}')
+            name.set(val + 'n')
+            await asyncio.sleep(random.randrange(1, 3))
+
+
 if __name__ == '__main__':
-    asyncio.run(test_autocommit())
+    asyncio.run(test_context_vars())

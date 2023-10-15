@@ -1298,6 +1298,7 @@ class LiveOrderManager(OrderManager):
         await self._create_exg_order(od, False)
 
     async def consume_queue(self):
+        reset_ctx()
         while True:
             job: OrderJob = await self.order_q.get()
             await self.exec_od_job(job)

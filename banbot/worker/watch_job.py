@@ -87,6 +87,7 @@ async def run_on_bar(state: WatchState):
 
 
 async def _consume_jobs():
+    reset_ctx()
     while True:
         if not wait_jobs:
             await asyncio.sleep(1)

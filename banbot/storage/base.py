@@ -43,6 +43,13 @@ _DbSessionClsAC: Optional[async_sessionmaker] = None
 '_db_engine_ac的Session类，可多线程访问'
 
 
+def reset_ctx():
+    """
+    仅用于异步任务重置_db_sess_asy
+    """
+    _db_sess_asy.set(None)
+
+
 def get_db_cfg(db_url: str = None, for_async=True) -> dict:
     db_cfg = AppConfig.get().get('database')
     if not db_cfg:
@@ -156,12 +163,6 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         logger.debug('dbsess exit %s %s', id(sess), traceback.format_stack()[-2])
 
         success = True
-        try:
-            sync_sess = sess.sync_session
-            conn = await sess.connection()
-        except Exception as ex:
-            conn = str(ex)
-            sync_sess = None
         if sess.in_transaction():
             success = False
             try:
@@ -173,7 +174,14 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
                 await asyncio.shield(sess.close())
             except Exception as e:
                 stack = "\n".join(traceback.format_stack())
-                logger.exception(f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
+                try:
+                    sync_sess = sess.sync_session
+                    conn = await sess.connection()
+                except Exception as ex:
+                    conn = str(ex)
+                    sync_sess = None
+                logger.exception(
+                    f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
 
         key = id(sess)
         if key in self._callbacks:
@@ -347,23 +355,24 @@ def set_db_events(engine, Session):
         logger.debug('[db] sess do_orm_execute: %s', orm_execute_state)
 
     @db_event.listens_for(engine, 'before_cursor_execute')
-    def before_cursor_execute(conn: AsyncConnection, cursor, statement, parameters, context, executemany):
+    def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         try:
+            max_len = 500
             if isinstance(parameters, (list, tuple)) and len(parameters) > 30:
                 if isinstance(parameters[0], (list, tuple, dict)):
                     parameters = f'[{parameters[0]}, len: {len(parameters)}]'
-                elif len(parameters) > 300:
-                    parameters = f'({parameters[:300]}, len: {len(parameters)})'
-            if statement and len(statement) > 300:
-                statement = f'{str(statement)[:300]}... len: {len(statement)}'
-            args = [conn, cursor, statement, parameters, context, executemany]
-            logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s', *args)
+                elif len(parameters) > max_len:
+                    parameters = f'({parameters[:max_len]}, len: {len(parameters)})'
+            if statement and len(statement) > max_len:
+                statement = f'{str(statement)[:max_len]}... len: {len(statement)}'
+            args = [conn, conn.connection, cursor, statement, parameters, context, executemany]
+            logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s %s', *args)
             conn.info['query_start_time'] = time.monotonic()
         except Exception:
             logger.exception(f'log sql execute start time fail: {statement}')
 
     @db_event.listens_for(engine, "after_cursor_execute")
-    def after_cursor_execute(conn: AsyncConnection, cursor, statement, parameters, context, executemany):
+    def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         try:
             total = time.monotonic() - conn.info['query_start_time']
             if total > db_slow_query_timeout:

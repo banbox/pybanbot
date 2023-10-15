@@ -178,6 +178,7 @@ class LiveTrader(Trader):
         refresh_intv = self.pair_mgr.refresh_secs
         if not refresh_intv:
             return
+        reset_ctx()
         while True:
             await asyncio.sleep(refresh_intv)
             try:

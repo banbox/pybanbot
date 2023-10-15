@@ -101,6 +101,76 @@ async def run_down_pairs(args: Dict[str, Any]):
         await down_pairs_by_config(config)
 
 
+"""
+*************************** 下面是爬虫部分 ***********************
+"""
+
+write_q = Queue(3000)  # 写入数据库的队列，逐个执行，避免写入并发过大出现异常
+init_sid: Set[int] = set()  # 不在此集合的，是初次写入，有遗漏，需要抓取缺失的bar
+
+
+async def _save_init(sid: int, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
+    exs = ExSymbol.get_by_id(sid)
+    init_sid.add(sid)
+    tf_msecs = tf_to_secs(save_tf) * 1000
+    if skip_first:
+        fetch_end_ms = ohlcv[0][0] + tf_msecs  # 第一个插入的bar时间戳，这个是不全的，需要跳过
+        ohlcv = ohlcv[1:]
+    else:
+        fetch_end_ms = ohlcv[0][0]
+    start_ms, end_ms = await KLine.query_range(sid, save_tf)
+    if not end_ms or fetch_end_ms <= end_ms:
+        # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
+        await KLine.insert(sid, save_tf, ohlcv)
+        return
+
+    try_count = 0
+    logger.info(f'start first fetch {exs.symbol} {end_ms}-{fetch_end_ms}')
+    exchange = get_exchange(exs.exchange, exs.market)
+    while True:
+        try_count += 1
+        ins_num = await download_to_db(exchange, exs, save_tf, end_ms, fetch_end_ms)
+        save_bars = await KLine.query(exs, save_tf, end_ms, fetch_end_ms)
+        last_ms = save_bars[-1][0] if save_bars else None
+        if last_ms and last_ms + tf_msecs == fetch_end_ms:
+            break
+        elif try_count > 5:
+            logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
+            break
+        else:
+            # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
+            logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {exs.symbol}')
+            await asyncio.sleep(3)
+    await KLine.insert(sid, save_tf, ohlcv)
+    logger.info(f'first fetch ok {exs.symbol} {end_ms}-{fetch_end_ms}')
+
+
+async def consume_db_queue():
+    from banbot.storage import dba, reset_ctx
+    reset_ctx()
+    while True:
+        try:
+            sid, ohlcv, save_tf, skip_first = await write_q.get()
+            async with BanLock('spider_dba'):
+                async with dba():
+                    if sid not in init_sid:
+                        await _save_init(sid, ohlcv, save_tf, skip_first)
+                    else:
+                        try:
+                            await KLine.insert(sid, save_tf, ohlcv)
+                        except DisContiError as e:
+                            logger.warning(f"Kline DisConti {e}, try fill...")
+                            await _save_init(sid, ohlcv, save_tf, False)
+            write_q.task_done()
+        except Exception:
+            logger.exception("consume spider write_q error")
+
+
+def run_consumers(num: int):
+    for n in range(num):
+        asyncio.create_task(consume_db_queue())
+
+
 class MinerJob(PairTFCache):
     def __init__(self, pair: str, save_tf: str, check_intv: float, since: Optional[int] = None):
         '''
@@ -132,8 +202,6 @@ class MinerJob(PairTFCache):
 
 
 class WebsocketWatcher:
-    write_q = Queue(3000)  # 写入数据库的队列，逐个执行，避免写入并发过大出现异常
-    init_sid: Set[int] = set()  # 不在此集合的，是初次写入，有遗漏，需要抓取缺失的bar
 
     def __init__(self, exg_name: str, market: str, pair: str):
         self.exchange = get_exchange(exg_name, market)
@@ -164,67 +232,6 @@ class WebsocketWatcher:
         if self.sid == 0:
             self.sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, self.pair)
         return self.sid
-
-    @classmethod
-    async def _save_init(cls, sid: int, ohlcv: List[Tuple], save_tf: str, skip_first: bool):
-        exs = ExSymbol.get_by_id(sid)
-        cls.init_sid.add(sid)
-        tf_msecs = tf_to_secs(save_tf) * 1000
-        if skip_first:
-            fetch_end_ms = ohlcv[0][0] + tf_msecs  # 第一个插入的bar时间戳，这个是不全的，需要跳过
-            ohlcv = ohlcv[1:]
-        else:
-            fetch_end_ms = ohlcv[0][0]
-        start_ms, end_ms = await KLine.query_range(sid, save_tf)
-        if not end_ms or fetch_end_ms <= end_ms:
-            # 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-            await KLine.insert(sid, save_tf, ohlcv)
-            return
-
-        try_count = 0
-        logger.info(f'start first fetch {exs.symbol} {end_ms}-{fetch_end_ms}')
-        exchange = get_exchange(exs.exchange, exs.market)
-        while True:
-            try_count += 1
-            ins_num = await download_to_db(exchange, exs, save_tf, end_ms, fetch_end_ms)
-            save_bars = await KLine.query(exs, save_tf, end_ms, fetch_end_ms)
-            last_ms = save_bars[-1][0] if save_bars else None
-            if last_ms and last_ms + tf_msecs == fetch_end_ms:
-                break
-            elif try_count > 5:
-                logger.error(f'fetch ohlcv fail {exs} {save_tf} {end_ms}-{fetch_end_ms}')
-                break
-            else:
-                # 如果未成功获取最新的bar，等待3s重试（1m刚结束时请求ohlcv可能取不到）
-                logger.info(f'query first fail, ins: {ins_num}, last: {last_ms}, wait 3... {exs.symbol}')
-                await asyncio.sleep(3)
-        await KLine.insert(sid, save_tf, ohlcv)
-        logger.info(f'first fetch ok {exs.symbol} {end_ms}-{fetch_end_ms}')
-
-    @classmethod
-    async def consume_queue(cls):
-        from banbot.storage import dba
-        while True:
-            try:
-                sid, ohlcv, save_tf, skip_first = await cls.write_q.get()
-                async with BanLock('spider_dba'):
-                    async with dba():
-                        if sid not in cls.init_sid:
-                            await cls._save_init(sid, ohlcv, save_tf, skip_first)
-                        else:
-                            try:
-                                await KLine.insert(sid, save_tf, ohlcv)
-                            except DisContiError as e:
-                                logger.warning(f"Kline DisConti {e}, try fill...")
-                                await cls._save_init(sid, ohlcv, save_tf, False)
-                cls.write_q.task_done()
-            except Exception:
-                logger.exception("consume spider write_q error")
-
-    @classmethod
-    async def run_consumers(cls, num: int):
-        consumers = [WebsocketWatcher.consume_queue() for n in range(num)]
-        await asyncio.gather(*consumers)
 
 
 class TradesWatcher(WebsocketWatcher):
@@ -267,7 +274,7 @@ class TradesWatcher(WebsocketWatcher):
         pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
         await self.spider.broadcast(pub_key, (ohlcvs_save, self.state_save.tf_secs))
         logger.info(f'ws ohlcv: {self.pair} {ohlcvs_save}')
-        self.write_q.put_nowait((self.get_sid(), ohlcvs_save, self.state_save.timeframe, True))
+        write_q.put_nowait((self.get_sid(), ohlcvs_save, self.state_save.timeframe, True))
 
 
 class OhlcvWatcher(WebsocketWatcher):
@@ -313,7 +320,7 @@ class OhlcvWatcher(WebsocketWatcher):
             # 发送已完成数据
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{self.pair}'
             await self.spider.broadcast(pub_key, (finish_bars, self.state_ws.tf_secs))
-            self.write_q.put_nowait((self.get_sid(), finish_bars, self.state_ws.timeframe, False))
+            write_q.put_nowait((self.get_sid(), finish_bars, self.state_ws.timeframe, False))
 
 
 class LiveMiner:
@@ -400,12 +407,10 @@ class LiveMiner:
             else:
                 ohlcvs, last_finish = ohlcvs_sml, True
             # 检查是否有完成的bar。写入到数据库
-            measure.start_for(f'write_db:{len(ohlcvs)}')
-            async with BanLock('spider_dba'):
-                async with dba():
-                    sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
-                    ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
-                    await KLine.insert(sid, job.timeframe, ohlcvs)
+            sid = ExSymbol.get_id(self.exchange.name, self.exchange.market_type, job.pair)
+            ohlcvs = get_finish_ohlcvs(job, ohlcvs, last_finish)
+            if ohlcvs:
+                write_q.put_nowait((sid, ohlcvs, job.timeframe, False))
             # 发布小间隔数据到订阅方
             measure.start_for('send_pub')
             pub_key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{job.pair}'
@@ -513,7 +518,7 @@ async def run_spider_forever(args: dict = None):
     logger.info('start top change update timer...')
     await TopChange.start()
     asyncio.create_task(run_watch_jobs())
-    asyncio.create_task(WebsocketWatcher.run_consumers(5))
+    run_consumers(5)
     await LiveSpider.run_spider()
     # await TopChange.clear()
 

@@ -43,7 +43,9 @@ api_overrides = dict()
 def loop_forever(func):
 
     async def wrap(*args, **kwargs):
+        from banbot.storage import reset_ctx
         fname = func.__qualname__
+        reset_ctx()
         while True:
             try:
                 result = await run_async(func, *args, **kwargs)

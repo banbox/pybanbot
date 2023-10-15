@@ -68,6 +68,7 @@ where exchange=:exchange and market=:market;'''
         interval, delay = 60, 10
         cache_key = f'topchg_{self.exg_name}_{self.market}'
         logger.info(f'run {cache_key}')
+        reset_ctx()
         while True:
             cur_time = btime.utcstamp() / 1000
             next_run = (cur_time // interval + 1) * interval + delay

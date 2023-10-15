@@ -3,7 +3,7 @@
 # File  : __init__.py.py
 # Author: anyongjin
 # Date  : 2023/3/21
-from banbot.storage.base import dba, sa, select, delete, update, insert, SqlSession, detach_obj  # noqa
+from banbot.storage.base import dba, sa, select, delete, update, insert, SqlSession, detach_obj, reset_ctx  # noqa
 from banbot.storage.bot_task import BotTask
 from banbot.storage.common import *
 from banbot.storage.klines import KLine, KHole, KInfo, DisContiError
