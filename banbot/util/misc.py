@@ -100,14 +100,20 @@ def add_dict_prefix(data: dict, prefix: str) -> dict:
     return {f'{prefix}{k}': v for k, v in data.items()}
 
 
-def del_dict_prefix(data: dict, prefix: str, with_others=True) -> dict:
+def del_dict_prefix(data: dict, prefix: str, *skips) -> dict:
     result = dict()
     pre_len = len(prefix)
+    del_keys = set()
+    skip_keys = set(skips) if skips else set()
     for key, val in data.items():
         if key.startswith(prefix):
-            result[key[pre_len:]] = val
-        elif with_others:
-            result[key] = val
+            sub_key = key[pre_len:]
+            if sub_key in skip_keys:
+                continue
+            result[sub_key] = val
+            del_keys.add(key)
+    for key in del_keys:
+        del data[key]
     return result
 
 

@@ -196,6 +196,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         self.enter: Optional[Order] = None
         self.exit: Optional[Order] = None
         self.margin_ratio = 0  # 合约的保证金比率
+        enter_kwargs = del_dict_prefix(kwargs, 'enter_', 'at', 'tag')
+        exit_kwargs = del_dict_prefix(kwargs, 'exit_', 'at', 'tag')
         from_db = super().init_infos(self, kwargs)
         if from_db:
             # 从数据库创建映射的值，无需设置，否则会覆盖数据库值
@@ -214,14 +216,12 @@ class InOutOrder(BaseDbModel, InfoPart):
         if not live_mode:
             self.id = InOutOrder._next_id
             InOutOrder._next_id += 1
-        enter_kwargs = del_dict_prefix(kwargs, 'enter_')
-        enter_kwargs['inout_id'] = self.id
+        sub_com = dict(task_id=kwargs.get('task_id'), symbol=kwargs.get('symbol'))
+        sub_com['inout_id'] = self.id
         enter_kwargs['side'] = 'sell' if self.short else 'buy'
-        self.enter: Order = Order(**enter_kwargs, enter=True)
+        self.enter: Order = Order(**enter_kwargs, **sub_com, enter=True)
         if 'exit_amount' in kwargs:
-            exit_kwargs = del_dict_prefix(kwargs, 'exit_')
-            exit_kwargs['inout_id'] = self.id
-            self.exit = Order(**exit_kwargs)
+            self.exit = Order(**exit_kwargs, **sub_com)
 
     @property
     def key(self):
@@ -325,7 +325,6 @@ class InOutOrder(BaseDbModel, InfoPart):
         返回入场手续费、出场手续费、净利润
         '''
         if not self.status or not self.enter.price or not self.enter.filled:
-            logger.info(f'skip profit calc: {self.status} {self.enter.price} {self.enter.filled}')
             return 0, 0, 0
         if price is None:
             price = self.exit.price if self.exit and self.exit.price else self.enter.price
@@ -439,6 +438,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             price = MarketPrice.get(self.symbol) or self.enter.average or self.enter.price or self.init_price
         if not self.exit_at:
             self.exit_at = btime.time_ms()
+        self.exit_tag = tag
         self.update_exit(
             tag=tag,
             update_at=btime.time_ms(),

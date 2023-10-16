@@ -78,7 +78,7 @@ class BaseStrategy:
                    cost_rate: float = 1.,
                    legal_cost: float = None,
                    leverage: int = None,
-                   order_type: str = None,
+                   order_type: Optional[Union[str, OrderType]] = None,
                    amount: float = None,
                    stoploss: float = None,
                    takeprofit: float = None,
@@ -100,7 +100,11 @@ class BaseStrategy:
         if leverage:
             od_args['leverage'] = leverage
         if order_type:
-            od_args['enter_order_type'] = OrderType(order_type).value
+            if isinstance(order_type, OrderType):
+                order_type = order_type.value
+                od_args['enter_order_type'] = order_type
+            else:
+                od_args['enter_order_type'] = OrderType(order_type).value
             if order_type != OrderType.Market.value:
                 if not price:
                     raise ValueError(f'`price` is required for {order_type} order')
@@ -125,7 +129,7 @@ class BaseStrategy:
                      short: bool = False,
                      price: float = None,
                      exit_rate: float = 1.,
-                     order_type: str = None,
+                     order_type: Optional[Union[str, OrderType]] = None,
                      amount: float = None,
                      enter_tag: str = None,
                      order_id: int = None
@@ -147,7 +151,11 @@ class BaseStrategy:
         elif exit_rate < 1:
             exit_args['exit_rate'] = exit_rate
         if order_type:
-            exit_args['order_type'] = OrderType(order_type).value
+            if isinstance(order_type, OrderType):
+                order_type = order_type.value
+                exit_args['enter_order_type'] = order_type
+            else:
+                exit_args['order_type'] = OrderType(order_type).value
             if order_type != OrderType.Market.value:
                 if not price:
                     raise ValueError(f'`price` is required for {order_type} order')

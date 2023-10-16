@@ -517,6 +517,7 @@ class LocalOrderManager(OrderManager):
                     else:
                         continue
                     self.wallets.exit_od(od, od.exit.amount, self.last_ts)
+                    await od.save()
                 continue
             od_type = sub_od.order_type or self.od_type
             if od_type == OrderType.Limit.value and sub_od.price:
