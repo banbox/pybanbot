@@ -54,6 +54,10 @@ class ExitTags:
     '未知原因'
     bomb = 'bomb'
     '账户爆仓'
+    stoploss = 'stoploss'
+    '止损'
+    takeprofit = 'takeprofit'
+    '止盈'
 
 
 class Order(BaseDbModel):
@@ -350,7 +354,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             profit_val = get_amount * price - ent_quote_value
         return ent_fee, ext_fee, profit_val
 
-    def update_by_price(self, price: float):
+    def update_profits(self, price: float):
         '''
         此方法由接口调用，策略中不应该调用此方法。
         :param price:
@@ -445,7 +449,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             average=price,
         )
         self.status = InOutStatus.FullExit
-        self.update_by_price(price)
+        self.update_profits(price)
         if status_msg:
             self.set_info(status_msg=status_msg)
 

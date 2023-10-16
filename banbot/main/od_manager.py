@@ -270,7 +270,7 @@ class OrderManager(metaclass=SingletonArg):
     async def _finish_order(self, od: InOutOrder):
         fee_rate = od.enter.fee + od.exit.fee
         if od.exit.price and od.enter.price:
-            od.update_by_price(od.exit.price)
+            od.update_profits(od.exit.price)
         if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
             limit_fee = self.pair_fee_limits.get(od.symbol)
             if limit_fee is not None and fee_rate > limit_fee * 2:
@@ -287,7 +287,7 @@ class OrderManager(metaclass=SingletonArg):
         # 更新订单利润
         close_price = float(row[ccol])
         for od in cur_orders:
-            od.update_by_price(close_price)
+            od.update_profits(close_price)
         if op_orders and self.market_type == 'future' and not btime.prod_mode():
             # 为合约更新此定价币的所有订单保证金和钱包情况
             quote_suffix = exs.quote_suffix()
@@ -397,6 +397,7 @@ class LocalOrderManager(OrderManager):
                 err_msg = f'{od} pres enter amount fail: {od.quote_cost} {ent_amount} : {e}'
                 logger.warning(err_msg)
                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                self.wallets.exit_od(od, od.exit.amount, self.last_ts)
                 await od.save()
                 return
         ctx = self.get_context(od)
@@ -500,6 +501,22 @@ class LocalOrderManager(OrderManager):
             elif od.enter.status != OrderStatus.Close:
                 sub_od = od.enter
             else:
+                if not od.exit_tag:
+                    # 检查是否触发止盈止损
+                    sl_price = od.get_info('stoploss_price')
+                    tp_price = od.get_info('takeprofit_price')
+                    if not (sl_price or tp_price):
+                        continue
+                    high_price, low_price = cur_candle[hcol], cur_candle[lcol]
+                    if sl_price and (od.short and high_price >= sl_price or
+                                     not od.short and low_price <= sl_price):
+                        od.local_exit(ExitTags.stoploss, sl_price)
+                    elif tp_price and (od.short and low_price <= tp_price or
+                                       not od.short and high_price >= tp_price):
+                        od.local_exit(ExitTags.takeprofit, tp_price)
+                    else:
+                        continue
+                    self.wallets.exit_od(od, od.exit.amount, self.last_ts)
                 continue
             od_type = sub_od.order_type or self.od_type
             if od_type == OrderType.Limit.value and sub_od.price:

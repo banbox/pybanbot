@@ -310,7 +310,7 @@ class RPC:
                 cur_price = od.exit.price
             else:
                 cur_price = MarketPrice.get(od.symbol)
-                od.update_by_price(cur_price)
+                od.update_profits(cur_price)
             od_dict = od.dict(flat_sub=True)
             od_dict.update(dict(
                 close_profit=od.profit_rate if od.exit_at else None,
@@ -415,7 +415,7 @@ class RPC:
     async def calc_profits(self, status: str):
         od_list = await get_db_orders(status=status)
         for od in od_list:
-            od.update_by_price(MarketPrice.get(od.symbol))
+            od.update_profits(MarketPrice.get(od.symbol))
         return dict(num=len(od_list))
 
     def pairlist(self) -> Dict:
