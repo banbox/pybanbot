@@ -130,7 +130,7 @@ class Order(BaseDbModel):
         else:
             cur_stamp = math.floor(btime.time() * 1000)
             data = dict(enter=False, status=OrderStatus.Init, fee=0, task_id=BotTask.cur_id,
-                        side='buy', filled=0, create_at=cur_stamp, update_at=cur_stamp)
+                        side='buy', filled=0, create_at=cur_stamp, update_at=0)
         kwargs = {**data, **kwargs}
         super(Order, self).__init__(**kwargs)
 
@@ -303,10 +303,18 @@ class InOutOrder(BaseDbModel, InfoPart):
             if 'amount' not in kwargs and self.enter.filled:
                 # 未提供时，默认全部卖出。（这里模拟手续费扣除）
                 # 这里amount传入可能为0，不能通过get('amount')方式判断
-                kwargs['amount'] = self.enter.filled * (1 - self.enter.fee)
+                kwargs['amount'] = self.get_exit_amount()
             self.exit = Order(**kwargs)
         else:
             self.exit.update_props(**kwargs)
+
+    def get_exit_amount(self):
+        """
+        获取可平仓的最大金额
+        """
+        if BotGlobal.market_type == 'future':
+            return self.enter.filled
+        return self.enter.filled * (1 - self.enter.fee)
 
     def fee_profit(self, price: float = None):
         '''
@@ -383,20 +391,24 @@ class InOutOrder(BaseDbModel, InfoPart):
         return part
 
     async def _save_to_db(self):
-        sess = dba.session
         if self.status < InOutStatus.FullExit:
+            sess = dba.session
             if not self.id:
                 sess.add(self)
                 await sess.flush()
+            need_flush = False
             if self.enter and not self.enter.id:
                 if not self.enter.inout_id:
                     self.enter.inout_id = self.id
                 sess.add(self.enter)
+                need_flush = True
             if self.exit and not self.exit.id:
                 if not self.exit.inout_id:
                     self.exit.inout_id = self.id
                 sess.add(self.exit)
-        await sess.flush()
+                need_flush = True
+            if need_flush:
+                await sess.flush()
 
     def _save_to_mem(self):
         if self.status < InOutStatus.FullExit:

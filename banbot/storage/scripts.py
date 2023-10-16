@@ -19,31 +19,18 @@ for tbl in all_tables:
     tbl_map[tbl.__class__.__name__.lower()] = tbl
 
 
-def get_db_tbls(conn):
-    inspector = sa.inspect(conn)
-    return set(inspector.get_table_names())
-
-
-async def get_fail_tables():
-    async with init_db().connect() as conn:
-        db_tbls = await conn.run_sync(get_db_tbls)
-        exist_tbls = [tbl for tbl in all_tables if tbl.__tablename__ in db_tbls]
-    return list(set(all_tables) - set(exist_tbls))
-
-
 async def rebuild_db(tables: list = None, skip_exist=True, require_confirm=True):
-    logger.info('start rebuild tables...')
     if not tables:
         tables = all_tables
     db_cfg = get_db_cfg(for_async=False)
     bandb = create_engine(db_cfg['url'], poolclass=pool.NullPool, isolation_level='AUTOCOMMIT')
+    exist_tbls = [tbl for tbl in tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
+    if skip_exist and exist_tbls:
+        tables = list(set(tables) - set(exist_tbls))
+    if not tables:
+        return
+    logger.info('start rebuild tables...')
     async with dba.autocommit() as sess:
-        exist_tbls = [tbl for tbl in tables if sa.inspect(bandb).has_table(tbl.__tablename__)]
-        if skip_exist and exist_tbls:
-            tables = list(set(tables) - set(exist_tbls))
-        if not tables:
-            print('No Tables need to create, all exists!')
-            return
         bandb.echo = True
         print('=======  Tables to Create:', [t.__name__ for t in tables])
         print('=======  Database:', bandb.url)

@@ -28,13 +28,11 @@ async def start_trading(args: Dict[str, Any]) -> int:
     Main entry point for trading mode
     """
     from banbot.main.live_trader import LiveTrader
-    from banbot.storage.scripts import rebuild_db, get_fail_tables, dba
+    from banbot.storage.scripts import rebuild_db
 
     config = AppConfig.init_by_args(args)
-    if await get_fail_tables():
-        # 有未初始化的表，自动执行脚本创建
-        async with dba():
-            await rebuild_db(require_confirm=False)
+    # 有未初始化的表，自动执行脚本创建
+    await rebuild_db(require_confirm=False)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
     cluster_text = 'Cluster' if config.get('cluster') else 'Stand-Alone'
     logger.warning("Run Mode: %s    Arch: %s", btime.run_mode.value, cluster_text)

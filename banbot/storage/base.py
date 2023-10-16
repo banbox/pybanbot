@@ -151,7 +151,7 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
             DbSession = _DbSessionCls[thread_id]
             sess = DbSession(**self.session_args)
             self.token = _db_sess_asy.set(sess)
-            logger.debug('dbsess create %s %s', id(sess), traceback.format_stack()[-2])
+            logger.debug('dbsess create %s %s %s', sess, id(sess), traceback.format_stack()[-2])
         return type(self)
 
     async def __aexit__(self, exc_type, exc_value, traceinfo):
@@ -160,28 +160,32 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         sess = _db_sess_asy.get()
         if not sess:
             return
-        logger.debug('dbsess exit %s %s', id(sess), traceback.format_stack()[-2])
+        logger.debug('dbsess exit %s %s %s', sess, id(sess), traceback.format_stack()[-2])
 
-        success = True
-        if sess.in_transaction():
-            success = False
+        success = False
+        reason = 'none'
+        try:
+            if exc_type is not None:
+                reason = (exc_type, exc_value)
+                await sess.rollback()
+            elif self.commit_on_exit:
+                await sess.commit()
+                success = True
+            else:
+                reason = f'not commit on exit'
+            await asyncio.shield(sess.close())
+        except Exception as e:
+            stack = "\n".join(traceback.format_stack())
             try:
-                if exc_type is not None:
-                    await sess.rollback()
-                elif self.commit_on_exit:
-                    await sess.commit()
-                    success = True
-                await asyncio.shield(sess.close())
-            except Exception as e:
-                stack = "\n".join(traceback.format_stack())
-                try:
-                    sync_sess = sess.sync_session
-                    conn = await sess.connection()
-                except Exception as ex:
-                    conn = str(ex)
-                    sync_sess = None
-                logger.exception(
-                    f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
+                sync_sess = sess.sync_session
+                conn = await sess.connection()
+            except Exception as ex:
+                conn = str(ex)
+                sync_sess = None
+            logger.exception(
+                f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
+        if not success:
+            logger.debug('not commit: %s %s', reason, traceback.format_stack()[-2])
 
         key = id(sess)
         if key in self._callbacks:

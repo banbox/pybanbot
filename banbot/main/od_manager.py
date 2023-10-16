@@ -242,7 +242,7 @@ class OrderManager(metaclass=SingletonArg):
             return
         exit_amt = sigout.get('amount')
         if exit_amt:
-            exit_rate = exit_amt / (od.enter.amount * (1 - od.enter.fee))
+            exit_rate = exit_amt / od.get_exit_amount()
             if exit_rate < 0.99:
                 # 要退出的部分不足99%，分割出一个小订单，用于退出。
                 part = od.cut_part(exit_amt)
@@ -797,7 +797,7 @@ class LiveOrderManager(OrderManager):
 
         return buy_price, sell_price
 
-    def _consume_unmatchs(self, sub_od: Order):
+    async def _consume_unmatchs(self, sub_od: Order):
         for trade in list(self.unmatch_trades.values()):
             if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
                 continue
@@ -806,7 +806,7 @@ class LiveOrderManager(OrderManager):
             if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
             logger.info('exec unmatch trade: %s', trade)
-            self._update_order(sub_od, trade)
+            await self._update_order(sub_od, trade)
 
     def _check_new_trades(self, trades: List[dict]):
         if not trades:
@@ -875,7 +875,7 @@ class LiveOrderManager(OrderManager):
         if new_num or self.market_type != 'spot':
             # 期货市场未返回trades
             await self._update_order_res(od, is_enter, order)
-        self._consume_unmatchs(sub_od)
+        await self._consume_unmatchs(sub_od)
 
     async def _finish_order(self, od: InOutOrder):
         await super(LiveOrderManager, self)._finish_order(od)
@@ -1061,21 +1061,26 @@ class LiveOrderManager(OrderManager):
             logger.error(f'watch_my_trades net error: {e}')
             return
         logger.debug('get my trades: %s', trades)
+        valid_items = []
+        for data in trades:
+            symbol = data['symbol']
+            if symbol not in BotGlobal.pairs:
+                # 忽略不处理的交易对
+                continue
+            trade_key = f"{symbol}_{data['id']}"
+            if trade_key in self.handled_trades:
+                continue
+            od_key = symbol, data['order']
+            if od_key not in self.exg_orders:
+                self.unmatch_trades[trade_key] = data
+                continue
+            valid_items.append((od_key, data))
+        if not valid_items:
+            return
         async with dba():
             sess = dba.session
             related_ods = set()
-            for data in trades:
-                symbol = data['symbol']
-                if symbol not in BotGlobal.pairs:
-                    # 忽略不处理的交易对
-                    continue
-                trade_key = f"{symbol}_{data['id']}"
-                if trade_key in self.handled_trades:
-                    continue
-                od_key = symbol, data['order']
-                if od_key not in self.exg_orders:
-                    self.unmatch_trades[trade_key] = data
-                    continue
+            for od_key, data in valid_items:
                 iod_id, sub_id = self.exg_orders[od_key]
                 async with BanLock(f'iod_{iod_id}', 5, force_on_fail=True):
                     sub_od: Order = await sess.get(Order, sub_id)
@@ -1083,7 +1088,7 @@ class LiveOrderManager(OrderManager):
                     related_ods.add(sub_od)
             for sub_od in related_ods:
                 async with BanLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
-                    self._consume_unmatchs(sub_od)
+                    await self._consume_unmatchs(sub_od)
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)

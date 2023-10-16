@@ -32,10 +32,15 @@ _symbol_ctx: Dict[str, Context] = dict()
 symbol_tf.set('')
 # 几个常用列的索引
 tcol, ocol, hcol, lcol, ccol, vcol = 0, 1, 2, 3, 4, 5
+_ctx_keys = {'bar_num', 'symbol_tf', 'bar_arr', 'bar_time'}
+'策略使用的上下文变量的key，其他key不要改动，否则会导致其他使用上下文变量的地方难以排查的bug'
 
 
 def _update_context(kwargs):
     for key, val in kwargs:
+        if key.name not in _ctx_keys:
+            '这里只修改策略相关的key，其他key不要改动，否则会导致其他使用上下文变量的地方难以排查的bug'
+            continue
         key.set(val)
 
 

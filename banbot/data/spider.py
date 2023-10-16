@@ -12,7 +12,6 @@ from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.storage import KLine, DisContiError
 from banbot.util.banio import ServerIO, BanConn
-from banbot.util.misc import BanLock
 from banbot.data.cache import BanCache
 
 
@@ -151,16 +150,15 @@ async def consume_db_queue():
     while True:
         try:
             sid, ohlcv, save_tf, skip_first = await write_q.get()
-            async with BanLock('spider_dba'):
-                async with dba():
-                    if sid not in init_sid:
-                        await _save_init(sid, ohlcv, save_tf, skip_first)
-                    else:
-                        try:
-                            await KLine.insert(sid, save_tf, ohlcv)
-                        except DisContiError as e:
-                            logger.warning(f"Kline DisConti {e}, try fill...")
-                            await _save_init(sid, ohlcv, save_tf, False)
+            async with dba():
+                if sid not in init_sid:
+                    await _save_init(sid, ohlcv, save_tf, skip_first)
+                else:
+                    try:
+                        await KLine.insert(sid, save_tf, ohlcv)
+                    except DisContiError as e:
+                        logger.warning(f"Kline DisConti {e}, try fill...")
+                        await _save_init(sid, ohlcv, save_tf, False)
             write_q.task_done()
         except Exception:
             logger.exception("consume spider write_q error")

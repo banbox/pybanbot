@@ -160,27 +160,56 @@ async def test_autocommit():
 async def test_context_vars():
     from contextvars import ContextVar
     name = ContextVar('name', default=None)
-    name.set('main')
+    name.set(None)
+
+    class Temp:
+        def __init__(self, name: str):
+            self.name = name
+
+        async def __aenter__(self):
+            val = name.get()
+            new_name = self.name + str(len(val or '') + 1)
+            name.set(new_name)
+            print(self.name, val, new_name, name.get())
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            name.set('none')
 
     async def loop():
-        print(f'loop init: {name.get()}')
-        name.set('a')
+        name.set(None)
         while True:
-            val = name.get()
-            print(f'loop val: {val}')
-            name.set(val + 'c')
-            await asyncio.sleep(random.randrange(1, 3))
+            async with Temp('a'):
+                await asyncio.sleep(random.randrange(1, 3))
 
+    async def loop2():
+        name.set(None)
+        while True:
+            async with Temp('b'):
+                await asyncio.sleep(random.randrange(1, 3))
     asyncio.create_task(loop())
+    asyncio.create_task(loop2())
+    await asyncio.sleep(10)
 
-    while True:
-        print(f'main init: {name.get()}')
-        name.set('m')
-        while True:
-            val = name.get()
-            print(f'main val: {val}')
-            name.set(val + 'n')
-            await asyncio.sleep(random.randrange(1, 3))
+
+async def test_get_obj():
+    import logging
+    from banbot.storage import dba, SqlSession, InOutOrder, reset_ctx, Order
+    from banbot.storage.base import select
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+    from sqlalchemy import pool
+    db_url = 'postgresql+asyncpg://postgres:123@[127.0.0.1]:5432/bantd2'
+    db_engine = create_async_engine(url=db_url, poolclass=pool.NullPool, echo=True)
+    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    sess = DbSession()
+    async with sess.begin():
+        od = await sess.get(InOutOrder, 23)
+        ex_ods = list(await sess.scalars(select(Order).where(Order.inout_id == 23)))
+        od.enter = next((o for o in ex_ods if o.enter), None)
+        od.exit = next((o for o in ex_ods if not o.enter), None)
+        od.profit = 0.2
+        od.profit_rate = 0.1
+        od.enter.fee = 0.1
 
 
 if __name__ == '__main__':

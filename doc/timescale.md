@@ -54,3 +54,11 @@ SELECT setval('tdsignal_id_seq', (SELECT max(id) FROM tdsignal));
 ```
 ### 使用超表还是连续聚合
 全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差
+### DbSession的注意
+DbSession不能用于多线程或asyncio的多个协程并发访问。会导致状态错误。
+目前已使用contextvars存储DbSession，使用create_task或者gather等创建异步任务时，检查是否需要重置上下文变量，需要则调用`reset_ctx`
+### contextvars上下文变量的使用
+在使用`create_task`或`gather`等启动异步并发任务时，上下文整体会被复制一份。  
+如一些变量DbSession不能用于并发时，在启动并发任务后，必须手动调用`myvar.set(None)`进行重置。  
+另外在一些地方批量更新上下文时(`ctx.py`)，应确保只更新自己需要的，不要更新所有变量，否则会导致其他上下文变量的值难以排查的bug
+
