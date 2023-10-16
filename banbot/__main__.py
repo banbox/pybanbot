@@ -32,6 +32,8 @@ def main(sysargv: Optional[List[str]] = None) -> None:
         arguments = Arguments(sysargv)
         args = arguments.get_parsed_arg()
         if args.get('debug'):
+            from banbot.util import btime
+            btime.debug = True
             set_log_level(logging.DEBUG)
             logger.debug('set logging level to DEBUG')
 

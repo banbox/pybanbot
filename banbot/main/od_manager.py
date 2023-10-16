@@ -1046,7 +1046,8 @@ class LiveOrderManager(OrderManager):
 
     async def _update_order(self, od: Order, data: dict):
         if od.status == OrderStatus.Close:
-            logger.warning(f'order: {od.inout_id} enter: {od.enter} complete: {od}, ignore trade: {data}')
+            tag = 'enter' if od.enter else 'exit'
+            logger.debug('order: %s %s complete, ignore trade: %s', od, tag, data)
             return
         if self.name.find('binance') >= 0:
             await self._update_bnb_order(od, data)

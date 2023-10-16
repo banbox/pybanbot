@@ -18,6 +18,8 @@ global cur_timestamp, run_mode
 
 run_mode = RunMode.DRY_RUN
 cur_timestamp = 0
+debug = False
+'当前是否是调试模式'
 
 
 def utctime() -> float:
