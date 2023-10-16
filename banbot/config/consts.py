@@ -45,6 +45,11 @@ class BotState(Enum):
         return self.name.lower()
 
 
+class OrderType(Enum):
+    Market = 'market'
+    Limit = 'limit'
+
+
 secs_min = 60
 secs_hour = secs_min * 60
 secs_day = secs_hour * 24

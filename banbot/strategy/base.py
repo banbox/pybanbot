@@ -100,8 +100,10 @@ class BaseStrategy:
         if leverage:
             od_args['leverage'] = leverage
         if order_type:
-            od_args['enter_order_type'] = order_type
-            if order_type != 'market':
+            od_args['enter_order_type'] = OrderType(order_type).value
+            if order_type != OrderType.Market.value:
+                if not price:
+                    raise ValueError(f'`price` is required for {order_type} order')
                 od_args['enter_price'] = price
         if amount:
             od_args['enter_amount'] = amount
@@ -145,8 +147,10 @@ class BaseStrategy:
         elif exit_rate < 1:
             exit_args['exit_rate'] = exit_rate
         if order_type:
-            exit_args['order_type'] = order_type
-            if order_type != 'market':
+            exit_args['order_type'] = OrderType(order_type).value
+            if order_type != OrderType.Market.value:
+                if not price:
+                    raise ValueError(f'`price` is required for {order_type} order')
                 exit_args['price'] = price
         if enter_tag:
             exit_args['enter_tag'] = enter_tag
@@ -237,7 +241,7 @@ class BaseStrategy:
         if not tfscores:
             return None
         from banbot.exchange.crypto_exchange import get_exchange
-        fee_rate = get_exchange(exg_name).calc_fee(symbol, 'market')['rate']
+        fee_rate = get_exchange(exg_name).calc_fee(symbol, OrderType.Market.value)['rate']
         if fee_rate > cls.max_fee:
             return
         min_score = cls.min_tfscore if fee_rate else cls.nofee_tfscore

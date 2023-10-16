@@ -3,9 +3,9 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
-import copy
 import math
 from dataclasses import dataclass
+from banbot.config.consts import *
 from banbot.compute.sta_inds import *
 from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
@@ -460,7 +460,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             tag = ExitTags.force_exit
         if status_msg:
             self.set_info(status_msg=status_msg)
-        exit_dic = dict(tag=tag, order_type='market')
+        exit_dic = dict(tag=tag, order_type=OrderType.Market.value)
         if self.exit:
             if btime.prod_mode():
                 # 实盘模式，提交到交易所平仓

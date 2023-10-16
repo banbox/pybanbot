@@ -45,6 +45,7 @@ class OrderManager(metaclass=SingletonArg):
         self.exchange = exchange
         self.market_type = config.get('market_type')
         self.leverage = config.get('leverage', 3)  # 杠杆倍数
+        self.od_type = config.get('order_type', OrderType.Market.value)
         self.name = data_hd.exg_name
         self.wallets = wallets
         self.data_mgr = data_hd
@@ -59,6 +60,8 @@ class OrderManager(metaclass=SingletonArg):
         '全局止损时禁止时间，默认8小时'
         self.forbid_pairs = set()
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
+        if self.market_type == 'future' and OrderType(self.od_type) is OrderType.Limit:
+            raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
 
     def _load_fatal_stop(self):
         fatal_cfg = self.config.get('fatal_stop')
@@ -381,8 +384,8 @@ class LocalOrderManager(OrderManager):
         self._fill_pending_exit(od, price)
 
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
-        enter_price = self.exchange.pres_price(od.symbol, price)
         sub_od = od.enter
+        enter_price = self.exchange.pres_price(od.symbol, price)
         if not sub_od.amount:
             if od.short and self.market_type == 'spot' and od.leverage == 1:
                 # 现货空单，必须给定数量
@@ -491,13 +494,26 @@ class LocalOrderManager(OrderManager):
         for od in op_orders:
             if timeframe and od.timeframe != timeframe:
                 continue
-            price = self._sim_market_price(od.symbol, od.timeframe, candle)
+            cur_candle = candle or self.data_mgr.get_latest_ohlcv(od.symbol)
             if od.exit_tag and od.exit and od.exit.status != OrderStatus.Close:
-                await self._fill_pending_exit(od, price)
-                affect_num += 1
+                sub_od = od.exit
             elif od.enter.status != OrderStatus.Close:
+                sub_od = od.enter
+            else:
+                continue
+            od_type = sub_od.order_type or self.od_type
+            if od_type == OrderType.Limit.value and sub_od.price:
+                price = sub_od.price
+                if (sub_od.side == 'buy' and price < cur_candle[lcol]
+                        or sub_od.side == 'sell' and price > cur_candle[hcol]):
+                    continue
+            else:
+                price = self._sim_market_price(od.symbol, od.timeframe, cur_candle)
+            if sub_od.enter:
                 await self._fill_pending_enter(od, price)
-                affect_num += 1
+            else:
+                await self._fill_pending_exit(od, price)
+            affect_num += 1
         return affect_num
 
     async def cleanup(self):
@@ -520,7 +536,6 @@ class LiveOrderManager(OrderManager):
         self.unmatch_trades: Dict[str, dict] = dict()
         '未匹配交易，key: symbol, order_id；每个订单只保留一个未匹配交易，也只应该有一个'
         self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
-        self.od_type = config.get('order_type', 'market')
         self.max_market_rate = config.get('max_market_rate', 0.0001)
         self.odbook_ttl: int = config.get('odbook_ttl', 500)
         self.odbooks: Dict[str, OrderBook] = dict()
@@ -533,10 +548,6 @@ class LiveOrderManager(OrderManager):
         '限价单的深度对应的秒级成交量'
         self._pair_prices: Dict[str, Tuple[float, float, float]] = dict()
         '交易对的价格缓存，键：pair+vol，值：买入价格，卖出价格，过期时间s'
-        if self.od_type not in {'limit', 'market'}:
-            raise ValueError(f'invalid order type: {self.od_type}, `limit` or `market` is accepted')
-        if self.market_type == 'future' and self.od_type == 'limit':
-            raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
         self.last_lack_ts = 0
         '上次通知余额不足的时间戳，10位秒级'
 
@@ -653,7 +664,7 @@ class LiveOrderManager(OrderManager):
         market = self.exchange.markets[exs.symbol]
         is_short = pos['side'] == 'short'
         # 持仓信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
-        fee_rate = market['taker'] if ent_od_type == 'market' else market['maker']
+        fee_rate = market['taker'] if ent_od_type == OrderType.Market.value else market['maker']
         fee_name = exs.quote_code if self.market_type == 'future' else exs.base_code
         tag_ = '开空' if is_short else '开多'
         logger.info(f'[仓]{tag_}：price:{average}, amount: {filled}, fee: {fee_rate}')
@@ -702,7 +713,7 @@ class LiveOrderManager(OrderManager):
         exs = ExSymbol.get(self.name, self.market_type, od['symbol'])
         market = self.exchange.markets[exs.symbol]
         # 订单信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
-        fee_rate = market['taker'] if od['type'] == 'market' else market['maker']
+        fee_rate = market['taker'] if od['type'] == OrderType.Market.value else market['maker']
         fee_name = exs.quote_code if self.market_type == 'future' else exs.base_code
         od_price, od_amount, od_time = od['average'], od['filled'], od['timestamp']
 
@@ -950,7 +961,7 @@ class LiveOrderManager(OrderManager):
                 sub_od.amount *= rate
                 od.quote_cost *= rate
         od_type = sub_od.order_type or self.od_type
-        if not sub_od.price and od_type.find('market') < 0:
+        if not sub_od.price and od_type.find(OrderType.Market.value) < 0:
             # 非市价单时，计算价格
             buy_price, sell_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))
             cur_price = buy_price if sub_od.side == 'buy' else sell_price

@@ -333,7 +333,7 @@ class CryptoExchange:
         返回值目前只用到：rate + currency
         返回：{'type': 'taker', 'currency': 'USDT', 'rate': 0.001, 'cost': 0.029733297910755734}
         '''
-        taker_maker = 'maker' if order_type == 'limit' else 'taker'
+        taker_maker = 'maker' if order_type != OrderType.Market else 'taker'
         cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
         if cache:
             return dict(rate=cache[1], currency=cache[0])

@@ -71,7 +71,7 @@ class PriceFilter(PairList):
                     return False
 
         if self.max_fee:
-            fee_rate = self.exchange.calc_fee(pair, 'market')['rate']
+            fee_rate = self.exchange.calc_fee(pair, OrderType.Market.value)['rate']
             if fee_rate > self.max_fee:
                 logger.info(f'Removed {pair} as fee rate {fee_rate} > {self.max_fee}')
                 return False
