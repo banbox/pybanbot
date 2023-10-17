@@ -409,7 +409,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         else:
             if self.id in self._open_ods:
                 self._open_ods.pop(self.id)
-            self._his_ods.append(self)
+            if self.enter.filled:
+                self._his_ods.append(self)
 
     async def save(self):
         if btime.run_mode not in btime.LIVE_MODES:

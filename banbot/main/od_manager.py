@@ -396,6 +396,7 @@ class LocalOrderManager(OrderManager):
         except Exception as e:
             # 余额不足
             od.local_exit(ExitTags.force_exit, status_msg=str(e))
+            await od.save()
             return
         sub_od = od.enter
         enter_price = self.exchange.pres_price(od.symbol, price)
@@ -664,6 +665,7 @@ class LiveOrderManager(OrderManager):
                     if iod.status < InOutStatus.FullExit:
                         msg = '订单没有入场仓位'
                         iod.local_exit(ExitTags.fatal_err, iod.init_price, status_msg=msg)
+                        await iod.save()
                     del_ods.append(iod)
                     continue
                 pos_amt = short_pos_amt if iod.short else long_pos_amt
@@ -677,6 +679,7 @@ class LiveOrderManager(OrderManager):
                 else:
                     msg = f'订单在交易所没有对应仓位，交易所：{(pos_amt + od_amt):.5f}'
                     iod.local_exit(ExitTags.fatal_err, iod.init_price, status_msg=msg)
+                    await iod.save()
                     del_ods.append(iod)
             [op_ods.remove(od) for od in del_ods]
             if long_pos:
@@ -1391,6 +1394,7 @@ class LiveOrderManager(OrderManager):
                             od = await InOutOrder.get(job.od_id)
                             # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                             od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
+                            await od.save()
                             logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                         else:
                             logger.exception('consume order exception: %s', job)
