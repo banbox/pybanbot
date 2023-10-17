@@ -162,7 +162,6 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
         sess = _db_sess_asy.get()
         if not sess:
             return
-        logger.debug('dbsess exit %s %s %s', sess, id(sess), traceback.format_stack()[-2])
 
         success = False
         reason = 'none'
@@ -287,94 +286,94 @@ class BaseDbModel(_BaseDbModel):
 
 
 def set_db_events(engine, Session):
-    from banbot.util import btime
-
-    if btime.debug:
-        @db_event.listens_for(engine, 'checkin')
-        def receive_checkin(dbapi_connection, connection_record):
-            logger.debug('[db] conn return to pool: %s %s', dbapi_connection, connection_record)
-
-        @db_event.listens_for(engine, 'checkout')
-        def receive_checkout(dbapi_connection, connection_record, connection_proxy):
-            logger.debug('[db] conn retrieve from pool: %s %s %s', dbapi_connection, connection_record, connection_proxy)
-
-        @db_event.listens_for(engine, 'close')
-        def receive_close(dbapi_connection, connection_record):
-            logger.debug('[db] conn closed: %s %s', dbapi_connection, connection_record)
-
-        @db_event.listens_for(engine, 'close_detached')
-        def receive_close_detached(dbapi_connection):
-            logger.debug('[db] conn close_detached: %s', dbapi_connection)
-
-        @db_event.listens_for(engine, 'connect')
-        def receive_connect(dbapi_connection, connection_record):
-            logger.debug('[db] conn connect: %s %s', dbapi_connection, connection_record)
-
-        @db_event.listens_for(engine, 'detach')
-        def receive_detach(dbapi_connection, connection_record):
-            logger.debug('[db] conn detach: %s %s', dbapi_connection, connection_record)
-
-        @db_event.listens_for(engine, 'first_connect')
-        def receive_first_connect(dbapi_connection, connection_record):
-            logger.debug('[db] conn first_connect: %s %s', dbapi_connection, connection_record)
-
-        @db_event.listens_for(engine, 'invalidate')
-        def receive_invalidate(dbapi_connection, connection_record, exception):
-            logger.debug('[db] conn invalidate: %s %s %s', dbapi_connection, connection_record, exception)
-
-        @db_event.listens_for(engine, 'reset')
-        def receive_reset(dbapi_connection, connection_record, reset_state):
-            logger.debug('[db] conn reset: %s %s %s', dbapi_connection, connection_record, reset_state)
-
-        @db_event.listens_for(engine, 'soft_invalidate')
-        def receive_soft_invalidate(dbapi_connection, connection_record, exception):
-            logger.debug('[db] conn soft_invalidate: %s %s %s', dbapi_connection, connection_record, exception)
-
-        @db_event.listens_for(Session, 'after_begin')
-        def receive_after_begin(session, transaction, connection):
-            logger.debug('[db] sess after_begin: %s %s %s', session, transaction, connection)
-
-        @db_event.listens_for(Session, 'after_commit')
-        def receive_after_commit(session):
-            logger.debug('[db] sess after_commit: %s', session)
-
-        @db_event.listens_for(Session, 'after_flush')
-        def receive_after_flush(session, flush_context):
-            logger.debug('[db] sess after_flush: %s %s', session, flush_context)
-
-        @db_event.listens_for(Session, 'after_rollback')
-        def receive_after_rollback(session):
-            logger.debug('[db] sess after_rollback: %s', session)
-
-        @db_event.listens_for(Session, 'after_soft_rollback')
-        def receive_after_soft_rollback(session, previous_transaction):
-            logger.debug('[db] sess after_soft_rollback: %s %s', session, previous_transaction)
-
-        @db_event.listens_for(Session, 'after_transaction_create')
-        def receive_after_transaction_create(session, transaction):
-            logger.debug('[db] sess after_transaction_create: %s %s', session, transaction)
-
-        @db_event.listens_for(Session, 'after_transaction_end')
-        def receive_after_transaction_end(session, transaction):
-            logger.debug('[db] sess after_transaction_end: %s %s', session, transaction)
-
-        @db_event.listens_for(Session, 'do_orm_execute')
-        def receive_do_orm_execute(orm_execute_state):
-            logger.debug('[db] sess do_orm_execute: %s', orm_execute_state)
+    # from banbot.util import btime
+    #
+    # if btime.debug:
+    #     @db_event.listens_for(engine, 'checkin')
+    #     def receive_checkin(dbapi_connection, connection_record):
+    #         logger.debug('[db] conn return to pool: %s %s', dbapi_connection, connection_record)
+    #
+    #     @db_event.listens_for(engine, 'checkout')
+    #     def receive_checkout(dbapi_connection, connection_record, connection_proxy):
+    #         logger.debug('[db] conn retrieve from pool: %s %s %s', dbapi_connection, connection_record, connection_proxy)
+    #
+    #     @db_event.listens_for(engine, 'close')
+    #     def receive_close(dbapi_connection, connection_record):
+    #         logger.debug('[db] conn closed: %s %s', dbapi_connection, connection_record)
+    #
+    #     @db_event.listens_for(engine, 'close_detached')
+    #     def receive_close_detached(dbapi_connection):
+    #         logger.debug('[db] conn close_detached: %s', dbapi_connection)
+    #
+    #     @db_event.listens_for(engine, 'connect')
+    #     def receive_connect(dbapi_connection, connection_record):
+    #         logger.debug('[db] conn connect: %s %s', dbapi_connection, connection_record)
+    #
+    #     @db_event.listens_for(engine, 'detach')
+    #     def receive_detach(dbapi_connection, connection_record):
+    #         logger.debug('[db] conn detach: %s %s', dbapi_connection, connection_record)
+    #
+    #     @db_event.listens_for(engine, 'first_connect')
+    #     def receive_first_connect(dbapi_connection, connection_record):
+    #         logger.debug('[db] conn first_connect: %s %s', dbapi_connection, connection_record)
+    #
+    #     @db_event.listens_for(engine, 'invalidate')
+    #     def receive_invalidate(dbapi_connection, connection_record, exception):
+    #         logger.debug('[db] conn invalidate: %s %s %s', dbapi_connection, connection_record, exception)
+    #
+    #     @db_event.listens_for(engine, 'reset')
+    #     def receive_reset(dbapi_connection, connection_record, reset_state):
+    #         logger.debug('[db] conn reset: %s %s %s', dbapi_connection, connection_record, reset_state)
+    #
+    #     @db_event.listens_for(engine, 'soft_invalidate')
+    #     def receive_soft_invalidate(dbapi_connection, connection_record, exception):
+    #         logger.debug('[db] conn soft_invalidate: %s %s %s', dbapi_connection, connection_record, exception)
+    #
+    #     @db_event.listens_for(Session, 'after_begin')
+    #     def receive_after_begin(session, transaction, connection):
+    #         logger.debug('[db] sess after_begin: %s %s %s', session, transaction, connection)
+    #
+    #     @db_event.listens_for(Session, 'after_commit')
+    #     def receive_after_commit(session):
+    #         logger.debug('[db] sess after_commit: %s', session)
+    #
+    #     @db_event.listens_for(Session, 'after_flush')
+    #     def receive_after_flush(session, flush_context):
+    #         logger.debug('[db] sess after_flush: %s %s', session, flush_context)
+    #
+    #     @db_event.listens_for(Session, 'after_rollback')
+    #     def receive_after_rollback(session):
+    #         logger.debug('[db] sess after_rollback: %s', session)
+    #
+    #     @db_event.listens_for(Session, 'after_soft_rollback')
+    #     def receive_after_soft_rollback(session, previous_transaction):
+    #         logger.debug('[db] sess after_soft_rollback: %s %s', session, previous_transaction)
+    #
+    #     @db_event.listens_for(Session, 'after_transaction_create')
+    #     def receive_after_transaction_create(session, transaction):
+    #         logger.debug('[db] sess after_transaction_create: %s %s', session, transaction)
+    #
+    #     @db_event.listens_for(Session, 'after_transaction_end')
+    #     def receive_after_transaction_end(session, transaction):
+    #         logger.debug('[db] sess after_transaction_end: %s %s', session, transaction)
+    #
+    #     @db_event.listens_for(Session, 'do_orm_execute')
+    #     def receive_do_orm_execute(orm_execute_state):
+    #         logger.debug('[db] sess do_orm_execute: %s', orm_execute_state)
 
     @db_event.listens_for(engine, 'before_cursor_execute')
     def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
         try:
-            max_len = 500
-            if isinstance(parameters, (list, tuple)) and len(parameters) > 30:
-                if isinstance(parameters[0], (list, tuple, dict)):
-                    parameters = f'[{parameters[0]}, len: {len(parameters)}]'
-                elif len(parameters) > max_len:
-                    parameters = f'({parameters[:max_len]}, len: {len(parameters)})'
-            if statement and len(statement) > max_len:
-                statement = f'{str(statement)[:max_len]}... len: {len(statement)}'
-            args = [conn, conn.connection, cursor, statement, parameters, context, executemany]
-            logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s %s', *args)
+            # max_len = 500
+            # if isinstance(parameters, (list, tuple)) and len(parameters) > 30:
+            #     if isinstance(parameters[0], (list, tuple, dict)):
+            #         parameters = f'[{parameters[0]}, len: {len(parameters)}]'
+            #     elif len(parameters) > max_len:
+            #         parameters = f'({parameters[:max_len]}, len: {len(parameters)})'
+            # if statement and len(statement) > max_len:
+            #     statement = f'{str(statement)[:max_len]}... len: {len(statement)}'
+            # args = [conn, conn.connection, cursor, statement, parameters, context, executemany]
+            # logger.debug('[db] conn before_cursor_execute %s %s %s %s %s %s %s', *args)
             conn.info['query_start_time'] = time.monotonic()
         except Exception:
             logger.exception(f'log sql execute start time fail: {statement}')

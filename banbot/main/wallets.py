@@ -238,12 +238,11 @@ class WalletsLocal:
         if not wallet:
             return
         src_dic = wallet.pendings if from_pending else wallet.frozens
-        src_amount = src_dic.get(od_key)
-        if not src_amount:
-            return
-        # logger.info(f'cancel wallet {od_key}.{symbol} {wallet.available} + {src_amount} + {add_amount}')
+        src_amount = src_dic.get(od_key) or 0
+        if src_amount:
+            # logger.info(f'cancel wallet {od_key}.{symbol} {wallet.available} + {src_amount} + {add_amount}')
+            del src_dic[od_key]
         src_amount += add_amount
-        del src_dic[od_key]
         tag = 'pending' if from_pending else 'frozen'
         logger.debug('cancel %s %f, add to ava, %s, %s', tag, src_amount, od_key, symbol)
         wallet.available += src_amount
@@ -390,7 +389,7 @@ class WalletsLocal:
             # 计算当前所需保证金
             cur_margin = quote_value / od.leverage
             # 判断价格走势和开单方向是否相同
-            is_good = (cur_price - od.enter.price) * (-1 if od.short else 1)
+            is_good = (cur_price - od.enter.average) * (-1 if od.short else 1)
             if is_good < 0:
                 # 价格走势不同，产生亏损，判断是否自动补充保证金
                 if od.profit > 0:

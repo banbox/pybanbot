@@ -444,7 +444,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         if status_msg:
             self.set_info(status_msg=status_msg)
 
-    def force_exit(self, tag: str = None, status_msg: str = None):
+    async def force_exit(self, tag: str = None, status_msg: str = None):
         '''
         强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
         生成模式：提交请求到交易所。
@@ -460,15 +460,15 @@ class InOutOrder(BaseDbModel, InfoPart):
             if btime.prod_mode():
                 # 实盘模式，提交到交易所平仓
                 self.exit_tag = None
-                LiveOrderManager.obj.exit_order(self, exit_dic)
+                await LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
                 # 模拟模式，从订单管理器平仓
-                LocalOrderManager.obj.force_exit(self)
+                await LocalOrderManager.obj.force_exit(self)
         else:
             if btime.prod_mode():
-                LiveOrderManager.obj.exit_order(self, exit_dic)
+                await LiveOrderManager.obj.exit_order(self, exit_dic)
             else:
-                LocalOrderManager.obj.exit_order(self, exit_dic)
+                await LocalOrderManager.obj.exit_order(self, exit_dic)
 
     def detach(self, sess: SqlSession):
         detach_obj(sess, self)

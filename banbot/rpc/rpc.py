@@ -409,7 +409,7 @@ class RPC:
         if not open_ods:
             raise RPCException('invalid argument')
         for od in open_ods:
-            od.force_exit(tag, tag_msg)
+            await od.force_exit(tag, tag_msg)
         return dict(close_num=len(open_ods))
 
     async def calc_profits(self, status: str):

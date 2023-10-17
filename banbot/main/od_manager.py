@@ -381,14 +381,14 @@ class LocalOrderManager(OrderManager):
         else:
             logger.info('%s open orders , dont stop', open_num)
 
-    def force_exit(self, od: InOutOrder, tag: Optional[str] = None, price: float = None):
+    async def force_exit(self, od: InOutOrder, tag: Optional[str] = None, price: float = None):
         if not tag:
             tag = 'force_exit'
-        self.exit_order(od, dict(tag=tag), price)
+        await self.exit_order(od, dict(tag=tag), price)
         if not price:
             candle = self.data_mgr.get_latest_ohlcv(od.symbol)
             price = self._sim_market_price(od.symbol, od.timeframe, candle)
-        self._fill_pending_exit(od, price)
+        await self._fill_pending_exit(od, price)
 
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
         try:
