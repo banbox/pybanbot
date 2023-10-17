@@ -124,11 +124,13 @@ class ItemWallet:
         self.frozens = dict()
         self.pendings = dict()
 
+
 class WalletsLocal:
     obj: 'WalletsLocal' = None
 
-    def __init__(self):
+    def __init__(self, exchange: CryptoExchange):
         WalletsLocal.obj = self
+        self.exchange = exchange
         self.data: Dict[str, ItemWallet] = dict()
         self.update_at = btime.time()
         config = AppConfig.get()
@@ -147,7 +149,7 @@ class WalletsLocal:
     def cost_ava(self, od_key: str, symbol: str, amount: float, negative: bool = False, after_ts: float = 0,
                  min_rate: float = 0.1) -> float:
         '''
-        从某个币的可用余额中扣除，仅用于回测
+        从某个币的可用余额中扣除，添加到pending中，仅用于回测
         :param od_key: 锁定的键
         :param symbol: 币代码
         :param amount: 金额
@@ -246,34 +248,35 @@ class WalletsLocal:
         logger.debug('cancel %s %f, add to ava, %s, %s', tag, src_amount, od_key, symbol)
         wallet.available += src_amount
 
-    def enter_od(self, exs: ExSymbol, sigin: dict, od_key: str, after_ts=0):
+    def enter_od(self, od: InOutOrder, after_ts=0):
         '''
         实盘和模拟都执行，实盘时可防止过度消费
         如果余额不足，会发出异常
+        需要调用confirm_od_enter确认。也可调用cancel取消
         '''
-        is_short = sigin.get('short')
-        legal_cost = sigin.pop('legal_cost')
+        od_key = od.key
+        # 如果余额不足会发出异常
+        exs = ExSymbol.get_by_id(od.sid)
+        legal_cost = od.get_info('legal_cost')
         is_future = exs.market == 'future'
-        if is_future or not is_short:
+        if is_future or not od.short:
             # 期货合约，现货多单锁定quote
             if legal_cost < MIN_STAKE_AMOUNT:
                 raise ValueError(f'margin cost must >= {MIN_STAKE_AMOUNT}, cur: {legal_cost:.2f}')
             if is_future:
                 # 期货合约，名义价值=保证金*杠杆
-                legal_cost /= sigin['leverage']
+                legal_cost /= od.leverage
             quote_cost = self.get_amount_by_legal(exs.quote_code, legal_cost)
             quote_cost = self.cost_ava(od_key, exs.quote_code, quote_cost, after_ts=after_ts)
             quote_margin = quote_cost  # 计算名义数量
             if is_future:
-                quote_margin *= sigin['leverage']
-            wallet = self.data[exs.quote_code]
-            sigin['wallet_left'] = wallet.available
-            sigin['quote_cost'] = quote_margin
+                quote_margin *= od.leverage
+            od.quote_cost = self.exchange.pres_cost(od.symbol, quote_margin)
         else:
             # 现货空单，锁定base，允许金额为负
             base_cost = self.get_amount_by_legal(exs.base_code, legal_cost)
             base_cost = self.cost_ava(od_key, exs.base_code, base_cost, negative=True, after_ts=after_ts)
-            sigin['enter_amount'] = base_cost
+            od.enter.amount = base_cost
         return legal_cost
 
     def confirm_od_enter(self, od: InOutOrder, enter_price: float):
@@ -493,8 +496,7 @@ class WalletsLocal:
 
 class CryptoWallet(WalletsLocal):
     def __init__(self, config: dict, exchange: CryptoExchange):
-        super(CryptoWallet, self).__init__()
-        self.exchange = exchange
+        super(CryptoWallet, self).__init__(exchange)
         self.config = config
         self._symbols = set()
 

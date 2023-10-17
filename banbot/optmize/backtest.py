@@ -13,8 +13,8 @@ from banbot.symbols.pair_manager import PairManager
 class BackTest(Trader):
     def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
-        self.wallets = WalletsLocal()
         self.exchange = get_exchange()
+        self.wallets = WalletsLocal(self.exchange)
         self.data_mgr = DBDataProvider(config, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = LocalOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)

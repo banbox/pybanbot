@@ -127,7 +127,8 @@ class OrderManager(metaclass=SingletonArg):
                     logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
             if exits:
                 for stg_name, sigout in exits:
-                    exit_ods.extend(await self.exit_open_orders(sigout, None, stg_name, exs.symbol))
+                    exit_ods.extend(await self.exit_open_orders(sigout, None, stg_name, exs.symbol,
+                                                                with_unfill=True))
         else:
             enter_ods, exit_ods = [], []
         if btime.run_mode in btime.LIVE_MODES:
@@ -164,10 +165,6 @@ class OrderManager(metaclass=SingletonArg):
         tag = sigin.pop('tag')
         if 'leverage' not in sigin and self.market_type == 'future':
             sigin['leverage'] = self.leverage
-        ent_side = 'short' if sigin.get('short') else 'long'
-        od_key = f'{exs.symbol}|{strategy}|{ent_side}|{tag}|{btime.time_ms()}'
-        # 如果余额不足会发出异常
-        legal_cost = self.wallets.enter_od(exs, sigin, od_key, self.last_ts)
         od = InOutOrder(
             **sigin,
             sid=exs.id,
@@ -178,10 +175,9 @@ class OrderManager(metaclass=SingletonArg):
             init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
             strategy=strategy
         )
-        od.quote_cost = self.exchange.pres_cost(od.symbol, od.quote_cost)
         await od.save()
         if btime.run_mode in LIVE_MODES:
-            logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, legal_cost)
+            logger.info('enter order {0} {1} cost: {2:.2f}', od.symbol, od.enter_tag, od.enter_cost)
         self._put_order(od, OrderJob.ACT_ENTER)
         return od
 
@@ -189,7 +185,8 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     async def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
-                         pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None) -> List[InOutOrder]:
+                               pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None,
+                               with_unfill=False) -> List[InOutOrder]:
         is_exact = False
         if 'order_id' in sigout:
             is_exact = True
@@ -216,23 +213,25 @@ class OrderManager(metaclass=SingletonArg):
         if not order_list:
             return result
         # 计算要退出的数量
-        all_amount = sum(od.enter_amount for od in order_list)
+        all_amount = sum(od.enter.filled for od in order_list)
         exit_amount = all_amount
         if 'amount' in sigout:
             exit_amount = sigout.pop('amount')
         elif 'exit_rate' in sigout:
             exit_amount = all_amount * sigout.pop('exit_rate')
         for od in order_list:
-            if not od.enter_amount:
+            if not od.enter.filled:
+                if with_unfill:
+                    await self.exit_order(od, copy.copy(sigout), price)
                 continue
-            cur_ext_rate = exit_amount / od.enter_amount
+            cur_ext_rate = exit_amount / od.enter.filled
             if cur_ext_rate < 0.01:
                 break
             try:
-                exit_amount -= od.enter_amount
+                exit_amount -= od.enter.filled
                 cur_out = copy.copy(sigout)
                 if cur_ext_rate < 0.99:
-                    cur_out['amount'] = od.enter_amount * cur_ext_rate
+                    cur_out['amount'] = od.enter.filled * cur_ext_rate
                 res_od = await self.exit_order(od, cur_out, price)
                 if res_od:
                     result.append(res_od)
@@ -260,7 +259,6 @@ class OrderManager(metaclass=SingletonArg):
         if price:
             sigout['price'] = price
         od.update_exit(**sigout)
-        self.wallets.exit_od(od, od.exit.amount, self.last_ts)
         await od.save()
         if btime.run_mode in LIVE_MODES:
             logger.info('exit order {0} {1}', od, od.exit_tag)
@@ -384,6 +382,12 @@ class LocalOrderManager(OrderManager):
         self._fill_pending_exit(od, price)
 
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
+        try:
+            self.wallets.enter_od(od, self.last_ts)
+        except Exception as e:
+            # 余额不足
+            od.local_exit(ExitTags.force_exit, status_msg=str(e))
+            return
         sub_od = od.enter
         enter_price = self.exchange.pres_price(od.symbol, price)
         if not sub_od.amount:
@@ -397,7 +401,8 @@ class LocalOrderManager(OrderManager):
                 err_msg = f'{od} pres enter amount fail: {od.quote_cost} {ent_amount} : {e}'
                 logger.warning(err_msg)
                 od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                self.wallets.exit_od(od, od.exit.amount, self.last_ts)
+                exs = ExSymbol.get_by_id(od.sid)
+                self.wallets.cancel(od.key, exs.quote_code)
                 await od.save()
                 return
         ctx = self.get_context(od)
@@ -418,6 +423,7 @@ class LocalOrderManager(OrderManager):
         await self._fire(od, True)
 
     async def _fill_pending_exit(self, od: InOutOrder, exit_price: float):
+        self.wallets.exit_od(od, od.exit.amount, self.last_ts)
         sub_od = od.exit
         fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
         if fees['rate']:
@@ -517,6 +523,8 @@ class LocalOrderManager(OrderManager):
                     else:
                         continue
                     self.wallets.exit_od(od, od.exit.amount, self.last_ts)
+                    # 用计算的利润更新钱包
+                    self.wallets.confirm_od_exit(od, od.exit.price)
                     await od.save()
                 continue
             od_type = sub_od.order_type or self.od_type
@@ -542,7 +550,7 @@ class LocalOrderManager(OrderManager):
         return affect_num
 
     async def cleanup(self):
-        await self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both')
+        await self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both', with_unfill=True)
         await self.fill_pending_orders()
         if not self.config.get('no_db'):
             await InOutOrder.dump_to_db()
@@ -931,7 +939,7 @@ class LiveOrderManager(OrderManager):
         if trig_price:
             params.update(closePosition=True, triggerPrice=trig_price)  # 止损单
         side = 'buy' if od.short else 'sell'
-        amount = od.enter_amount
+        amount = od.enter.amount
         try:
             order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
         except ccxt.OrderImmediatelyFillable:
@@ -1140,7 +1148,7 @@ class LiveOrderManager(OrderManager):
         if iod.exit and iod.exit.amount:
             ava_amount = iod.exit.amount - iod.exit.filled
         else:
-            ava_amount = iod.enter_amount
+            ava_amount = iod.enter.filled
         if filled >= ava_amount * 0.99:
             fill_amt = ava_amount
             filled -= ava_amount
@@ -1503,7 +1511,9 @@ class LiveOrderManager(OrderManager):
         if btime.run_mode not in btime.LIVE_MODES:
             # 实盘模式和实时模拟时，停止机器人不退出订单
             async with dba():
-                exit_ods = await self.exit_open_orders(dict(tag='bot_stop'), 0, is_force=True, od_dir='both')
+                ext_dic = dict(tag='bot_stop')
+                exit_ods = await self.exit_open_orders(ext_dic, 0, is_force=True, od_dir='both',
+                                                       with_unfill=True)
                 if exit_ods:
                     logger.info('exit %d open trades', len(exit_ods))
         await self.order_q.join()

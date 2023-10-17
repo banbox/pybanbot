@@ -253,10 +253,9 @@ class InOutOrder(BaseDbModel, InfoPart):
     def enter_cost(self):
         '''
         获取订单花费的金额（名义价值）
+        如果未入场则返回0
         '''
-        if self.quote_cost:
-            return self.quote_cost
-        return self.enter.amount * (self.enter.price or self.init_price)
+        return self.enter.filled * (self.enter.average or self.enter.price or self.init_price)
 
     @property
     def enter_cost_real(self):
@@ -267,15 +266,6 @@ class InOutOrder(BaseDbModel, InfoPart):
         if self.leverage <= 1:
             return cost
         return cost / self.leverage
-
-    @property
-    def enter_amount(self):
-        '''
-        获取入场标的的数量
-        '''
-        if self.enter.amount:
-            return self.enter.amount
-        return self.quote_cost / (self.enter.price or self.init_price)
 
     def can_close(self):
         '''
@@ -372,7 +362,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         '''
         从当前订单分割出一个小的InOutOrder，解决买入一次，需要分多次卖出的问题。
         '''
-        enter_rate = enter_amt / self.enter_amount
+        enter_rate = enter_amt / self.enter.amount
         exit_rate = exit_amt / self.exit.amount if self.exit else 0
         part = InOutOrder(task_id=self.task_id, symbol=self.symbol, sid=self.sid, timeframe=self.timeframe,
                           short=self.short, status=self.status, enter_tag=self.enter_tag, init_price=self.init_price,
