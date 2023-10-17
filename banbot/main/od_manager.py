@@ -414,8 +414,10 @@ class LocalOrderManager(OrderManager):
                 self.wallets.cancel(od.key, exs.quote_code)
                 await od.save()
                 return
+        if not sub_od.price:
+            sub_od.price = enter_price
         ctx = self.get_context(od)
-        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
+        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, enter_price)
         if fees['rate']:
             sub_od.fee = fees['rate']
             sub_od.fee_type = fees['currency']
@@ -423,12 +425,11 @@ class LocalOrderManager(OrderManager):
         update_time = ctx[bar_time][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
+        sub_od.create_at = update_time
         sub_od.update_at = update_time
         sub_od.filled = sub_od.amount
         sub_od.average = enter_price
         sub_od.status = OrderStatus.Close
-        if not sub_od.price:
-            sub_od.price = enter_price
         await self._fire(od, True)
 
     async def _fill_pending_exit(self, od: InOutOrder, exit_price: float):
@@ -442,6 +443,7 @@ class LocalOrderManager(OrderManager):
         update_time = ctx[bar_time][0] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
+        sub_od.create_at = update_time
         sub_od.update_at = update_time
         od.update_exit(
             status=OrderStatus.Close,

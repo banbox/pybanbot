@@ -257,7 +257,10 @@ class WalletsLocal:
         od_key = od.key
         # 如果余额不足会发出异常
         exs = ExSymbol.get_by_id(od.sid)
-        legal_cost = od.get_info('legal_cost')
+        if od.enter.amount:
+            legal_cost = od.enter.amount * MarketPrice.get(od.symbol)
+        else:
+            legal_cost = od.get_info('legal_cost')
         is_future = exs.market == 'future'
         if is_future or not od.short:
             # 期货合约，现货多单锁定quote

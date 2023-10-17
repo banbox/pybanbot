@@ -454,9 +454,9 @@ group by 1'''
     @classmethod
     @contextlib.asynccontextmanager
     async def decompress(cls, tbl_list: List[str] = None):
-        logger.info('pause compress ing...')
         start = time.monotonic()
         async with dba.autocommit() as sess:
+            logger.info('pause compress ing...')
             jobs = await cls._pause_compress(sess, tbl_list)
         cost = time.monotonic() - start
         logger.info(f'pause compress ok, cost: {cost:.3f} secs')

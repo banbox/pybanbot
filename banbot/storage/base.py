@@ -131,6 +131,8 @@ class DBSessionAsyncMeta(type):
 
     @contextlib.asynccontextmanager
     async def autocommit(cls, **kwargs):
+        if not _DbSessionClsAC:
+            init_db()
         async with _DbSessionClsAC(**kwargs) as sess:
             yield sess
 

@@ -44,11 +44,16 @@ def _update_context(kwargs):
         key.set(val)
 
 
-def get_cur_symbol(ctx: Optional[Context] = None):
+def get_cur_symbol(ctx: Optional[Context] = None, catch_err=False):
     from banbot.storage.symbols import ExSymbol
     pair_tf = ctx[symbol_tf] if ctx else symbol_tf.get()
     exg_name, market, symbol, timeframe = pair_tf.split('_')
-    exs = ExSymbol.get(exg_name, market, symbol)
+    try:
+        exs = ExSymbol.get(exg_name, market, symbol)
+    except Exception:
+        if not catch_err:
+            raise
+        exs = ExSymbol(exchange=exg_name, market=market, symbol=symbol)
     return exs, timeframe
 
 

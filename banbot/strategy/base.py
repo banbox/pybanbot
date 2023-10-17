@@ -6,7 +6,7 @@
 from banbot.strategy.common import *
 from banbot.rpc import Notify, NotifyType  # noqa
 from banbot.storage import ExSymbol
-from banbot.main.addons import MarketPrice
+from banbot.main.addons import MarketPrice  # noqa
 
 
 class BaseStrategy:
@@ -65,7 +65,7 @@ class BaseStrategy:
         :return:
         '''
         if self.timeframe is None:
-            self.symbol, self.timeframe = get_cur_symbol()
+            self.symbol, self.timeframe = get_cur_symbol(catch_err=True)
         self.entrys = []
         self.exits = []
         self.state = dict()
@@ -98,11 +98,12 @@ class BaseStrategy:
         if leverage:
             od_args['leverage'] = leverage
         if limit:
+            if not np.isfinite(limit):
+                raise ValueError(f'`limit` should be a valid number, current: {limit}')
             od_args['enter_order_type'] = OrderType.Limit.value
             od_args['enter_price'] = limit
         if amount:
             od_args['enter_amount'] = amount
-            od_args['legal_cost'] = amount * MarketPrice.get(self.symbol.symbol)
         else:
             if legal_cost:
                 od_args['legal_cost'] = legal_cost
@@ -144,6 +145,8 @@ class BaseStrategy:
         if unopen_only is not None:
             exit_args['unopen_only'] = unopen_only
         if limit:
+            if not np.isfinite(limit):
+                raise ValueError(f'`limit` should be a valid number, current: {limit}')
             exit_args['order_type'] = OrderType.Limit.value
             exit_args['price'] = limit
         if enter_tag:
