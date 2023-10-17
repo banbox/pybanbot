@@ -3,7 +3,6 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
-import traceback
 from asyncio import Queue
 from collections import OrderedDict
 
@@ -94,7 +93,7 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     async def process_orders(self, pair_tf: str, enters: List[Tuple[str, dict]],
-                       exits: List[Tuple[str, dict]], edit_triggers: List[Tuple[InOutOrder, str]])\
+                             exits: List[Tuple[str, dict]], edit_triggers: List[Tuple[InOutOrder, str]]) \
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -128,7 +127,7 @@ class OrderManager(metaclass=SingletonArg):
             if exits:
                 for stg_name, sigout in exits:
                     exit_ods.extend(await self.exit_open_orders(sigout, None, stg_name, exs.symbol,
-                                                                with_unfill=True))
+                                                                with_unopen=True))
         else:
             enter_ods, exit_ods = [], []
         if btime.run_mode in btime.LIVE_MODES:
@@ -184,16 +183,14 @@ class OrderManager(metaclass=SingletonArg):
     def _put_order(self, od: InOutOrder, action: str, data: str = None):
         pass
 
-    async def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
-                               pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None,
-                               with_unfill=False) -> List[InOutOrder]:
+    async def _find_open_orders(self, sigout: dict, strategy: str = None, pairs: Union[str, List[str]] = None,
+                                is_force=False, od_dir: str = None, ):
         is_exact = False
         if 'order_id' in sigout:
             is_exact = True
             order_list = [await InOutOrder.get(sigout.pop('order_id'))]
         else:
             order_list = await InOutOrder.open_orders(strategy, pairs)
-        result = []
         if not is_exact:
             # 精确指定退出订单ID时，忽略方向过滤
             if od_dir == 'both':
@@ -210,18 +207,29 @@ class OrderManager(metaclass=SingletonArg):
         if not is_force:
             # 非强制退出，筛选可退出订单
             order_list = [od for od in order_list if od.can_close()]
+        return order_list
+
+    async def exit_open_orders(self, sigout: dict, price: Optional[float] = None, strategy: str = None,
+                               pairs: Union[str, List[str]] = None, is_force=False, od_dir: str = None,
+                               with_unopen=False) -> List[InOutOrder]:
+        order_list = await self._find_open_orders(sigout, strategy, pairs, is_force, od_dir)
+        result = []
         if not order_list:
             return result
         # 计算要退出的数量
         all_amount = sum(od.enter.filled for od in order_list)
         exit_amount = all_amount
-        if 'amount' in sigout:
+        if sigout.get('unopen_only'):
+            # 只退出尚未入场的订单（挂单）
+            exit_amount = 0
+            with_unopen = True
+        elif 'amount' in sigout:
             exit_amount = sigout.pop('amount')
         elif 'exit_rate' in sigout:
             exit_amount = all_amount * sigout.pop('exit_rate')
         for od in order_list:
             if not od.enter.filled:
-                if with_unfill:
+                if with_unopen:
                     await self.exit_order(od, copy.copy(sigout), price)
                 continue
             cur_ext_rate = exit_amount / od.enter.filled
@@ -308,7 +316,8 @@ class OrderManager(metaclass=SingletonArg):
             for check_mins, bad_ratio in self.fatal_stop.items():
                 fatal_loss = await self.calc_fatal_loss(check_mins)
                 if fatal_loss >= bad_ratio:
-                    logger.error(f'{check_mins}分钟内损失{(fatal_loss * 100):.2f}%，禁止下单{self.fatal_stop_hours}小时!')
+                    logger.error(
+                        f'{check_mins}分钟内损失{(fatal_loss * 100):.2f}%，禁止下单{self.fatal_stop_hours}小时!')
                     self.disable_until = btime.utcstamp() + self.fatal_stop_hours * 60 * 60000
                     break
 
@@ -550,7 +559,7 @@ class LocalOrderManager(OrderManager):
         return affect_num
 
     async def cleanup(self):
-        await self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both', with_unfill=True)
+        await self.exit_open_orders(dict(tag='bot_stop'), 0, od_dir='both', with_unopen=True)
         await self.fill_pending_orders()
         if not self.config.get('no_db'):
             await InOutOrder.dump_to_db()
@@ -769,7 +778,8 @@ class LiveOrderManager(OrderManager):
             if not is_reduce_only and od_amount > min_dust:
                 # 剩余数量，创建相反订单
                 tag_ = '开空' if is_short else '开多'
-                logger.info(f'{tag_}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
+                logger.info(
+                    f'{tag_}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
                 iod = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
                                             od_time, OrderStatus.Close, od['id'])
                 if iod:
@@ -778,7 +788,8 @@ class LiveOrderManager(OrderManager):
         if is_short == is_sell:
             # 开多，或开空
             tag = '开空' if is_short else '开多'
-            logger.info(f'{tag}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
+            logger.info(
+                f'{tag}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
             od = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
                                        od_time, OrderStatus.Close, od['id'])
             if od:
@@ -1308,6 +1319,7 @@ class LiveOrderManager(OrderManager):
             if od.enter:
                 await sess.delete(od.enter)
             await sess.flush()
+
         try:
             await self._create_exg_order(od, True)
         except ccxt.InsufficientFunds:
@@ -1513,7 +1525,7 @@ class LiveOrderManager(OrderManager):
             async with dba():
                 ext_dic = dict(tag='bot_stop')
                 exit_ods = await self.exit_open_orders(ext_dic, 0, is_force=True, od_dir='both',
-                                                       with_unfill=True)
+                                                       with_unopen=True)
                 if exit_ods:
                     logger.info('exit %d open trades', len(exit_ods))
         await self.order_q.join()

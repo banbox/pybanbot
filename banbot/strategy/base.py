@@ -132,7 +132,8 @@ class BaseStrategy:
                      order_type: Optional[Union[str, OrderType]] = None,
                      amount: float = None,
                      enter_tag: str = None,
-                     order_id: int = None
+                     order_id: int = None,
+                     unopen_only: bool = None
                      ):
         '''
         退出若干订单。默认平多。如需平空short=True
@@ -144,12 +145,15 @@ class BaseStrategy:
         :param amount: 要退出的标的数量。指定时exit_rate无效
         :param enter_tag: 只退出入场信号为enter_tag的订单
         :param order_id: 只退出指定订单
+        :param unopen_only: True时只退出尚未入场的订单
         '''
         exit_args = dict(tag=tag, short=short)
         if amount:
             exit_args['amount'] = amount
         elif exit_rate < 1:
             exit_args['exit_rate'] = exit_rate
+        if unopen_only is not None:
+            exit_args['unopen_only'] = unopen_only
         if order_type:
             if isinstance(order_type, OrderType):
                 order_type = order_type.value
