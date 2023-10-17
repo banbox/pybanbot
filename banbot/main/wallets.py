@@ -76,7 +76,8 @@ class ItemWallet:
                 # 未实现盈亏足够，无需冻结
                 if od_key in self.frozens:
                     del self.frozens[od_key]
-                return
+                upol_cost = amount
+                amount = 0
             else:
                 # 未实现盈亏不足，更新还需占用的
                 new_amount = self.used_upol - self.unrealized_pol
@@ -244,8 +245,8 @@ class WalletsLocal:
             del src_dic[od_key]
         src_amount += add_amount
         tag = 'pending' if from_pending else 'frozen'
-        logger.debug('cancel %s %f, add to ava, %s, %s', tag, src_amount, od_key, symbol)
         wallet.available += src_amount
+        logger.debug('cancel %s %f to ava, %s, %s, final: %.4f', tag, src_amount, od_key, symbol, wallet.available)
 
     def enter_od(self, od: InOutOrder, after_ts=0):
         '''
@@ -274,6 +275,10 @@ class WalletsLocal:
             if is_future:
                 quote_margin *= od.leverage
             od.quote_cost = self.exchange.pres_cost(od.symbol, quote_margin)
+            if od.get_info('wallet_left'):
+                item = self.data.get(exs.quote_code)
+                if item:
+                    od.set_info(wallet_left=item.available)
         else:
             # 现货空单，锁定base，允许金额为负
             base_cost = self.get_amount_by_legal(exs.base_code, legal_cost)
@@ -398,7 +403,8 @@ class WalletsLocal:
                 min_margin = exchange.min_margin(quote_value)  # 要求的最低保证金
                 if abs(od.profit) >= (cur_margin - min_margin) * self.margin_add_rate:
                     # 当亏损达到初始保证金比例时，为此订单增加保证金避免强平
-                    logger.info(f'{od} loss 2/3 {od.profit:.5f} {cur_margin:.5f}')
+                    loss_pct = round(self.margin_add_rate * 100)
+                    logger.debug('loss %d%% %s %.5f %.5f', loss_pct, od, od.profit, cur_margin)
                     cur_margin -= od.profit
             # 价格走势和预期相同。所需保证金增长
             try:

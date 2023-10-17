@@ -85,7 +85,9 @@ def dump_graph(assets: Dict[str, List[Tuple[datetime.datetime, float]]], out_dir
         idx += 1
         if len(data) > max_num * 2:
             step = round(len(data) / max_num)
-            data = [r for i, r in enumerate(data) if i % step == 0]
+            last = data[-1]
+            data = [r for i, r in enumerate(data[:-1]) if i % step == 0]
+            data.append(last)
         x_dates, y_values = list(zip(*data))
         color = colors[idx % len(colors)]
         plot_data.append(go.Scatter(x=x_dates, y=y_values, line=dict(color=color), name=key))

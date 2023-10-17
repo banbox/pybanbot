@@ -393,7 +393,7 @@ class LocalOrderManager(OrderManager):
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
         try:
             self.wallets.enter_od(od, self.last_ts)
-        except Exception as e:
+        except LackOfCash as e:
             # 余额不足
             od.local_exit(ExitTags.force_exit, status_msg=str(e))
             await od.save()
