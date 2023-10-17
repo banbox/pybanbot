@@ -74,11 +74,10 @@ class BaseStrategy:
 
     def open_order(self, tag: str,
                    short: bool = False,
-                   price: float = None,
+                   limit: float = None,
                    cost_rate: float = 1.,
                    legal_cost: float = None,
                    leverage: int = None,
-                   order_type: Optional[Union[str, OrderType]] = None,
                    amount: float = None,
                    stoploss: float = None,
                    takeprofit: float = None,
@@ -87,11 +86,10 @@ class BaseStrategy:
         打开一个订单。默认开多。如需开空short=False
         :param tag: 入场信号
         :param short: 是否做空，默认False
-        :param price: 入场价格，仅当指定order_type=limit时有效
+        :param limit: 限价单入场价格，指定时订单将作为限价单提交
         :param cost_rate: 开仓倍率、默认按配置1倍。用于计算legal_cost
         :param legal_cost: 花费法币金额。指定时忽略cost_rate
         :param leverage: 杠杆倍数。为空时使用默认配置的杠杆
-        :param order_type: 订单类型：limit, market
         :param amount: 入场标的数量，由legal_cost和price计算
         :param stoploss: 止损价格，不为空时在交易所提交一个止损单
         :param takeprofit: 止盈价格，不为空时在交易所提交一个止盈单。
@@ -99,16 +97,9 @@ class BaseStrategy:
         od_args = dict(tag=tag, short=short, **kwargs)
         if leverage:
             od_args['leverage'] = leverage
-        if order_type:
-            if isinstance(order_type, OrderType):
-                order_type = order_type.value
-                od_args['enter_order_type'] = order_type
-            else:
-                od_args['enter_order_type'] = OrderType(order_type).value
-            if order_type != OrderType.Market.value:
-                if not price:
-                    raise ValueError(f'`price` is required for {order_type} order')
-                od_args['enter_price'] = price
+        if limit:
+            od_args['enter_order_type'] = OrderType.Limit.value
+            od_args['enter_price'] = limit
         if amount:
             od_args['enter_amount'] = amount
             od_args['legal_cost'] = amount * MarketPrice.get(self.symbol.symbol)
@@ -127,9 +118,8 @@ class BaseStrategy:
 
     def close_orders(self, tag: str,
                      short: bool = False,
-                     price: float = None,
+                     limit: float = None,
                      exit_rate: float = 1.,
-                     order_type: Optional[Union[str, OrderType]] = None,
                      amount: float = None,
                      enter_tag: str = None,
                      order_id: int = None,
@@ -139,9 +129,8 @@ class BaseStrategy:
         退出若干订单。默认平多。如需平空short=True
         :param tag: 退出原因
         :param short: 是否平空，默认否
-        :param price: 退出价格，仅当order_type=limit时有效
+        :param limit: 限价单退出价格，指定时订单将作为限价单提交
         :param exit_rate: 退出比率，默认100%即所有订单全部退出
-        :param order_type: 订单类型，默认按配置文件指定的订单类型
         :param amount: 要退出的标的数量。指定时exit_rate无效
         :param enter_tag: 只退出入场信号为enter_tag的订单
         :param order_id: 只退出指定订单
@@ -154,16 +143,9 @@ class BaseStrategy:
             exit_args['exit_rate'] = exit_rate
         if unopen_only is not None:
             exit_args['unopen_only'] = unopen_only
-        if order_type:
-            if isinstance(order_type, OrderType):
-                order_type = order_type.value
-                exit_args['enter_order_type'] = order_type
-            else:
-                exit_args['order_type'] = OrderType(order_type).value
-            if order_type != OrderType.Market.value:
-                if not price:
-                    raise ValueError(f'`price` is required for {order_type} order')
-                exit_args['price'] = price
+        if limit:
+            exit_args['order_type'] = OrderType.Limit.value
+            exit_args['price'] = limit
         if enter_tag:
             exit_args['enter_tag'] = enter_tag
         if order_id:
