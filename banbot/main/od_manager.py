@@ -1232,7 +1232,7 @@ class LiveOrderManager(OrderManager):
                                                      od_type, fee_name, fee_val)
             if part.status == InOutStatus.FullExit:
                 await self._finish_order(part)
-                logger.debug('exit : %s by third %s', part, trade)
+                logger.info('exit : %s by third %s', part, trade)
                 await self._fire(part, False)
             if filled <= min_dust:
                 break
