@@ -1325,7 +1325,12 @@ class LiveOrderManager(OrderManager):
             return
         if not od.enter.amount:
             if not od.quote_cost:
-                raise ValueError(f'quote_cost is required to calc enter_amount')
+                legal_cost = od.get_info('legal_cost')
+                if legal_cost:
+                    exs = ExSymbol.get_by_id(od.sid)
+                    od.quote_cost = self.wallets.get_amount_by_legal(exs.quote_code, legal_cost)
+                else:
+                    raise ValueError(f'quote_cost is required to calc enter_amount')
             try:
                 real_price = MarketPrice.get(od.symbol)
                 # 这里应使用市价计算数量，因传入价格可能和市价相差很大

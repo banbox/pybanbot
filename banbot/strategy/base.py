@@ -192,10 +192,10 @@ class BaseStrategy:
             is_short = side == 'short'
             open_ods = [od for od in open_ods if od.short == is_short]
         if open_ods:
-            legal_cost = sum(od.enter_cost for od in open_ods)
+            total_cost = sum(od.enter_cost for od in open_ods)
         else:
-            legal_cost = 0
-        return legal_cost / self.get_stake_amount()
+            total_cost = 0
+        return total_cost / self.get_stake_amount()
 
     def init_third_od(self, od: InOutOrder):
         pass

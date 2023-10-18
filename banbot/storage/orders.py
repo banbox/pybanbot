@@ -314,13 +314,13 @@ class InOutOrder(BaseDbModel, InfoPart):
         '''
         返回入场手续费、出场手续费、净利润
         '''
-        if not self.status or not self.enter.price or not self.enter.filled:
+        if not self.status or not self.enter.average or not self.enter.filled:
             return 0, 0, 0
         if price is None:
-            price = self.exit.price if self.exit and self.exit.price else self.enter.price
+            price = self.exit.price if self.exit and self.exit.price else self.enter.average
         ent_fee, ext_fee, profit_val = 0, 0, 0
         ent_fee_rate = self.enter.fee
-        ent_quote_value = self.enter.price * self.enter.filled
+        ent_quote_value = self.enter.average * self.enter.filled
         if BotGlobal.market_type == 'future':
             # 期货市场，手续费以定价币计算
             get_amount = self.enter.filled
@@ -334,7 +334,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             profit_val = clean_profit - ent_fee - ext_fee
         else:
             get_amount = self.enter.filled * (1 - ent_fee_rate)  # 入场后的数量
-            ent_fee = (self.enter.filled - get_amount) * self.enter.price
+            ent_fee = (self.enter.filled - get_amount) * self.enter.average
             if self.status == InOutStatus.FullExit and self.exit:
                 # 已完全退出
                 fee_amt = get_amount * self.exit.fee
