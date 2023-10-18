@@ -956,6 +956,7 @@ class LiveOrderManager(OrderManager):
             params.update(closePosition=True, triggerPrice=trig_price)  # 止损单
         side = 'buy' if od.short else 'sell'
         amount = od.enter.amount
+        order = None
         try:
             order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
         except ccxt.OrderImmediatelyFillable:
@@ -975,12 +976,13 @@ class LiveOrderManager(OrderManager):
                     # 这里不返回，取消已有的触发订单
             else:
                 raise e
-        od.set_info(**{f'{prefix}oid': order['id']})
-        if trigger_oid and order['status'] == 'open':
+        if order:
+            od.set_info(**{f'{prefix}oid': order['id']})
+        if trigger_oid and (not order or order['status'] == 'open'):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
             except ccxt.OrderNotFound:
-                logger.error(f'[{od.id}] cancel old stop order fail, not found: {od.symbol}, {trigger_oid}')
+                logger.warning(f'[{od.id}] cancel old stop order fail, not found: {od.symbol}, {trigger_oid}')
 
     async def _cancel_trigger_ods(self, od: InOutOrder):
         '''
@@ -1019,12 +1021,26 @@ class LiveOrderManager(OrderManager):
         params = dict()
         if self.market_type == 'future':
             params['positionSide'] = 'SHORT' if od.short else 'LONG'
-        order = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
-        print_args = [is_enter, od.symbol, od_type, side, amount, price, params, order]
-        logger.debug('create exg order res: %s, %s, %s, %s, %s, %s, %s, %s', *print_args)
+        print_args = [is_enter, od.symbol, od_type, side, amount, price, params]
+        od_res = None
+        try:
+            od_res = await self.exchange.create_order(od.symbol, od_type, side, amount, price, params)
+            print_args.append(od_res)
+            logger.debug('create exg order res: %s, %s, %s, %s, %s, %s, %s, %s', *print_args)
+        except Exception as e:
+            catched = False
+            if isinstance(e, ccxt.errors.InvalidOrder):
+                if str(e).find('-2022') > 0:
+                    catched = True
+                    logger.warning(f"{od.key} id:{od.id} {print_args} reduce only is rejected")
+                    tag = (od.enter_tag if is_enter else od.exit_tag) or ExitTags.fatal_err
+                    od.local_exit(tag, status_msg=str(e))
+            if not catched:
+                raise ValueError(f'create exg order fail: {print_args}')
         # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
         try:
-            await self._update_subod_by_ccxtres(od, is_enter, order)
+            if od_res:
+                await self._update_subod_by_ccxtres(od, is_enter, od_res)
             if is_enter:
                 if od.get_info('stoploss_price'):
                     await self._edit_trigger_od(od, 'stoploss_')
