@@ -3,11 +3,14 @@
 # File  : ccxt_exts.py
 # Author: anyongjin
 # Date  : 2023/8/22
+from typing import Optional
 import ccxt.pro as ccxtpro
+import ccxt.async_support as ccxy_asy
+from ccxt import NotSupported
 
 
 def get_asy_overrides():
-    return dict()
+    return dict(binanceusdm=asybinanceusdm)
 
 
 def get_pro_overrides():
@@ -182,3 +185,45 @@ class probinanceusdm(ccxtpro.binanceusdm):
         else:
             return method(client, message)
 
+
+class asybinanceusdm(ccxy_asy.binanceusdm):
+
+    async def fetch_income_history(self, intype: str, symbol: Optional[str] = None, since: Optional[int] = None,
+                                   limit: Optional[int] = None, params={}):
+        """
+        fetch the history of rebates on self account
+        :param str intype: 数据类型 "TRANSFER"，"WELCOME_BONUS", "REALIZED_PNL"，"FUNDING_FEE", "COMMISSION" and "INSURANCE_CLEAR"
+        :param str|None symbol: unified market symbol
+        :param int|None since: the earliest time in ms to fetch rebate history for
+        :param int|None limit: the maximum number of rebate history structures to retrieve
+        :param dict params: extra parameters specific to the binance api endpoint
+        :returns dict:
+        """
+        await self.load_markets()
+        market = None
+        method = None
+        request = {
+            'incomeType': intype,  # "TRANSFER"，"WELCOME_BONUS", "REALIZED_PNL"，"FUNDING_FEE", "COMMISSION" and "INSURANCE_CLEAR"
+        }
+        if symbol:
+            market = self.market(symbol)
+            request['symbol'] = market['id']
+            if not market['swap']:
+                raise NotSupported(self.id + ' fetchIncomeHistory() supports swap contracts only')
+        subType = None
+        subType, params = self.handle_sub_type_and_params('fetchIncomeHistory', market, params, 'linear')
+        if since is not None:
+            request['startTime'] = since
+        if limit is not None:
+            request['limit'] = limit
+        defaultType = self.safe_string_2(self.options, 'fetchIncomeHistory', 'defaultType', 'future')
+        type = self.safe_string(params, 'type', defaultType)
+        params = self.omit(params, 'type')
+        if self.is_linear(type, subType):
+            method = 'fapiPrivateGetIncome'
+        elif self.is_inverse(type, subType):
+            method = 'dapiPrivateGetIncome'
+        else:
+            raise NotSupported(self.id + ' fetchIncomeHistory() supports linear and inverse contracts only')
+        response = await getattr(self, method)(self.extend(request, params))
+        return self.parse_incomes(response, market, since, limit)

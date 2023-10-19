@@ -70,6 +70,14 @@ async def stats(rpc: RPC = Depends(get_rpc)):
     return await rpc.stats()
 
 
+@router.get('/incomes', tags=['info'])
+async def incomes(intype: str, symbol: str = None, start_time: int = 0, limit: int = 0, rpc: RPC = Depends(get_rpc)):
+    """
+    获取账户损益资金流水
+    """
+    return await rpc.incomes(intype, symbol, start_time, limit)
+
+
 @router.get('/profit_by', tags=['info'])
 async def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
     return await rpc.timeunit_profit(limit, unit)

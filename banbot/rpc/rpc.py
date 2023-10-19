@@ -508,3 +508,23 @@ class RPC:
             last_process=self.bot.last_process,
             allow_trade_at=self.bot.order_mgr.disable_until
         )
+
+    async def incomes(self, intype: str, symbol: str, start_time: int, limit: int):
+        """
+        获取账户损益资金流水
+        """
+        async def run_data():
+            return await self.bot.exchange.get_incomes(intype, symbol, start_time, limit)
+        fut = asyncio.run_coroutine_threadsafe(run_data(), BotGlobal.bot_loop)
+        res_list = await run_in_threadpool(fut.result)
+        exg_name = self.bot.exchange.name
+        if exg_name == 'binance':
+            for item in res_list:
+                info = item.get('info')
+                if info:
+                    item['account'] = info.get('info')
+                    item['tradeId'] = info.get('tradeId')
+                    del item['info']
+        return dict(data=res_list)
+
+

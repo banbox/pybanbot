@@ -786,6 +786,15 @@ class CryptoExchange:
         if success_cnt:
             logger.warning('canceled %d unfill orders', success_cnt)
 
+    async def get_incomes(self, intype: str, symbol: Optional[str] = None, since: Optional[int] = None,
+                          limit: Optional[int] = None, params={}):
+        """
+        获取账户损益资金流水
+        """
+        if not hasattr(self.api_async, 'fetch_income_history'):
+            raise ValueError(f'{self.api_async.name} not support fetch_income_history')
+        return await self.api_async.fetch_income_history(intype, symbol, since, limit)
+
     async def close(self):
         await self.api_async.close()
         await self.api_ws.close()
