@@ -11,7 +11,8 @@ prefire: false  # 是否在bar即将完成时，提前10%时间触发
 margin_add_rate: 0.6666  # 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
 charge_on_bomb: false  # 回测出现爆仓时，是否重新充值继续测试，默认否，退出回测
 take_over_stgy: null  # 接管非当前机器人的下单的策略
-stake_amount: 15  # 单笔订单默认本金
+stake_amount: 15  # 单笔订单默认本金（名义价值）
+min_open_rate: 0.1  # 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 max_open_orders: 100  # 最大开单数量，默认100
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000

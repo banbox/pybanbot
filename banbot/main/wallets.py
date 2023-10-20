@@ -137,6 +137,8 @@ class WalletsLocal:
         config = AppConfig.get()
         self.margin_add_rate = config.get('margin_add_rate') or 0.667
         '出现亏损时，在亏损百分比后追加保证金'
+        self.min_open_rate = config.get('min_open_rate') or 0.1
+        '钱包余额不足单笔开单金额时，超过此比例即允许开小单'
 
     def set_wallets(self, **kwargs):
         for key, val in kwargs.items():
@@ -148,7 +150,7 @@ class WalletsLocal:
                 raise ValueError(f'unsupport val type: {key} {type(val)}')
 
     def cost_ava(self, od_key: str, symbol: str, amount: float, negative: bool = False, after_ts: float = 0,
-                 min_rate: float = 0.1) -> float:
+                 min_rate: float = None) -> float:
         '''
         从某个币的可用余额中扣除，添加到pending中，仅用于回测
         :param od_key: 锁定的键
@@ -156,7 +158,7 @@ class WalletsLocal:
         :param amount: 金额
         :param negative: 是否允许负数余额（空单用到）
         :param after_ts: 是否要求更新时间戳
-        :param min_rate: 最低扣除比率
+        :param min_rate: 最小开单倍率
         :return 实际扣除数量
         '''
         if self.update_at + 1 < after_ts:
@@ -165,10 +167,11 @@ class WalletsLocal:
             self.data[symbol] = ItemWallet(symbol)
         wallet = self.data[symbol]
         src_amount = wallet.available
+        cur_min_rate = self.min_open_rate if min_rate is None else min_rate
         if src_amount >= amount or negative:
             # 余额充足，或允许负数，直接扣除
             real_cost = amount
-        elif src_amount / amount > min_rate:
+        elif src_amount / amount > cur_min_rate:
             # 差额在近似允许范围内，扣除实际值
             real_cost = src_amount
         else:
@@ -388,7 +391,7 @@ class WalletsLocal:
         for od in od_list:
             if not od.enter.filled:
                 continue
-            cur_price = MarketPrice.get(exs.symbol)
+            cur_price = MarketPrice.get(od.symbol)
             # 计算名义价值
             quote_value = od.enter.filled * cur_price
             # 计算当前所需保证金
