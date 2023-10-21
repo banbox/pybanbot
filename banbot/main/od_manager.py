@@ -577,7 +577,10 @@ class LiveOrderManager(OrderManager):
         LiveOrderManager.obj = self
         self.exchange = exchange
         self.wallets: CryptoWallet = wallets
+        self._done_keys: Dict[Tuple[str, str], Any] = OrderedDict()  # 有序集合
+        '已完成的exorder的id主键列表'
         self.exg_orders: Dict[Tuple[str, str], Tuple[int, int]] = dict()
+        '交易所币+订单ID到数据库订单ID的映射。用于从推送的订单流更新订单状态。'
         self.unmatch_trades: Dict[str, dict] = dict()
         '未匹配交易，key: symbol, order_id；每个订单只保留一个未匹配交易，也只应该有一个'
         self.handled_trades: Dict[str, int] = OrderedDict()  # 有序集合，使用OrderedDict实现
@@ -924,9 +927,9 @@ class LiveOrderManager(OrderManager):
 
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
         sub_od = od.enter if is_enter else od.exit
-        if sub_od.order_id and (od.symbol, sub_od.order_id) in self.exg_orders:
+        if sub_od.order_id:
             # 如修改订单价格，order_id会变化
-            del self.exg_orders[(od.symbol, sub_od.order_id)]
+            self._done_keys[(od.symbol, sub_od.order_id)] = 1
         sub_od.order_id = order["id"]
         exg_key = od.symbol, sub_od.order_id
         self.exg_orders[exg_key] = od.id, sub_od.id
@@ -938,14 +941,18 @@ class LiveOrderManager(OrderManager):
         await self._consume_unmatchs(sub_od)
 
     async def _finish_order(self, od: InOutOrder):
+        if od.enter.order_id:
+            self._done_keys[(od.symbol, od.enter.order_id)] = 1
+        if od.exit and od.exit.order_id:
+            self._done_keys[(od.symbol, od.exit.order_id)] = 1
         await super(LiveOrderManager, self)._finish_order(od)
-        exg_inkey = od.symbol, od.enter.order_id
-        if exg_inkey in self.exg_orders:
-            self.exg_orders.pop(exg_inkey)
-        if od.exit:
-            exg_outkey = od.symbol, od.exit.order_id
-            if exg_outkey in self.exg_orders:
-                self.exg_orders.pop(exg_outkey)
+        if len(self._done_keys) > 1500:
+            done_keys = list(self._done_keys.keys())
+            self._done_keys = OrderedDict.fromkeys(done_keys[800:], value=1)
+            del_keys = done_keys[:800]
+            for k in del_keys:
+                if k in self.exg_orders:
+                    self.exg_orders.pop(k)
 
     async def _edit_trigger_od(self, od: InOutOrder, prefix: str, try_kill=True):
         trigger_oid = od.get_info(f'{prefix}oid')
@@ -1150,6 +1157,8 @@ class LiveOrderManager(OrderManager):
             od_key = symbol, data['order']
             if od_key not in self.exg_orders:
                 self.unmatch_trades[trade_key] = data
+                continue
+            if od_key in self._done_keys:
                 continue
             valid_items.append((od_key, data))
         if not valid_items:
@@ -1375,6 +1384,7 @@ class LiveOrderManager(OrderManager):
                 except ccxt.OrderNotFound:
                     pass
             if not od.enter.filled:
+                od.status = InOutStatus.FullExit
                 od.update_exit(price=od.enter.price)
                 await self._finish_order(od)
                 await self._cancel_trigger_ods(od)
