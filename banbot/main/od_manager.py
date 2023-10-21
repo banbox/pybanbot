@@ -1024,6 +1024,17 @@ class LiveOrderManager(OrderManager):
             buy_price, sell_price = (await self._get_pair_prices(od.symbol, self.limit_vol_secs))
             cur_price = buy_price if sub_od.side == 'buy' else sell_price
             sub_od.price = self.exchange.pres_price(od.symbol, cur_price)
+        if not sub_od.amount:
+            if is_enter:
+                raise ValueError(f'amount is required for enter: {od}, {sub_od.amount}')
+            sub_od.amount = od.enter.filled
+            if not sub_od.amount:
+                # 没有入场，直接本地退出。
+                od.status = InOutStatus.FullExit
+                od.update_exit(price=od.enter.price)
+                await self._finish_order(od)
+                await self._cancel_trigger_ods(od)
+                return
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
         params = dict()
         if self.market_type == 'future':
@@ -1125,6 +1136,7 @@ class LiveOrderManager(OrderManager):
         if inout_status == InOutStatus.FullExit:
             await self._finish_order(inout_od)
             logger.debug('fire exg od: %s', inout_od)
+            await self._cancel_trigger_ods(od)
             await self._fire(inout_od, od.enter)
 
     async def _update_order(self, od: Order, data: dict):
