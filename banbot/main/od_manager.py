@@ -614,6 +614,8 @@ class LiveOrderManager(OrderManager):
         positions = await self.exchange.fetch_account_positions()
         positions = [p for p in positions if p['notional']]
         cur_symbols = {p['symbol'] for p in positions}
+        his_ods = await get_db_orders(pairs=list(cur_symbols), status='his')
+        his_ods = sorted(his_ods, key=lambda o: o.enter_at, reverse=True)
         op_ods = await InOutOrder.open_orders()
         if not op_ods:
             since_ms = 0
@@ -628,7 +630,9 @@ class LiveOrderManager(OrderManager):
                 continue
             long_pos = next((p for p in cur_pos if p['side'] == 'long'), None)
             short_pos = next((p for p in cur_pos if p['side'] == 'short'), None)
-            await self._sync_pair_orders(pair, long_pos, short_pos, cur_ods, since_ms)
+            his_od = next((o for o in his_ods if o.symbol == pair), None)
+            prev_tf = his_od.timeframe if his_od else None
+            await self._sync_pair_orders(pair, long_pos, short_pos, since_ms, cur_ods, prev_tf)
             res_odlist.update(cur_ods)
         new_ods = res_odlist - set(op_ods)
         old_ods = res_odlist.intersection(op_ods)
@@ -639,8 +643,8 @@ class LiveOrderManager(OrderManager):
             logger.info(f'开始跟踪{len(new_ods)}个用户下单：{new_ods}')
         return len(old_ods), len(new_ods), len(del_ods), list(res_odlist)
 
-    async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict,
-                                op_ods: List[InOutOrder], since_ms: int):
+    async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict, since_ms: int,
+                                op_ods: List[InOutOrder], prev_tf: str = None):
         '''
         对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
         '''
@@ -652,11 +656,7 @@ class LiveOrderManager(OrderManager):
                 if exod['status'] != 'closed':
                     # 跳过未完成的订单
                     continue
-                client_id: str = exod['clientOrderId']
-                if client_id.startswith(BotGlobal.bot_name):
-                    # 这里不应该有当前机器人的订单，除非是两个同名的机器人交易同一个账户
-                    logger.error(f'unexpect order for bot: {BotGlobal.bot_name}: {exod}')
-                await self._apply_history_order(op_ods, exod)
+                await self._apply_history_order(op_ods, exod, prev_tf)
             long_pos_amt = long_pos['contracts'] if long_pos else 0.
             short_pos_amt = short_pos['contracts'] if short_pos else 0.
             # 检查剩余的打开订单是否和仓位匹配，如不匹配强制关闭对应的订单
@@ -693,17 +693,17 @@ class LiveOrderManager(OrderManager):
         if not self.take_over_stgy:
             return
         if long_pos and long_pos['contracts'] > min_dust:
-            long_od = self._create_order_from_position(long_pos)
+            long_od = self._create_order_from_position(long_pos, prev_tf)
             if long_od:
                 await long_od.save()
                 op_ods.append(long_od)
         if short_pos and short_pos['contracts'] > min_dust:
-            short_od = self._create_order_from_position(short_pos)
+            short_od = self._create_order_from_position(short_pos, prev_tf)
             if short_od:
                 await short_od.save()
                 op_ods.append(short_od)
 
-    def _create_order_from_position(self, pos: dict):
+    def _create_order_from_position(self, pos: dict, prev_tf: str):
         '''
         从ccxt返回的持仓情况创建跟踪订单。
         '''
@@ -719,13 +719,14 @@ class LiveOrderManager(OrderManager):
         tag_ = '开空' if is_short else '开多'
         logger.info(f'[仓]{tag_}：price:{average}, amount: {filled}, fee: {fee_rate}')
         return self._create_inout_od(exs, is_short, average, filled, ent_od_type, fee_rate,
-                                     fee_name, btime.time_ms(), OrderStatus.Close)
+                                     fee_name, btime.time_ms(), OrderStatus.Close, prev_tf=prev_tf)
 
     def _create_inout_od(self, exs: ExSymbol, short: bool, average: float, filled: float,
                          ent_od_type: str, fee_rate: float, fee_name: str, enter_at: int,
-                         ent_status: int, ent_odid: str = None):
+                         ent_status: int, ent_odid: str = None, prev_tf: str = None):
         job = next((p for p in BotGlobal.stg_symbol_tfs if p[0] == self.take_over_stgy and p[1] == exs.symbol), None)
-        if not job:
+        timeframe = job[2] if job else prev_tf
+        if not timeframe:
             logger.warning(f'take over job not found: {exs.symbol} {self.take_over_stgy}')
             return
         leverage = self.exchange.get_leverage(exs.symbol)
@@ -734,7 +735,7 @@ class LiveOrderManager(OrderManager):
         return InOutOrder(
             sid=exs.id,
             symbol=exs.symbol,
-            timeframe=job[2],
+            timeframe=timeframe,
             short=short,
             status=io_status,
             enter_price=average,
@@ -755,7 +756,7 @@ class LiveOrderManager(OrderManager):
             quote_cost=quote_cost,
         )
 
-    async def _apply_history_order(self, od_list: List[InOutOrder], od: dict):
+    async def _apply_history_order(self, od_list: List[InOutOrder], od: dict, prev_tf: str):
         info: dict = od['info']
         is_short = info['positionSide'] == 'SHORT'
         is_sell = od['side'] == 'sell'
@@ -789,7 +790,7 @@ class LiveOrderManager(OrderManager):
                 logger.info(
                     f'{tag_}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
                 iod = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
-                                            od_time, OrderStatus.Close, od['id'])
+                                            od_time, OrderStatus.Close, od['id'], prev_tf=prev_tf)
                 if iod:
                     od_list.append(iod)
 
@@ -799,7 +800,7 @@ class LiveOrderManager(OrderManager):
             logger.info(
                 f'{tag}：price:{od_price}, amount: {od_amount}, {od["type"]}, fee: {fee_rate} {od_time} id: {od["id"]}')
             od = self._create_inout_od(exs, is_short, od_price, od_amount, od['type'], fee_rate, fee_name,
-                                       od_time, OrderStatus.Close, od['id'])
+                                       od_time, OrderStatus.Close, od['id'], prev_tf=prev_tf)
             if od:
                 od_list.append(od)
         else:
@@ -1301,6 +1302,9 @@ class LiveOrderManager(OrderManager):
 
     async def _create_order_from_bnb(self, trade: dict):
         info: dict = trade['info']
+        if info.get('R', False):
+            # 忽略只减仓订单
+            return
         state: str = info['X']
         if state != 'FILLED':
             # 只对完全入场的尝试跟踪
