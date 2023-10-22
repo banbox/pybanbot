@@ -5,6 +5,7 @@
 # Date  : 2023/7/21
 import datetime
 from banbot.storage.base import *
+from banbot.util.tf_utils import *
 
 min_date_time = datetime.datetime.utcfromtimestamp(0)
 
@@ -69,7 +70,7 @@ class Overlay(BaseDbModel):
                 olay.data = save_data
                 await sess.flush()
                 return olay.id
-        from banbot.exchange.exchange_utils import tf_to_secs
+        from banbot.util.tf_utils import tf_to_secs
         tf_msecs = tf_to_secs(timeframe) * 1000
         olay = Overlay(user=user_id, sid=sid, start_ms=start_ms, stop_ms=stop_ms, tf_msecs=tf_msecs,
                        update_at=cur_time, data=save_data)
@@ -90,7 +91,7 @@ class Overlay(BaseDbModel):
     @classmethod
     async def delete(cls, user_id: int, sid: int, timeframe: str, start_ms: int, stop_ms: int,
                      sess: SqlSession = None):
-        from banbot.exchange.exchange_utils import tf_to_secs
+        from banbot.util.tf_utils import tf_to_secs
         if not sess:
             sess = dba.session
         tf_msecs = tf_to_secs(timeframe) * 1000

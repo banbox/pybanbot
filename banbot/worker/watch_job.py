@@ -10,13 +10,14 @@ import asyncio
 import time
 
 from banbot.storage import *
-from banbot.exchange.exchange_utils import *
 from banbot.strategy.resolver import get_strategy, BaseStrategy
 from banbot.compute.ctx import *
 from banbot.compute.tools import append_new_bar
 from banbot.config import AppConfig
 from banbot.util.common import logger
 from banbot.data import auto_fetch_ohlcv
+from banbot.util.tf_utils import *
+from banbot.util import btime
 
 _tf_stgy_cls: Dict[str, List[Type[BaseStrategy]]] = dict()  # 记录所有周期，及其运行的策略
 _state_map: Dict[str, 'WatchState'] = dict()
@@ -59,7 +60,7 @@ async def run_on_bar(state: WatchState):
     '''
     from banbot.exchange import get_exchange
     tf_msecs = state.tf_msecs
-    cur_end = btime.utcstamp() // tf_msecs * tf_msecs
+    cur_end = align_tfmsecs(btime.utcstamp(), tf_msecs)
     if state.end_ms and state.end_ms + tf_msecs > cur_end:
         # 如果没有新数据，直接退出
         return

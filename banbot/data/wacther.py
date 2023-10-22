@@ -12,7 +12,7 @@ from banbot.util.common import logger
 from banbot.util.banio import ClientIO
 from banbot.config import AppConfig
 from dataclasses import dataclass
-from banbot.exchange import tf_to_secs
+from banbot.util.tf_utils import *
 from banbot.data.tools import build_ohlcvc
 
 

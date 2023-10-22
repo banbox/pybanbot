@@ -5,6 +5,7 @@
 # Date  : 2023/7/25
 from banbot.storage.klines import *
 from banbot.data.tools import *
+from banbot.util.tf_utils import *
 
 
 async def _find_sid_hole(sess: SqlSession, timeframe: str, sid: int, since: datetime, until: datetime = None):
@@ -137,8 +138,8 @@ async def _sync_kline_sid(sid: int, tf_list: List[Tuple[str, int, int, int]]):
         ptf, psec, pstart, pend = tf_list[cur_id]
         stf, ssec, start, end = tf_list[src_id]
         tf_msecs = psec * 1000
-        start_align = start // tf_msecs * tf_msecs
-        end_align = end // tf_msecs * tf_msecs
+        start_align = align_tfmsecs(start, tf_msecs)
+        end_align = align_tfmsecs(end, tf_msecs)
         if start_align >= pstart and end_align <= pend:
             continue
 
@@ -189,10 +190,10 @@ async def _correct_sid_tf_ohlcv(exs: ExSymbol, sub_tf: str, timeframe: str, star
     batch_num = batch_num // factor * factor
 
     # 计算此次父周期涉及的时间范围
-    big_start = start_ms // tf_msecs * tf_msecs
+    big_start = align_tfmsecs(start_ms, tf_msecs)
     if big_start < start_ms:
         big_start += tf_msecs
-    big_end = end_ms // tf_msecs * tf_msecs
+    big_end = align_tfmsecs(end_ms, tf_msecs)
 
     cur_start = big_start
     while cur_start < big_end:

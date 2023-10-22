@@ -4,13 +4,13 @@
 # Author: anyongjin
 # Date  : 2023/7/27
 from banbot.storage import *
-from banbot.exchange.exchange_utils import *
 from banbot.strategy.resolver import get_strategy
 from banbot.compute.ctx import *
 from banbot.compute.sta_inds import tcol
 from banbot.compute.tools import append_new_bar
 from banbot.config import AppConfig
 from banbot.util.common import logger
+from banbot.util.tf_utils import *
 
 
 async def calc_strategy_sigs(exs: ExSymbol, timeframe: str, strategy: str, start_ms: int, end_ms: int):

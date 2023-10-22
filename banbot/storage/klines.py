@@ -7,10 +7,10 @@ import math
 import collections
 from typing import Tuple, ClassVar, Iterable, Deque
 
-from banbot.exchange.exchange_utils import tf_to_secs
 from banbot.storage.base import *
 from banbot.util import btime
 from banbot.storage.symbols import ExSymbol
+from banbot.util.tf_utils import *
 from asyncio import Future
 
 
@@ -211,8 +211,8 @@ CREATE TABLE "kline_un" (
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
         # 计算最新未完成bar的时间戳
-        finish_end_ts = end_ts // tf_secs * tf_secs
-        unfinish_ts = int(btime.utctime() // tf_secs * tf_secs)
+        finish_end_ts = align_tfsecs(end_ts, tf_secs)
+        unfinish_ts = align_tfsecs(btime.utctime(), tf_secs)
         if finish_end_ts > unfinish_ts:
             finish_end_ts = unfinish_ts
 
@@ -222,8 +222,9 @@ where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({
 order by time'''
 
         def gen_gp_sql():
+            origin = get_tfalign_origin(timeframe)[0]
             return f'''
-                select (extract(epoch from time_bucket('{timeframe}', time, origin => '1970-01-01')) * 1000)::bigint AS gtime,
+                select (extract(epoch from time_bucket('{timeframe}', time, origin => '{origin}')) * 1000)::bigint AS gtime,
                   {cls._candle_agg} from {{tbl}}
                 where sid={{sid}} and time >= to_timestamp({start_ts}) and time < to_timestamp({finish_end_ts})
                 group by gtime
@@ -252,8 +253,8 @@ order by time'''
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
         # 计算最新未完成bar的时间戳
-        finish_end_ts = end_ts // tf_secs * tf_secs
-        unfinish_ts = int(btime.utctime() // tf_secs * tf_secs)
+        finish_end_ts = align_tfsecs(end_ts, tf_secs)
+        unfinish_ts = align_tfsecs(btime.utctime(), tf_secs)
         if finish_end_ts > unfinish_ts:
             finish_end_ts = unfinish_ts
 
@@ -375,7 +376,7 @@ group by 1'''
         获取指定周期对应的下载的时间周期。
         只有1m和1h允许下载并写入超表。其他维度都是由这两个维度聚合得到。
         '''
-        from banbot.exchange.exchange_utils import secs_min, secs_hour, secs_day
+        from banbot.util.tf_utils import secs_min, secs_hour, secs_day
         tf_secs = tf_to_secs(tf)
         if tf_secs >= secs_day:
             if tf_secs % secs_day:
@@ -615,8 +616,8 @@ group by 1'''
             await sess.execute(sa.text(f"DELETE {from_where}"))
             await sess.flush()
             return
-        bar_start_ts = start_ms // tf_msecs * tf_secs
-        bar_end_ts = end_ms // tf_msecs * tf_secs
+        bar_start_ts = align_tfsecs(start_ms // 1000, tf_secs)
+        bar_end_ts = align_tfsecs(end_ms // 1000, tf_secs)
         if bar_start_ts == bar_end_ts:
             # 当子周期插入开始结束时间戳，对应到当前周期，属于同一个bar时，才执行快速更新
             stmt = sa.text(f"select start_ms,open,high,low,close,volume,stop_ms {from_where}")
@@ -677,10 +678,10 @@ update "kline_un" set high={phigh},low={plow},
     async def refresh_agg(cls, sess: SqlSession, tbl: BarAgg, sid: int,
                           org_start_ms: int, org_end_ms: int, agg_from: str = None):
         tf_msecs = tbl.secs * 1000
-        start_ms = org_start_ms // tf_msecs * tf_msecs
+        start_ms = align_tfmsecs(org_start_ms, tf_msecs)
         # 有可能start_ms刚好是下一个bar的开始，前一个需要-1
         agg_start = start_ms - tf_msecs
-        end_ms = org_end_ms // tf_msecs * tf_msecs
+        end_ms = align_tfmsecs(org_end_ms, tf_msecs)
         if start_ms == end_ms < org_start_ms:
             # 没有出现新的完成的bar数据，无需更新
             # 前2个相等，说明：插入的数据所属bar尚未完成。

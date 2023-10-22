@@ -144,7 +144,7 @@ class StrategyResolver(IResolver):
             if not run_tfs:
                 from banbot.storage import KLine
                 run_tfs.update([k.tf for k in KLine.agg_list])
-        from banbot.exchange.exchange_utils import tf_to_secs
+        from banbot.util.tf_utils import tf_to_secs
         tf_sec_list = [(tf, tf_to_secs(tf)) for tf in run_tfs]
         tf_sec_list = sorted(tf_sec_list, key=lambda x: x[1])
         BotGlobal.run_tf_secs = tf_sec_list

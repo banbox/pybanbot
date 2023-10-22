@@ -12,6 +12,7 @@ from banbot.data.wacther import *
 from banbot.exchange.crypto_exchange import get_exchange
 from banbot.storage import KLine, DisContiError
 from banbot.util.banio import ServerIO, BanConn
+from banbot.util.tf_utils import *
 from banbot.data.cache import BanCache
 
 
@@ -185,7 +186,7 @@ class MinerJob(PairTFCache):
         self.check_intv = check_intv
         self.fetch_tf = '1s' if self.check_intv < 60 else '1m'
         self.fetch_tfsecs = tf_to_secs(self.fetch_tf)
-        self.since = int(since) if since else int(btime.utctime() // tf_secs * 1000)
+        self.since = int(since) if since else align_tfsecs(btime.utctime(), tf_secs) * 1000
         self.next_run = self.since / 1000
 
     @classmethod
@@ -427,9 +428,9 @@ class LiveMiner:
         prefetch = 1000
         save_tf, tf_secs = '1m', 60
         tf_msecs = tf_to_secs(save_tf) * 1000
-        cur_ms = btime.utcstamp() // tf_msecs * tf_msecs
-        start_ms = (cur_ms - tf_msecs * prefetch) // tf_msecs * tf_msecs
-        exs = await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [symbol])[0]
+        cur_ms = align_tfmsecs(btime.utcstamp(), tf_msecs)
+        start_ms = align_tfmsecs(cur_ms - tf_msecs * prefetch, tf_msecs)
+        exs = (await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [symbol]))[0]
         _, end_ms = await KLine.query_range(exs.id, save_tf)
         if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
             # 当缺失数据超过30个时，才执行批量下载

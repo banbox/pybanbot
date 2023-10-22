@@ -14,7 +14,7 @@ from banbot.util.common import logger
 
 async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num: int = 300)\
         -> Dict[str, List[Tuple[str, float]]]:
-    from banbot.exchange.exchange_utils import tf_to_secs
+    from banbot.util.tf_utils import tf_to_secs
     if not BotGlobal.run_tf_secs:
         raise ValueError('`run_timeframes` not set in `StrategyResolver.load_run_jobs`')
     pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}

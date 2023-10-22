@@ -167,7 +167,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             for hold, tf_warms in warm_jobs:
                 for tf, warm_num in tf_warms.items():
                     tf_msecs = tf_to_secs(tf) * 1000
-                    end_ms = cur_mtime // tf_msecs * tf_msecs
+                    end_ms = align_tfmsecs(cur_mtime, tf_msecs)
                     start_ms = end_ms - tf_msecs * warm_num
                     if tf not in tf_symbols:
                         tf_symbols[tf] = []

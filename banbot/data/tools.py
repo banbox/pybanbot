@@ -5,18 +5,17 @@
 # Date  : 2023/2/28
 import asyncio
 import datetime
-import math
 import os
-
-import six
+import ccxt
 
 from banbot.config.timerange import TimeRange
 from banbot.exchange.crypto_exchange import CryptoExchange
-from banbot.exchange.exchange_utils import *
 from banbot.storage.symbols import ExSymbol
 from banbot.storage.base import SqlSession
 from banbot.util.common import logger
 from banbot.util.misc import LazyTqdm
+from banbot.util.tf_utils import *
+from banbot.util import btime
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
@@ -364,16 +363,17 @@ def parse_down_args(timeframe: str, start_ms: Optional[int] = None, end_ms: Opti
                     limit: Optional[int] = None, with_unfinish: bool = False):
     tf_msecs = tf_to_secs(timeframe) * 1000
     if start_ms:
-        fix_start_ms = start_ms // tf_msecs * tf_msecs
+        fix_start_ms = align_tfmsecs(start_ms, tf_msecs)
         if start_ms > fix_start_ms:
             start_ms = fix_start_ms + tf_msecs
         if limit and not end_ms:
             end_ms = start_ms + tf_msecs * limit
     if not end_ms:
         end_ms = int(btime.time() * 1000)
-    factor = end_ms / tf_msecs
-    factor_int = math.ceil(factor) if with_unfinish else math.floor(factor)
-    end_ms = factor_int * tf_msecs
+    align_endms = align_tfmsecs(end_ms, tf_msecs)
+    if with_unfinish and end_ms % tf_msecs:
+        align_endms += tf_msecs
+    end_ms = align_endms
     if not start_ms:
         start_ms = end_ms - tf_msecs * limit
     return start_ms, end_ms

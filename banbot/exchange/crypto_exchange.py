@@ -8,8 +8,8 @@ import random
 import ccxt.async_support as ccxt_async
 import ccxt.pro as ccxtpro
 import orjson
-import six
 import os
+import ccxt
 from ccxt import TICK_SIZE
 from asyncio import Lock
 from cachetools import TTLCache
@@ -17,8 +17,8 @@ from cachetools import TTLCache
 from banbot.config.appconfig import AppConfig
 from banbot.util.misc import *
 from banbot.util.common import logger
-from banbot.config.consts import *
-from banbot.exchange.exchange_utils import *
+from banbot.util import btime
+from banbot.util.tf_utils import *
 from banbot.main.addons import MarketPrice
 from banbot.exchange.ccxt_exts import get_pro_overrides, get_asy_overrides
 from banbot.types import *
@@ -496,7 +496,7 @@ class CryptoExchange:
         if cut_end:
             tf_msecs = tf_to_secs(timeframe) * 1000
             cur_time = btime.utcstamp()
-            end_ts = cur_time // tf_msecs * tf_msecs - 1
+            end_ts = align_tfmsecs(cur_time, tf_msecs) - 1
             if since and since >= end_ts:
                 # 避免开始时间>结束时间，接口返回错误
                 return []

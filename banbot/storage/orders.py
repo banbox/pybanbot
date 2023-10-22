@@ -5,9 +5,8 @@
 # Date  : 2023/3/21
 import math
 from dataclasses import dataclass
-from banbot.config.consts import *
 from banbot.compute.sta_inds import *
-from banbot.exchange.exchange_utils import tf_to_secs
+from banbot.util.tf_utils import *
 from banbot.storage.base import *
 from banbot.storage.bot_task import BotTask
 from banbot.util.misc import del_dict_prefix
