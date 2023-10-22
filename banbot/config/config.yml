@@ -38,6 +38,7 @@ pairs:  # 给定交易币种，如不为空，pairlists和paircfg会被忽略
 - SFP/USDT:USDT
 paircfg:  # 交易对管理的一些配置
   refresh_mins: 720  # 默认过期时间
+  cron: '0 1 * * *'  # 定期更新的corn表达式：分钟，小时，日，月，周
 pairlists:  # 交易对过滤器，按从上到下的顺序逐个过滤应用。
 - name: StaticPairList  # 静态交易对，使用exchange.pair_whitelist，不可和VolumePairList同时使用，二选一。
 - name: VolumePairList  # 按成交量价值倒序排序所有交易对

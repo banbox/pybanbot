@@ -175,12 +175,12 @@ class LiveTrader(Trader):
             await self.data_mgr.sub_warm_pairs(pair_tfs)
 
     async def loop_refresh_pairs(self):
-        refresh_intv = self.pair_mgr.refresh_secs
-        if not refresh_intv:
-            return
         reset_ctx()
         while True:
-            await asyncio.sleep(refresh_intv)
+            wait_secs = self.pair_mgr.get_refresh_wait()
+            if not wait_secs:
+                return
+            await asyncio.sleep(wait_secs)
             try:
                 async with dba():
                     await self.refresh_pairs()

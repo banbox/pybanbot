@@ -3,7 +3,7 @@
 # File  : pair_manager.py
 # Author: anyongjin
 # Date  : 2023/4/17
-
+from croniter import croniter
 from banbot.symbols.pair_resolver import *
 from banbot.symbols.pairlist.helper import *
 from banbot.symbols.tfscaler import calc_symboltf_scales
@@ -34,7 +34,11 @@ class PairManager:
             raise ValueError(f'exchange not support fetchTickers, affect: {ticker_names}')
         self.ticker_cache = TTLCache(maxsize=1, ttl=1800)
         pair_cfg = config.get('paircfg') or dict()
-        self.refresh_secs = pair_cfg.get('refresh_mins', 720) * 60  # 交易对定期刷新间隔
+        self._refresh_secs = pair_cfg.get('refresh_mins', 720) * 60  # 交易对定期刷新间隔
+        cron_exp = pair_cfg.get('cron')
+        self._refresh_cron = croniter(cron_exp) if cron_exp else None
+        self._last_refresh = 0
+        '上次刷新交易对时间'
         self._ava_at = 0
         self._ava_symbols = None
         self.pair_tfscores: Dict[str, List[Tuple[str, float]]] = dict()  # 记录每个交易对的周期质量分数
@@ -44,6 +48,7 @@ class PairManager:
         return self.whitelist
 
     async def refresh_pairlist(self, add_pairs: Iterable[str] = None):
+        self._last_refresh = btime.utctime()
         if self.config.get('pairs'):
             # 回测模式传入pairs
             pairlist = self.config['pairs']
@@ -70,6 +75,14 @@ class PairManager:
 
         self.whitelist = pairlist
         BotGlobal.pairs = set(pairlist)
+
+    def get_refresh_wait(self):
+        """获取下次刷新的等待时间"""
+        if self._refresh_cron:
+            next_ts = self._refresh_cron.next()
+        else:
+            next_ts = self._last_refresh + self._refresh_secs
+        return next_ts - btime.utctime()
 
     @property
     def name_list(self) -> List[str]:

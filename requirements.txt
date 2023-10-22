@@ -17,6 +17,7 @@ aiohttp
 psutil
 PyJWT
 python-dateutil
+croniter
 
 python-telegram-bot
 corpwechatbot
