@@ -640,7 +640,7 @@ class LiveOrderManager(OrderManager):
         if old_ods:
             logger.info(f'恢复{len(old_ods)}个未平仓订单：{old_ods}')
         if new_ods:
-            logger.info(f'开始跟踪{len(new_ods)}个用户下单：{new_ods}')
+            logger.info(f'新开始跟踪{len(new_ods)}个用户下单：{new_ods}')
         return len(old_ods), len(new_ods), len(del_ods), list(res_odlist)
 
     async def _sync_pair_orders(self, pair: str, long_pos: dict, short_pos: dict, since_ms: int,
@@ -726,7 +726,8 @@ class LiveOrderManager(OrderManager):
                          ent_status: int, ent_odid: str = None, prev_tf: str = None):
         job = next((p for p in BotGlobal.stg_symbol_tfs if p[0] == self.take_over_stgy and p[1] == exs.symbol), None)
         timeframe = job[2] if job else prev_tf
-        if not timeframe:
+        if not timeframe and BotGlobal.state == BotState.RUNNING:
+            # 启动后，跳过未跟踪的。初始化阶段，允许未跟踪的币。
             logger.warning(f'take over job not found: {exs.symbol} {self.take_over_stgy}')
             return
         leverage = self.exchange.get_leverage(exs.symbol)

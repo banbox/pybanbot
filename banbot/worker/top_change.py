@@ -63,7 +63,7 @@ where exchange=:exchange and market=:market;'''
         return change_list
 
     async def run(self):
-        from banbot.exchange.exchange_utils import secs_day
+        from banbot.util.tf_utils import secs_day
         from banbot.data.spider import LiveSpider
         interval, delay = 60, 10
         cache_key = f'topchg_{self.exg_name}_{self.market}'

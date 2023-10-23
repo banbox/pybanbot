@@ -37,9 +37,9 @@ class BotState(Enum):
     """
     Bot application states
     """
+    INIT = 0
     RUNNING = 1
     STOPPED = 2
-    RELOAD_CONFIG = 3
 
     def __str__(self):
         return self.name.lower()

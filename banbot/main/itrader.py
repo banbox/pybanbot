@@ -12,7 +12,7 @@ from banbot.strategy.resolver import StrategyResolver
 
 class Trader:
     def __init__(self, config: Config):
-        BotGlobal.state = BotState.RUNNING
+        BotGlobal.state = BotState.INIT
         self.config = config
         self.name = config.get('name', 'noname')
         if btime.prod_mode():

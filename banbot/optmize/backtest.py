@@ -92,6 +92,7 @@ class BackTest(Trader):
         from banbot.optmize.reports import print_backtest
         from banbot.optmize.bt_analysis import BTAnalysis
         await self.init()
+        BotGlobal.state = BotState.RUNNING
         # 轮训数据
         async with dba():
             await self.data_mgr.down_data()

@@ -56,7 +56,10 @@ class PairManager:
             tickers = self.ticker_cache.get('tickers') or dict()
             if not tickers and self.need_tickers and btime.run_mode in LIVE_MODES:
                 ava_symbols = list(self.avaiable_symbols)
-                tickers = await self.exchange.fetch_tickers(ava_symbols)
+                try:
+                    tickers = await self.exchange.fetch_tickers(ava_symbols)
+                except Exception:
+                    raise ValueError(f'fetch tickers fail: {ava_symbols}')
                 self.ticker_cache['tickers'] = tickers
 
             pairlist = await self.handlers[0].gen_pairlist(tickers)

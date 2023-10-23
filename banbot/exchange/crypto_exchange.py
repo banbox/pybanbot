@@ -371,14 +371,14 @@ class CryptoExchange:
         if not markets:
             raise RuntimeError("Markets were not loaded.")
 
-        spot_only, margin_only, futures_only = False, False, False
+        spot_only, future_only = False, False
         if trade_modes:
             if isinstance(trade_modes, six.string_types):
                 trade_modes = {trade_modes}
             else:
                 trade_modes = set(trade_modes)
             spot_only = 'spot' in trade_modes
-            margin_only = 'margin' in trade_modes
+            future_only = 'future' in trade_modes
 
         def ia_valid(v: dict):
             if base_currs and v['base'] not in base_currs:
@@ -391,7 +391,9 @@ class CryptoExchange:
                 return False
             if spot_only and not v.get('spot'):
                 return False
-            if margin_only and not v.get('margin'):
+            if future_only and not v.get('swap'):
+                # 期货模式下，只交易永续合约。
+                # margin: 保证金  future: 短期期货  swap: 永续期货  option: 期权  contract: future/swap/option
                 return False
             return True
 

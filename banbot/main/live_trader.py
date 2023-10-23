@@ -65,12 +65,13 @@ class LiveTrader(Trader):
             await ExSymbol.init()
             # 先更新所有未平仓订单的状态
             old_num, new_num, del_num, open_ods = await self.order_mgr.sync_orders_with_exg()
-            add_pairs = {od.symbol for od in open_ods}
+            add_pairs = {od.symbol for od in open_ods if od.timeframe}
             await self.pair_mgr.refresh_pairlist(add_pairs)
             cur_pairs = self.pair_mgr.symbols
             await self.wallets.init(cur_pairs)
             await self.exchange.init(cur_pairs)
             pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
+            await self._init_orders(open_ods)
             await self._init_strategies()
             logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
@@ -79,6 +80,18 @@ class LiveTrader(Trader):
             type=NotifyType.STATUS,
             status=f'订单同步：恢复{old_num}，删除{del_num}，新增{new_num}，已开启{len(open_ods)}单'
         )
+
+    async def _init_orders(self, open_ods: List[InOutOrder]):
+        sess: SqlSession = dba.session
+        for od in open_ods:
+            if od.timeframe:
+                continue
+            tf = next((p[2] for p in BotGlobal.stg_symbol_tfs if p[0] == od.strategy and p[1] == od.symbol), None)
+            if not tf:
+                logger.warning(f'Order Trace canceled, job not found: {od}')
+                await sess.delete(od)
+            else:
+                od.timeframe = tf
 
     async def _init_strategies(self):
         open_ods = await InOutOrder.open_orders()
@@ -98,6 +111,7 @@ class LiveTrader(Trader):
         self.loop = asyncio.get_running_loop()
         # 初始化
         await self.init()
+        BotGlobal.state = BotState.RUNNING
         # 启动restapi
         start_api(self)
         # 启动异步任务

@@ -435,7 +435,7 @@ class RPC:
         target = self.bot.pair_mgr.whitelist if for_white else self.bot.pair_mgr.blacklist
         init_list = set(target)
         if adds:
-            valid_keys = set(self.bot.exchange.get_markets().keys())
+            valid_keys = set(self.bot.exchange.get_cur_markets().keys())
             old_list = set(target)
             for pair in adds:
                 if pair not in valid_keys:
