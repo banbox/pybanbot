@@ -81,3 +81,10 @@ class ForceExitPayload(BaseModel):
     order_type: Optional[str] = None
     amount: Optional[float] = None
 
+
+class ClosePosPayload(BaseModel):
+    symbol: str
+    amount: float
+    side: str
+    order_type: str
+    price: float = None

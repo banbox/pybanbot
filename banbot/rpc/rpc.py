@@ -20,6 +20,15 @@ from banbot.main.addons import MarketPrice
 from banbot.compute import get_context
 from banbot.util.common import bufferHandler
 from banbot.config import AppConfig
+from banbot.rpc.api.schemas import *
+
+
+def run_in_loop(func):
+    async def wrapper(*args, **kwargs):
+        coort = func(*args, **kwargs)
+        fut = asyncio.run_coroutine_threadsafe(coort, BotGlobal.bot_loop)
+        return await run_in_threadpool(fut.result)
+    return wrapper
 
 
 class RPCException(Exception):
@@ -278,8 +287,12 @@ class RPC:
         if source == 'bot':
             return await self.get_ban_orders(status, symbol, start_time, stop_time,
                                              limit, offset, with_total)
-        else:
+        elif source == 'exchange':
             return await self.get_exg_orders(symbol, start_time, limit or 10)
+        elif source == 'position':
+            return await self.get_exg_positions()
+        else:
+            return dict(code=400, msg='invalid source!')
 
     async def get_ban_orders(self, status: str = None, symbol: str = None,
                              start_time: int = 0, stop_time: int = 0, limit: int = 0, offset: int = 0,
@@ -319,12 +332,16 @@ class RPC:
             results.append(od_dict)
         return dict(data=results, total_num=total_num, offset=offset)
 
+    @run_in_loop
     async def get_exg_orders(self, symbol: str, start_time: int, limit: int):
-        async def run_data():
-            return await self.bot.exchange.fetch_orders(symbol, start_time, limit)
-        fut = asyncio.run_coroutine_threadsafe(run_data(), BotGlobal.bot_loop)
-        od_list = await run_in_threadpool(fut.result)
+        od_list = await self.bot.exchange.fetch_orders(symbol, start_time, limit)
         return dict(data=od_list)
+
+    @run_in_loop
+    async def get_exg_positions(self):
+        pos_list = await self.bot.exchange.fetch_account_positions()
+        positions = [p for p in pos_list if p['notional']]
+        return dict(data=positions)
 
     def _force_entry_validations(self, pair: str, order_side: str):
         if order_side not in {'long', 'short'}:
@@ -411,6 +428,36 @@ class RPC:
         for od in open_ods:
             await od.force_exit(tag, tag_msg)
         return dict(close_num=len(open_ods))
+
+    @run_in_loop
+    async def close_pos(self, data: ClosePosPayload):
+        tasks = []
+        if data.symbol == 'all':
+            pos_list = await self.bot.exchange.fetch_account_positions()
+            positions = [p for p in pos_list if p['notional']]
+            for p in positions:
+                tasks.append(dict(
+                    symbol=p['symbol'],
+                    amount=p['contracts'],
+                    side=p['side'],
+                    order_type='market',
+                    price=None
+                ))
+        else:
+            tasks.append(data.model_dump())
+        close_count, done_count = 0, 0
+        for task in tasks:
+            params = dict()
+            if BotGlobal.market_type == 'future':
+                params['positionSide'] = 'SHORT' if task['side'] == 'short' else 'LONG'
+            side = 'buy' if task['side'] == 'short' else 'sell'
+            symbol, od_type, amount, price = task['symbol'], task['order_type'], task['amount'], task.get('price')
+            od_res = await self.bot.exchange.create_order(symbol, od_type, side, amount, price, params)
+            if od_res.get('id'):
+                close_count += 1
+                if od_res.get('filled') == od_res.get('amount'):
+                    done_count += 1
+        return dict(close_num=close_count, done_num=done_count)
 
     async def calc_profits(self, status: str):
         od_list = await get_db_orders(status=status)
@@ -509,14 +556,12 @@ class RPC:
             allow_trade_at=self.bot.order_mgr.disable_until
         )
 
+    @run_in_loop
     async def incomes(self, intype: str, symbol: str, start_time: int, limit: int):
         """
         获取账户损益资金流水
         """
-        async def run_data():
-            return await self.bot.exchange.get_incomes(intype, symbol, start_time, limit)
-        fut = asyncio.run_coroutine_threadsafe(run_data(), BotGlobal.bot_loop)
-        res_list = await run_in_threadpool(fut.result)
+        res_list = await self.bot.exchange.get_incomes(intype, symbol, start_time, limit)
         exg_name = self.bot.exchange.name
         if exg_name == 'binance':
             for item in res_list:

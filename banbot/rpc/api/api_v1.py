@@ -113,6 +113,9 @@ async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
 async def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
     return await rpc.force_exit(payload.order_id)
 
+@router.post('/close_pos', tags=['trading'])
+async def close_pos(payload: ClosePosPayload, rpc: RPC = Depends(get_rpc)):
+    return await rpc.close_pos(payload)
 
 @router.post('/calc_profits', tags=['info'])
 async def calc_profits(status: str = Body(None, embed=True), rpc: RPC = Depends(get_rpc)):
