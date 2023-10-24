@@ -16,6 +16,7 @@ from banbot.util.common import logger
 from banbot.util.misc import LazyTqdm
 from banbot.util.tf_utils import *
 from banbot.util import btime
+from banbot.util.banio import ClientIO
 
 
 def trades_to_ohlcv(trades: List[dict]) -> List[Tuple[int, float, float, float, float, float, int]]:
@@ -324,11 +325,13 @@ async def download_to_db(exchange, exs: ExSymbol, timeframe: str, start_ms: int,
     if not sess:
         sess = dba.new_session() if new_sess else None
     try:
-        down_count = await _do_download_db(exchange, exs, timeframe, start_ms, end_ms,
-                                           check_exist, allow_lack, pbar, sess)
+        async with ClientIO.lock(f'{exs.id}|{timeframe}'):
+            down_count = await _do_download_db(exchange, exs, timeframe, start_ms, end_ms,
+                                               check_exist, allow_lack, pbar, sess)
     finally:
         if sess and new_sess:
-            await sess.commit()
+            if sess.is_active:
+                await sess.commit()
             await asyncio.shield(sess.close())
     return down_count
 

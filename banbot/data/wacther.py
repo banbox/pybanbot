@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/4/30
 import asyncio
-from typing import *
 
 from banbot.storage import BotGlobal
 from banbot.util import btime

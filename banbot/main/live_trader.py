@@ -59,6 +59,8 @@ class LiveTrader(Trader):
         BotGlobal.bot_loop = asyncio.get_running_loop()
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
+        # 监听实时数据推送
+        self._run_tasks.append(asyncio.create_task(LiveDataProvider.run()))
         async with dba():
             await BotTask.init()
             await sync_timeframes()
@@ -125,8 +127,6 @@ class LiveTrader(Trader):
         ])
 
     async def _start_tasks(self):
-        # 监听实时数据推送
-        self._run_tasks.append(asyncio.create_task(LiveDataProvider.run()))
         # 定期刷新交易对
         self._run_tasks.append(asyncio.create_task(self.loop_refresh_pairs()))
         if btime.prod_mode():

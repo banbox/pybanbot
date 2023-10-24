@@ -3,9 +3,9 @@
 # File  : klines.py
 # Author: anyongjin
 # Date  : 2023/4/24
-import math
 import collections
-from typing import Tuple, ClassVar, Iterable, Deque
+
+import pytz
 
 from banbot.storage.base import *
 from banbot.util import btime
@@ -722,10 +722,13 @@ ORDER BY sid, 2'''
         '''
         tf_msecs = tf_to_secs(timeframe) * 1000
         # 取 >= start_ms的第一个bar开始时间
-        start_ms = math.ceil(start_ms / tf_msecs) * tf_msecs
+        align_start = align_tfmsecs(start_ms, tf_msecs)
+        if start_ms % tf_msecs:
+            align_start += tf_msecs
+        start_ms = align_start
         # 取 < end_ms的最后一个bar开始时间
         end_ms = min(end_ms, btime.time_ms())
-        end_ms = (math.ceil(end_ms / tf_msecs) - 1) * tf_msecs
+        end_ms = align_tfmsecs(end_ms, tf_msecs)
         if start_ms > end_ms:
             return
         holes = []
@@ -772,8 +775,16 @@ ORDER BY sid, 2'''
                     old_h.stop = hole.stop
                 merged[-1] = old_h
         for m in merged:
+            if m.start == m.stop:
+                if m.id:
+                    await sess.delete(m)
+                continue
             if not m.id:
-                assert m.stop <= btime.now(), 'hole.stop exceed cur time'
+                stop_at = m.stop.replace(tzinfo=pytz.UTC)
+                if stop_at > btime.now():
+                    logger.error(f'hole.stop exceed cur time, bad: {m}, all: {merged}')
+                    await sess.rollback()
+                    return
                 sess.add(m)
         await sess.flush()
 
@@ -847,6 +858,12 @@ class KHole(BaseDbModel):
         if start >= stop:
             return 0, 0
         return btime.to_utcstamp(start, True, True), btime.to_utcstamp(stop, True, True)
+
+    def __str__(self):
+        return f'{self.sid}|{self.timeframe}|{self.start}|{self.stop}'
+
+    def __repr__(self):
+        return f'{self.sid}|{self.timeframe}|{self.start}|{self.stop}'
 
 
 def get_unknown_range(start, stop, holes: List[KHole]):

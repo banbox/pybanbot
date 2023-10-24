@@ -5,8 +5,12 @@
 # Date  : 2023/9/20
 import asyncio
 import marshal
-from typing import Optional, Any, List, Tuple, Dict, Callable
+import random
+import contextlib
+from typing import Optional, Any, List, Tuple, Dict, Callable, ClassVar
 from banbot.util.common import logger
+from asyncio import Future
+from banbot.util import btime
 
 
 line_end = b'<\0>'
@@ -97,6 +101,10 @@ class BanConn:
     async def run_forever(self, name: str):
         '''
         监听连接发送的信息并处理。
+        根据消息的action：
+            调用对应成员函数处理；直接传入msg_data
+            或从listens中找对应的处理函数，如果精确匹配，传入msg_data，否则传入action, msg_data
+        服务器端和客户端都会调用此方法
         '''
         from banbot.util.misc import run_async
         try:
@@ -119,11 +127,11 @@ class BanConn:
                     logger.info(f'{name} unhandle msg: {action}, {act_data}')
                     continue
                 is_exact, handle_fn = handle_res
+                call_args = [act_data] if is_exact else [action, act_data]
                 try:
-                    call_args = [act_data] if is_exact else [action, act_data]
                     await run_async(handle_fn, *call_args)
                 except Exception:
-                    logger.exception(f'{name} handle msg err: {self.remote}: {data}')
+                    logger.exception(f'{name} handle msg err: {self.remote}: {data}, {call_args}')
         except (asyncio.IncompleteReadError, ConnectionResetError) as e:
             self.reader = None
             self.writer = None
@@ -143,6 +151,8 @@ class ServerIO:
     '''
     Socket服务器端，监听端口，接受客户端连接，处理消息并发送响应。
     '''
+    obj: ClassVar['ServerIO'] = None
+
     def __init__(self, addr: str, name: str):
         host, port = addr.split(':')
         self.host = host
@@ -150,6 +160,9 @@ class ServerIO:
         self.name = name or 'banserver'
         self.server: Optional[asyncio.Server] = None
         self.conns: List[BanConn] = []
+        self.data: Dict[str, Any] = dict()
+        '内存缓存的数据，可供远程端访问设置'
+        ServerIO.obj = self
 
     async def run_forever(self):
         self.server = await asyncio.start_server(self._handle_conn, self.host, self.port)
@@ -161,6 +174,7 @@ class ServerIO:
     async def _handle_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         conn = self.get_conn(reader, writer)
         logger.info(f'receive client: {conn.remote}')
+        self._wrap_handlers(conn)
         writer.write('ready'.encode())
         writer.write(line_end)
         await writer.drain()
@@ -197,17 +211,65 @@ class ServerIO:
         '''
         return BanConn(reader, writer, reconnect=False)
 
+    def get_val(self, key: str):
+        """从服务器端直接获取缓存的值"""
+        from banbot.util import btime
+        cache_val = self.data.get(key)
+        val = None
+        if cache_val:
+            val, exp_at = cache_val
+            if exp_at and exp_at <= btime.utctime():
+                val = None
+        return val
+
+    def set_val(self, key: str, val, expire_secs: int = None):
+        """从服务器端直接设置缓存的值"""
+        if val is None:
+            # 删除值
+            if key in self.data:
+                del self.data[key]
+            return
+        expire_at = None
+        if expire_secs:
+            from banbot.util import btime
+            expire_at = btime.utctime() + expire_secs
+        self.data[key] = (val, expire_at)
+
+    def _wrap_handlers(self, conn: BanConn):
+        async def _on_get_val(key: str):
+            """处理远程端请求数据，读取数据并返回给远程端"""
+            logger.info(f'_on_get_val: {key}')
+            val = self.get_val(key)
+            await conn.write_msg('_on_get_val_res', (key, val))
+
+        def _on_set_val(data):
+            logger.info(f'_on_set_val: {data}')
+            key, val, expire_secs = data
+            self.set_val(key, val, expire_secs)
+
+        conn.listens.update(
+            _on_get_val=_on_get_val,
+            _on_set_val=_on_set_val
+        )
+
 
 class ClientIO(BanConn):
     '''
     socket客户端，用于连接服务器，发送请求处理并得到响应。也可用于获取服务器缓存数据。
     客户端可从此类继承，实现成员函数，处理服务器主动发送的消息。
     '''
+    _obj: ClassVar['ClientIO'] = None
+
     def __init__(self, server_addr: str):
         super().__init__()
         host, port = server_addr.split(':')
         self.host = host
         self.port = int(port)
+        self._waits: Dict[str, Future] = dict()
+        '等待触发的异步对象'
+        if ClientIO._obj:
+            logger.error(f'ClientIO already created: {ClientIO._obj}')
+        ClientIO._obj = self
 
     async def connect(self):
         logger.debug('connecting: %s:%s', self.host, self.port)
@@ -216,3 +278,86 @@ class ClientIO(BanConn):
         self.remote = self.writer.get_extra_info('peername')
         await self.read()
         '收到服务器第一个消息后认为服务器就绪，不管消息是什么'
+
+    async def get_val(self, key: str):
+        """从远程端获取指定key的值。"""
+        fut = asyncio.get_running_loop().create_future()
+        wait_key = f'get_{key}'
+        self._waits[wait_key] = fut
+        await self.write_msg('_on_get_val', key)
+        try:
+            return await fut
+        finally:
+            del self._waits[wait_key]
+
+    def _on_get_val_res(self, data):
+        """处理远程端取得数据后回调"""
+        key, val = data
+        fut = self._waits.get(f'get_{key}')
+        if not fut:
+            return
+        fut.set_result(val)
+
+    async def set_val(self, key: str, val, expire_secs: int = None):
+        """保存指定的值到远程端，过期时间可选，不等待返回确认"""
+        await self.write_msg('_on_set_val', (key, val, expire_secs))
+
+    @classmethod
+    async def get_remote(cls, key: str, catch_err=False):
+        """获取服务器端缓存的数据（服务器端也可调用此方法）"""
+        if ServerIO.obj:
+            return ServerIO.obj.get_val(key)
+        if not cls._obj:
+            if catch_err:
+                return None
+            raise ValueError(f'remote not ready, get: {key}')
+        return await cls._obj.get_val(key)
+
+    @classmethod
+    async def set_remote(cls, key: str, val, expire_secs: int = None, catch_err=False):
+        """设置数据缓存到服务器端（服务器端也可调用此方法）"""
+        if ServerIO.obj:
+            return ServerIO.obj.set_val(key, val, expire_secs)
+        if not cls._obj:
+            if catch_err:
+                return None
+            raise ValueError(f'remote not ready, get: {key}')
+        await cls._obj.set_val(key, val, expire_secs)
+
+    @classmethod
+    async def get_lock(cls, key: str, timeout: int = None) -> int:
+        """设置分布式锁，可指定超时时间，不指定默认20分钟"""
+        start = btime.time()
+        lock_by = await cls.get_remote(key)
+        lock_val = random.randrange(1000, 10000000)
+        if not lock_by:
+            await cls.set_remote(key, lock_val)
+            return lock_val
+        if not timeout:
+            timeout = 1200  # 最大超时时间20分钟
+        while btime.time() < start + timeout:
+            await asyncio.sleep(0.01)
+            lock_by = await cls.get_remote(key)
+            if not lock_by:
+                await cls.set_remote(key, lock_val)
+                return lock_val
+        raise TimeoutError(f'wait lock timeout: {key}, cost: {(btime.time() - start):.2f} secs')
+
+    @classmethod
+    async def del_lock(cls, key: str, lock_val: int = None):
+        """删除分布式锁，提供lock_val时对比是否相同，相同才删除"""
+        if lock_val:
+            lock_by = await cls.get_remote(key)
+            if lock_by != lock_val:
+                return
+        await cls.set_remote(key, None)
+
+    @classmethod
+    @contextlib.asynccontextmanager
+    async def lock(cls, key: str, timeout: int = None):
+        """请求一个分布式锁；此方法必须用with调用"""
+        lock_val = await cls.get_lock(key, timeout)
+        try:
+            yield
+        finally:
+            await cls.del_lock(key, lock_val)
