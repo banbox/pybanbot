@@ -155,6 +155,15 @@ class AppConfig(metaclass=Singleton):
         return cls.obj.get_config()
 
     @classmethod
+    def get_data_dir(cls):
+        import os
+        data_dir = os.environ.get('ban_data_dir')
+        if data_dir:
+            return data_dir
+        config = cls.get()
+        return config.get('data_dir')
+
+    @classmethod
     async def test_db(cls):
         # 测试数据库连接
         from banbot.storage.base import init_db, dba, sa

@@ -42,7 +42,7 @@ class Arguments:
         subparsers = self.parser.add_subparsers(dest='command')
 
         # 注册子命令
-        sub_cmds = [_reg_trade, _reg_backtest, _reg_down_data, _reg_dbcmd, _reg_od_compare, _reg_spider]
+        sub_cmds = [_reg_trade, _reg_backtest, _reg_down_data, _reg_down_ws, _reg_dbcmd, _reg_od_compare, _reg_spider]
         for sub_md in sub_cmds:
             sub_md(subparsers, parents=[com_parser])
 
@@ -79,6 +79,11 @@ def _reg_down_data(subparsers, **kwargs):
     from banbot.data.spider import run_down_pairs
     opts = ["timerange", "pairs", "timeframes", "medium"]
     _reg_sub(subparsers, 'down_data', opts, run_down_pairs, help='download data', **kwargs)
+
+
+def _reg_down_ws(subparsers, **kwargs):
+    from banbot.data.crawler import down_ws
+    _reg_sub(subparsers, 'down_ws', [], down_ws, help='download trades and orderbooks', **kwargs)
 
 
 def _reg_dbcmd(subparsers, **kwargs):
