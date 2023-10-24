@@ -212,7 +212,8 @@ async def down_ws(args: Dict[str, Any]):
         exchange = my_binanceusdm(exg_args)
     else:
         raise ValueError(f'unsupport exchange: {exg_name}')
-    exchange.aiohttp_proxy = exg_cfg['proxies']['http']
+    if has_proxy:
+        exchange.aiohttp_proxy = exg_cfg['proxies']['http']
     quote_codes = ['USDT']
     await exchange.load_markets()
     markets = get_markets(exchange, quote_codes, trade_modes=[market_type])
