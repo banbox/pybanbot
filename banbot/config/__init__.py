@@ -9,6 +9,7 @@ from typing import Tuple
 import orjson
 
 from banbot.config.appconfig import AppConfig, Config
+from banbot.config.user_config import UserConfig
 
 
 def get_bnb_client_args() -> Tuple[dict, dict, dict]:

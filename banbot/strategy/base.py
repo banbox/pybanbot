@@ -7,6 +7,7 @@ from banbot.strategy.common import *
 from banbot.rpc import Notify, NotifyType  # noqa
 from banbot.storage import ExSymbol
 from banbot.main.addons import MarketPrice  # noqa
+from banbot.config import UserConfig
 
 
 class BaseStrategy:
@@ -42,14 +43,42 @@ class BaseStrategy:
         self.calc_num = 0
         self.orders: List[InOutOrder] = []
         '当前打开的订单'
-        self.symbol: Optional[ExSymbol] = None
+        symbol, timeframe = get_cur_symbol(catch_err=True)
+        self.symbol: ExSymbol = symbol
         '当前处理的币种'
-        self.timeframe: Optional[str] = None
+        self.timeframe: str = timeframe
         '当前处理的时间周期'
         self.enter_tags: Set[str] = set()
         '已入场订单的标签'
         self.enter_num = 0
         '记录已提交入场订单数量，避免访问数据库过于频繁'
+        self.open_long = True
+        '是否允许开多'
+        self.open_short = True
+        '是否允许开空'
+        self.close_long = True
+        '是否允许平多'
+        self.close_short = True
+        '是否允许平空'
+        self.allow_exg_stoploss = True
+        '是否允许交易所止损'
+        self.allow_exg_takeprofit = True
+        '是否允许交易所止盈'
+        self._restore_config()
+
+    def _restore_config(self):
+        """从用户面板配置中恢复策略的状态"""
+        config = UserConfig.get()
+        pair_jobs: dict = config.get('pair_jobs') or dict()
+        cur_key = f'{self.symbol.symbol}_{self.name}'
+        stg_config: dict = pair_jobs.get(cur_key)
+        if not stg_config:
+            return
+        bool_keys = ['open_long', 'open_short', 'close_long', 'close_short', 'allow_exg_stoploss',
+                     'allow_exg_takeprofit']
+        for key in bool_keys:
+            if key in stg_config:
+                setattr(self, key, bool(stg_config[key]))
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -64,8 +93,6 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
-        if self.timeframe is None:
-            self.symbol, self.timeframe = get_cur_symbol(catch_err=True)
         self.entrys = []
         self.exits = []
         self.state = dict()
@@ -94,6 +121,10 @@ class BaseStrategy:
         :param stoploss: 止损价格，不为空时在交易所提交一个止损单
         :param takeprofit: 止盈价格，不为空时在交易所提交一个止盈单。
         '''
+        if short and not self.open_short or not short and not self.open_long:
+            tag = 'short' if short else 'long'
+            logger.warning(f'[{self.name}] open {tag} is disabled for {self.symbol}')
+            return
         od_args = dict(tag=tag, short=short, **kwargs)
         if leverage:
             od_args['leverage'] = leverage
@@ -111,9 +142,15 @@ class BaseStrategy:
                 od_args['cost_rate'] = cost_rate
                 od_args['legal_cost'] = self.custom_cost(od_args)
         if stoploss:
-            od_args['stoploss_price'] = stoploss
+            if self.allow_exg_stoploss:
+                od_args['stoploss_price'] = stoploss
+            else:
+                logger.warning(f'[{self.name}] stoploss on exchange is disabled for {self.symbol}')
         if takeprofit:
-            od_args['takeprofit_price'] = takeprofit
+            if self.allow_exg_takeprofit:
+                od_args['takeprofit_price'] = takeprofit
+            else:
+                logger.warning(f'[{self.name}] takeprofit on exchange is disabled for {self.symbol}')
         self.entrys.append(od_args)
         self.enter_num += 1
 
@@ -137,6 +174,10 @@ class BaseStrategy:
         :param order_id: 只退出指定订单
         :param unopen_only: True时只退出尚未入场的订单
         '''
+        if short and not self.close_short or not short and not self.close_long:
+            tag = 'short' if short else 'long'
+            logger.warning(f'[{self.name}] close {tag} is disabled for {self.symbol}')
+            return
         exit_args = dict(tag=tag, short=short)
         if amount:
             exit_args['amount'] = amount
@@ -161,6 +202,8 @@ class BaseStrategy:
     def check_custom_exits(self, pair_arr: np.ndarray) -> List[Tuple[InOutOrder, str]]:
         # 调用策略的自定义退出判断
         edit_ods = []
+        skip_takeprofit = 0
+        skip_stoploss = 0
         for od in self.orders:
             if not od.can_close():
                 continue
@@ -172,9 +215,19 @@ class BaseStrategy:
                 new_sl_price = od.get_info('stoploss_price')
                 new_tp_price = od.get_info('takeprofit_price')
                 if new_sl_price != sl_price:
-                    edit_ods.append((od, 'stoploss_'))
+                    if self.allow_exg_stoploss:
+                        edit_ods.append((od, 'stoploss_'))
+                    else:
+                        skip_stoploss += 1
                 if new_tp_price != tp_price:
-                    edit_ods.append((od, 'takeprofit_'))
+                    if self.allow_exg_takeprofit:
+                        edit_ods.append((od, 'takeprofit_'))
+                    else:
+                        skip_takeprofit += 1
+        if skip_stoploss:
+            logger.warning(f'[{self.name}] {self.symbol} stoploss on exchange is disabled, {skip_stoploss} orders')
+        if skip_takeprofit:
+            logger.warning(f'[{self.name}] {self.symbol} takeprofit on exchange is disabled, {skip_takeprofit} orders')
         return edit_ods
 
     def on_bot_stop(self):

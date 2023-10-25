@@ -31,19 +31,19 @@ class Trader:
         if not run_jobs:
             raise ValueError('no run jobs found')
         pair_tfs = dict()
-        stg_pairs = []
         for pair, timeframe, warm_num, stg_set in run_jobs:
             if pair not in pair_tfs:
                 pair_tfs[pair] = dict()
             pair_tfs[pair][timeframe] = warm_num
-            symbol = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
-            with TempContext(symbol):
-                BotGlobal.pairtf_stgs[f'{pair}_{timeframe}'] = [cls(self.config) for cls in stg_set]
-                stg_pairs.extend([(cls.__name__, pair, timeframe) for cls in stg_set])
-            for stg in stg_set:
-                BotGlobal.stg_symbol_tfs.append((stg.__name__, pair, timeframe))
+            ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
+            with TempContext(ctx_key):
+                stg_insts = []
+                for cls in stg_set:
+                    stg_insts.append(cls(self.config))
+                    BotGlobal.stg_symbol_tfs.append((cls.__name__, pair, timeframe))
+                BotGlobal.pairtf_stgs[f'{pair}_{timeframe}'] = stg_insts
         from itertools import groupby
-        stg_pairs = sorted(stg_pairs, key=lambda x: x[:2])
+        stg_pairs = sorted(BotGlobal.stg_symbol_tfs, key=lambda x: x[:2])
         sp_groups = groupby(stg_pairs, key=lambda x: x[0])
         for key, gp in sp_groups:
             items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
