@@ -23,8 +23,9 @@ class PairManager:
         self.config = config
         self.market_type = config.get('market_type') or 'spot'
         self.stake_currency: Set[str] = set(config.get('stake_currency') or [])
-        self.whitelist: List[str] = exchange.exg_config.get('pair_whitelist')
-        self.blacklist: List[str] = exchange.exg_config.get('pair_blacklist', [])
+        self.whitelist: List[str] = exchange.exg_config.get('pair_whitelist') or []
+        self.blacklist: List[str] = exchange.exg_config.get('pair_blacklist') or []
+        self.symbols: List[str] = []
         self.handlers = PairResolver.load_handlers(exchange, self, config)
         if not self.handlers:
             raise RuntimeError('no pairlist defined')
@@ -42,10 +43,17 @@ class PairManager:
         self._ava_at = 0
         self._ava_symbols = None
         self.pair_tfscores: Dict[str, List[Tuple[str, float]]] = dict()  # 记录每个交易对的周期质量分数
+        self._restore_pairs()
 
-    @property
-    def symbols(self):
-        return self.whitelist
+    def _restore_pairs(self):
+        from banbot.config import UserConfig
+        config = UserConfig.get()
+        pairs_white: list = config.get('pairs_white')
+        if pairs_white:
+            self.whitelist = list(set(self.whitelist).union(pairs_white))
+        pairs_black: list = config.get('pairs_black')
+        if pairs_black:
+            self.blacklist = list(set(self.blacklist).union(pairs_black))
 
     async def refresh_pairlist(self, add_pairs: Iterable[str] = None):
         self._last_refresh = btime.utctime()
@@ -68,6 +76,8 @@ class PairManager:
                 pairlist = await handler.filter_pairlist(pairlist, tickers)
                 logger.info(f'left {len(pairlist)} symbols after {handler.name}')
 
+        if self.whitelist:
+            add_pairs = self.whitelist if not add_pairs else set(add_pairs).union(self.whitelist)
         if add_pairs:
             new_pairs = set(add_pairs).difference(pairlist)
             if new_pairs:
@@ -76,7 +86,7 @@ class PairManager:
         # 计算交易对各维度K线质量分数
         self.pair_tfscores = await calc_symboltf_scales(self.exchange, pairlist)
 
-        self.whitelist = pairlist
+        self.symbols = pairlist
         BotGlobal.pairs = set(pairlist)
 
     def get_refresh_wait(self):

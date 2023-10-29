@@ -37,11 +37,15 @@ class Trader:
             pair_tfs[pair][timeframe] = warm_num
             ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
             with TempContext(ctx_key):
-                stg_insts = []
+                pair_tf_key = f'{pair}_{timeframe}'
+                stg_insts = BotGlobal.pairtf_stgs.get(pair_tf_key) or []
                 for cls in stg_set:
+                    job = (cls.__name__, pair, timeframe)
+                    if job in BotGlobal.stg_symbol_tfs:
+                        continue
                     stg_insts.append(cls(self.config))
-                    BotGlobal.stg_symbol_tfs.append((cls.__name__, pair, timeframe))
-                BotGlobal.pairtf_stgs[f'{pair}_{timeframe}'] = stg_insts
+                    BotGlobal.stg_symbol_tfs.append(job)
+                BotGlobal.pairtf_stgs[pair_tf_key] = stg_insts
         from itertools import groupby
         stg_pairs = sorted(BotGlobal.stg_symbol_tfs, key=lambda x: x[:2])
         sp_groups = groupby(stg_pairs, key=lambda x: x[0])

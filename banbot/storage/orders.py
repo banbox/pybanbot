@@ -254,6 +254,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         获取订单花费的金额（名义价值）
         如果未入场则返回0
         '''
+        if not self.enter or not self.enter.filled:
+            return 0
         return self.enter.filled * (self.enter.average or self.enter.price or self.init_price)
 
     @property
@@ -511,11 +513,11 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     @classmethod
     async def get_orders(cls, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
-                         close_after: int = None, sess: SqlSession = None)\
+                         close_after: int = None, close_before: int = None, sess: SqlSession = None)\
             -> List['InOutOrder']:
         if btime.run_mode in btime.LIVE_MODES:
             from banbot.storage.bot_task import BotTask
-            return await get_db_orders(strategy, pairs, status, close_after, sess=sess)
+            return await get_db_orders(strategy, pairs, status, close_after, close_before, sess=sess)
         else:
             if status == 'his':
                 candicates = cls._his_ods
@@ -529,6 +531,8 @@ class InOutOrder(BaseDbModel, InfoPart):
                 candicates = [od for od in candicates if od.strategy == strategy]
             if close_after:
                 candicates = [od for od in candicates if od.exit_at > close_after]
+            if close_before:
+                candicates = [od for od in candicates if od.exit_at < close_before]
             if pairs:
                 if isinstance(pairs, six.string_types):
                     candicates = [od for od in candicates if od.symbol == pairs]
@@ -554,12 +558,9 @@ class InOutOrder(BaseDbModel, InfoPart):
         return await cls.get_orders(status='his')
 
     @classmethod
-    async def get_overall_performance(cls, minutes=None, sess: SqlSession = None) -> List[Dict[str, Any]]:
+    async def get_pair_performance(cls, start_ms: int, stop_ms: int) -> List[Dict[str, Any]]:
         from itertools import groupby
-        close_after = None
-        if minutes:
-            close_after = btime.utcstamp() - minutes * 60000
-        his_ods = await cls.get_orders(status='his', close_after=close_after, sess=sess)
+        his_ods = await cls.get_orders(status='his', close_after=start_ms, close_before=stop_ms)
         his_ods = sorted(his_ods, key=lambda x: x.symbol)
         gps = groupby(his_ods, key=lambda x: x.symbol)
         result = []
@@ -626,7 +627,7 @@ class OrderJob:
 
 
 def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
-                      close_after: int = None, filters=None):
+                      close_after: int = None, close_before: int = None, filters=None):
     where_list = []
     if task_id:
         where_list.append(InOutOrder.task_id == task_id)
@@ -639,6 +640,8 @@ def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, 
         where_list.append(InOutOrder.strategy == strategy)
     if close_after:
         where_list.append(InOutOrder.exit_at > close_after)
+    if close_before:
+        where_list.append(InOutOrder.exit_at < close_before)
     if pairs:
         if isinstance(pairs, six.string_types):
             where_list.append(InOutOrder.symbol == pairs)
@@ -649,9 +652,9 @@ def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, 
     return where_list
 
 
-async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None,
-                        status: str = None, close_after: int = None, task_id: int = -1, filters=None,
-                        limit=0, offset=0, order_by=None, sess: SqlSession = None) -> List[InOutOrder]:
+async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
+                        close_after: int = None, close_before: int = None, task_id: int = -1,
+                        filters=None, limit=0, offset=0, order_by=None, sess: SqlSession = None) -> List[InOutOrder]:
     '''
     此方法仅用于订单管理器获取数据库订单，会自动关联Order到InOutOrder。
     :param task_id: 任务ID，不提供时默认取BotTask.cur_id
@@ -659,6 +662,7 @@ async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = Non
     :param pairs: 交易对，字符串或列表
     :param status: open/his
     :param close_after: 毫秒时间戳
+    :param close_before: 毫秒时间戳
     :param filters: 额外筛选条件
     :param limit:
     :param offset:
@@ -669,7 +673,7 @@ async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = Non
         task_id = BotTask.cur_id
     if not sess:
         sess = dba.session
-    where_list = get_order_filters(task_id, strategy, pairs, status, close_after, filters)
+    where_list = get_order_filters(task_id, strategy, pairs, status, close_after, close_before, filters)
     query = select(InOutOrder).where(*where_list)
     if order_by is not None:
         query = query.order_by(order_by)

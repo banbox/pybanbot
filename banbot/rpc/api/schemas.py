@@ -3,7 +3,7 @@
 # File  : schemas.py
 # Author: anyongjin
 # Date  : 2023/9/6
-from typing import Dict, List, Optional
+from typing import List, Optional, Any
 
 from pydantic import BaseModel
 
@@ -39,25 +39,6 @@ class Balances(BaseModel):
     total: float
 
 
-class PerformanceEntry(BaseModel):
-    pair: str
-    profit_sum: float
-    profit_pct: float
-    close_num: int
-
-
-class TagStat(BaseModel):
-    tag: str
-    wins: int
-    losses: int
-    draws: int
-
-
-class Stats(BaseModel):
-    exit_reasons: List[TagStat]
-    durations: Dict[str, Optional[float]]
-
-
 class SetPairsPayload(BaseModel):
     for_white: bool
     adds: Optional[List[str]] = None
@@ -88,3 +69,11 @@ class ClosePosPayload(BaseModel):
     side: str
     order_type: str
     price: float = None
+
+
+class EditJobPayload(BaseModel):
+    pair: str
+    tf: str
+    stgy: str
+    key: str
+    val: Any

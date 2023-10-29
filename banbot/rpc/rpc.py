@@ -19,7 +19,7 @@ from banbot.util import btime
 from banbot.main.addons import MarketPrice
 from banbot.compute import get_context
 from banbot.util.common import bufferHandler
-from banbot.config import AppConfig
+from banbot.config import AppConfig, UserConfig
 from banbot.rpc.api.schemas import *
 
 
@@ -102,9 +102,6 @@ class RPC:
             max_num=self.bot.order_mgr.max_open_orders,
             total_cost=sum(od.enter_cost for od in open_ods)
         )
-
-    async def pair_performance(self):
-        return await InOutOrder.get_overall_performance()
 
     async def dash_statistics(self):
         orders = await get_db_orders()
@@ -209,18 +206,35 @@ class RPC:
             'pairs': BotGlobal.pairs
         }
 
-    async def stats(self) -> Dict[str, Any]:
+    async def get_task_pairs(self, start_ms: int = None, stop_ms: int = None) -> List[str]:
+        """获取当前任务，有订单的所有币种。用于查看收益筛选"""
+        from banbot.storage import select, SqlSession
+        sess: SqlSession = dba.session
+        where_fts = [InOutOrder.task_id == BotTask.cur_id]
+        if start_ms:
+            where_fts.append(InOutOrder.enter_at >= start_ms)
+        if stop_ms:
+            where_fts.append(InOutOrder.enter_at <= stop_ms)
+        stmt = select(InOutOrder.symbol).where(*where_fts).group_by(InOutOrder.symbol)
+        return list(await sess.scalars(stmt))
+
+    async def tag_stats(self) -> Dict[str, Any]:
+        """获取各个入场出场标签的胜率，持仓时间等"""
         orders = await get_db_orders(status='his')
         # Duration
         dur: Dict[str, List[float]] = {'wins': [], 'draws': [], 'losses': []}
-        # Exit reason
         exit_reasons = {}
+        enter_reasons = {}
         for od in orders:
             exit_tag = od.exit_tag or 'empty'
+            enter_tag = od.enter_tag or 'empty'
             if exit_tag not in exit_reasons:
                 exit_reasons[exit_tag] = {'wins': 0, 'losses': 0, 'draws': 0}
+            if enter_tag not in enter_reasons:
+                enter_reasons[enter_tag] = {'wins': 0, 'losses': 0, 'draws': 0}
             od_sta = 'wins' if od.profit > 0 else ('losses' if od.profit < 0 else 'draws')
             exit_reasons[exit_tag][od_sta] += 1
+            enter_reasons[enter_tag][od_sta] += 1
 
             dur[od_sta].append((od.exit_at - od.enter_at) / 1000)
 
@@ -229,30 +243,36 @@ class RPC:
         losses_dur = sum(dur['losses']) / len(dur['losses']) if len(dur['losses']) > 0 else None
 
         durations = {'wins': wins_dur, 'draws': draws_dur, 'losses': losses_dur}
+        return {
+            'exit_reasons': self._to_tag_list(exit_reasons),
+            'enter_reasons': self._to_tag_list(enter_reasons),
+            'durations': durations
+        }
+
+    def _to_tag_list(self, tag_reasons: dict):
         tag_list = []
-        for tag, item in exit_reasons.items():
+        for tag, item in tag_reasons.items():
             item['tag'] = tag
             tag_list.append(item)
-        tag_list = sorted(tag_list, key=lambda x: x['tag'])
-        return {'exit_reasons': tag_list, 'durations': durations}
+        return sorted(tag_list, key=lambda x: x['tag'])
 
-    async def timeunit_profit(self, timescale: int, timeunit: str = 'days') -> List[Dict]:
+    async def timeunit_profit(self, group_by: str, timescale: int, start_ms: int, stop_ms: int,
+                              pairs: Optional[List[str]] = None) -> List[Dict]:
         init_date = datetime.now(timezone.utc).date()
-        if timeunit == 'weeks':
-            # weekly
+        if group_by == 'weeks':
             init_date = init_date - timedelta(days=init_date.weekday())  # Monday
-        if timeunit == 'months':
+        if group_by == 'months':
             init_date = init_date.replace(day=1)
 
         def time_offset(step: int):
-            if timeunit == 'months':
+            if group_by == 'months':
                 return relativedelta(months=step)
-            return timedelta(**{timeunit: step})
+            return timedelta(**{group_by: step})
 
         if not (isinstance(timescale, int) and timescale > 0):
             raise RPCException('timescale must be an integer greater than 0')
 
-        his_ods = await get_db_orders(status='his')
+        his_ods = await get_db_orders(status='his', close_after=start_ms, close_before=stop_ms, pairs=pairs)
 
         if not his_ods:
             return []
@@ -470,7 +490,7 @@ class RPC:
 
         res = {'method': self.bot.pair_mgr.name_list,
                'blacklist': self.bot.pair_mgr.blacklist,
-               'whitelist': self.bot.pair_mgr.whitelist,
+               'whitelist': self.bot.pair_mgr.symbols,
                }
         return res
 
@@ -478,8 +498,26 @@ class RPC:
         '''
         手动设置交易对。增加或减少。
         '''
+        # 保存修改到用户配置缓存文件
+        config = UserConfig.get()
+        save_key = 'pairs_white' if for_white else 'pairs_black'
+        save_pairs: list = config.get(save_key)
+        if save_pairs is None:
+            save_pairs = []
+            config[save_key] = save_pairs
+        saves = set(save_pairs)
+        if adds:
+            for pair in adds:
+                if pair not in saves:
+                    save_pairs.append(pair)
+        if deletes:
+            for pair in deletes:
+                if pair in saves:
+                    save_pairs.remove(pair)
+        UserConfig.save()
+        # 更新到交易对
         errors = {}
-        target = self.bot.pair_mgr.whitelist if for_white else self.bot.pair_mgr.blacklist
+        target = self.bot.pair_mgr.symbols if for_white else self.bot.pair_mgr.blacklist
         init_list = set(target)
         if adds:
             valid_keys = set(self.bot.exchange.get_cur_markets().keys())
@@ -499,7 +537,7 @@ class RPC:
                     target.remove(pair)
                 else:
                     errors[pair] = {
-                        'error_msg': f"Pair {pair} is not in the current blacklist."
+                        'error_msg': f"Pair {pair} is not in current list."
                     }
         if for_white:
             asyncio.run_coroutine_threadsafe(self.bot.add_del_pairs(init_list), self.bot.loop)

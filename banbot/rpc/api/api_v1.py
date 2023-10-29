@@ -10,7 +10,7 @@ from fastapi.exceptions import HTTPException
 
 from banbot import __version__
 from banbot.rpc import RPC
-from banbot.config import AppConfig
+from banbot.config import AppConfig, UserConfig
 from banbot.rpc.api.schemas import *
 from banbot.storage import BotGlobal
 
@@ -62,25 +62,12 @@ async def statistics(rpc: RPC = Depends(get_rpc)):
     return await rpc.dash_statistics()
 
 
-@router.get('/stats', response_model=Stats, tags=['info'])
-async def stats(rpc: RPC = Depends(get_rpc)):
-    '''
-    显示各个平仓信号的胜率。盈亏时持仓时间。
-    '''
-    return await rpc.stats()
-
-
 @router.get('/incomes', tags=['info'])
 async def incomes(intype: str, symbol: str = None, start_time: int = 0, limit: int = 0, rpc: RPC = Depends(get_rpc)):
     """
     获取账户损益资金流水
     """
     return await rpc.incomes(intype, symbol, start_time, limit)
-
-
-@router.get('/profit_by', tags=['info'])
-async def profit_by(unit: str = Query(...), limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
-    return await rpc.timeunit_profit(limit, unit)
 
 
 @router.get('/orders', tags=['info'])
@@ -113,9 +100,11 @@ async def force_entry(payload: ForceEnterPayload, rpc: RPC = Depends(get_rpc)):
 async def forceexit(payload: ForceExitPayload, rpc: RPC = Depends(get_rpc)):
     return await rpc.force_exit(payload.order_id)
 
+
 @router.post('/close_pos', tags=['trading'])
 async def close_pos(payload: ClosePosPayload, rpc: RPC = Depends(get_rpc)):
     return await rpc.close_pos(payload)
+
 
 @router.post('/calc_profits', tags=['info'])
 async def calc_profits(status: str = Body(None, embed=True), rpc: RPC = Depends(get_rpc)):
@@ -155,10 +144,12 @@ def reload_config(rpc: RPC = Depends(get_rpc)):
     return rpc.reload_config()
 
 
-@router.get('/pair_stgs', tags=['strategy'])
-def pair_stgs():
+@router.get('/pair_jobs', tags=['strategy'])
+def get_pair_jobs():
     from banbot.strategy.resolver import get_strategy
     jobs = BotGlobal.stg_symbol_tfs
+    jobs = sorted(jobs, key=lambda x: (x[1], x[2], x[0]))
+    # 读取所有策略和版本号
     stgy_set = {j[0] for j in jobs}
     stgy_dic = dict()
     for stgy in stgy_set:
@@ -166,16 +157,75 @@ def pair_stgs():
         if not stg_cls:
             continue
         stgy_dic[stgy] = stg_cls.version
-    jobs = [dict(stgy=j[0], pair=j[1], tf=j[2]) for j in jobs]
-    return dict(jobs=jobs, stgy=stgy_dic)
+    # 币对，策略，及其开关配置
+    stg_map = dict()
+    for key, stg_list in BotGlobal.pairtf_stgs.items():
+        pair, tf = key.split('_')
+        for stg in stg_list:
+            stg_map[(stg.name, pair, tf)] = stg
+
+    items = []
+    from banbot.strategy import BaseStrategy
+    for j in jobs:
+        stg: BaseStrategy = stg_map.get(j)
+        if not stg:
+            continue
+        item = dict(stgy=j[0], pair=j[1], tf=j[2])
+        item['open_long'] = stg.open_long
+        item['open_short'] = stg.open_short
+        item['close_long'] = stg.close_long
+        item['close_short'] = stg.close_short
+        item['exg_stoploss'] = stg.allow_exg_stoploss
+        item['exg_takeprofit'] = stg.allow_exg_takeprofit
+        items.append(item)
+    return dict(jobs=items, stgy=stgy_dic)
 
 
-@router.get('/performance', response_model=List[PerformanceEntry], tags=['info'])
-async def performance(rpc: RPC = Depends(get_rpc)):
+@router.post('/edit_job')
+def edit_pair_job(payload: EditJobPayload):
+    config = UserConfig.get()
+    pair_jobs: dict = config.get('pair_jobs')
+    if pair_jobs is None:
+        pair_jobs = dict()
+        config['pair_jobs'] = pair_jobs
+    cur_key = f'{payload.pair}_{payload.stgy}'
+    job_config: dict = pair_jobs.get(cur_key)
+    if job_config is None:
+        job_config = dict()
+        pair_jobs[cur_key] = job_config
+    job_config[payload.key] = payload.val
+    UserConfig.save()
+    insts = BotGlobal.pairtf_stgs.get(f'{payload.pair}_{payload.tf}')
+    for inst in insts:
+        if inst.name == payload.stgy:
+            setattr(inst, payload.key, payload.val)
+    return dict(code=200)
+
+
+@router.get('/task_pairs')
+async def task_pairs(start: Optional[int] = Query(None), stop: Optional[int] = Query(None),
+                     rpc: RPC = Depends(get_rpc)):
+    pairs = await rpc.get_task_pairs(start, stop)
+    return dict(pairs=pairs)
+
+
+@router.get('/performance', tags=['info'])
+async def performance(group_by: str = Query(...), pairs: Optional[List[str]] = Query(None),
+                      start: Optional[int] = Query(None), stop: Optional[int] = Query(None),
+                      limit: int = Query(...), rpc: RPC = Depends(get_rpc)):
     '''
-    按币种统计大致盈利状态。
+    统计盈利状态。按天，按周，按月，按币种。
     '''
-    return await rpc.pair_performance()
+    if group_by == 'symbols':
+        from banbot.storage import InOutOrder
+        items = await InOutOrder.get_pair_performance(start, stop)
+    else:
+        items = await rpc.timeunit_profit(group_by, limit, start, stop, pairs)
+    tag_res = await rpc.tag_stats()
+    return dict(
+        items=items,
+        **tag_res
+    )
 
 
 @router.get('/strategy/{strategy}', tags=['strategy'])
