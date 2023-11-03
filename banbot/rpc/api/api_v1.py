@@ -171,18 +171,17 @@ def get_pair_jobs():
         if not stg:
             continue
         item = dict(stgy=j[0], pair=j[1], tf=j[2])
-        item['open_long'] = stg.open_long
-        item['open_short'] = stg.open_short
-        item['close_long'] = stg.close_long
-        item['close_short'] = stg.close_short
-        item['exg_stoploss'] = stg.allow_exg_stoploss
-        item['exg_takeprofit'] = stg.allow_exg_takeprofit
+        args = []
+        for arg in stg.job_args_info:
+            args.append(dict(**arg, value=getattr(stg, arg['field'])))
+        item['args'] = args
         items.append(item)
     return dict(jobs=items, stgy=stgy_dic)
 
 
 @router.post('/edit_job')
 def edit_pair_job(payload: EditJobPayload):
+    import builtins
     config = UserConfig.get()
     pair_jobs: dict = config.get('pair_jobs')
     if pair_jobs is None:
@@ -193,12 +192,22 @@ def edit_pair_job(payload: EditJobPayload):
     if job_config is None:
         job_config = dict()
         pair_jobs[cur_key] = job_config
-    job_config[payload.key] = payload.val
+    for arg in payload.args:
+        arg_val = arg['value']
+        if arg_val is not None:
+            val_type = getattr(builtins, arg['val_type'])
+            try:
+                arg_val = val_type(arg_val)
+            except ValueError:
+                arg_val = val_type()
+            arg['value'] = arg_val
+        job_config[arg['field']] = arg['value']
     UserConfig.save()
     insts = BotGlobal.pairtf_stgs.get(f'{payload.pair}_{payload.tf}')
     for inst in insts:
         if inst.name == payload.stgy:
-            setattr(inst, payload.key, payload.val)
+            for arg in payload.args:
+                setattr(inst, arg['field'], arg['value'])
     return dict(code=200)
 
 

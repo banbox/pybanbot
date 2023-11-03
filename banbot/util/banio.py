@@ -11,6 +11,7 @@ from typing import Optional, Any, List, Tuple, Dict, Callable, ClassVar
 from banbot.util.common import logger
 from asyncio import Future
 from banbot.util import btime
+from banbot.storage import BotGlobal
 
 
 line_end = b'<\0>'
@@ -356,6 +357,9 @@ class ClientIO(BanConn):
     @contextlib.asynccontextmanager
     async def lock(cls, key: str, timeout: int = None):
         """请求一个分布式锁；此方法必须用with调用"""
+        if not BotGlobal.live_mode:
+            yield
+            return
         lock_val = await cls.get_lock(key, timeout)
         try:
             yield

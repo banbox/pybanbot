@@ -75,5 +75,4 @@ class EditJobPayload(BaseModel):
     pair: str
     tf: str
     stgy: str
-    key: str
-    val: Any
+    args: List[dict]

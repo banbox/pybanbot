@@ -10,6 +10,37 @@ from banbot.main.addons import MarketPrice  # noqa
 from banbot.config import UserConfig
 
 
+_stg_args_info = []
+
+_job_args_info = [
+    dict(field='open_long', val_type='bool', title='开多'),
+    dict(field='open_short', val_type='bool', title='开空'),
+    dict(field='close_long', val_type='bool', title='平多'),
+    dict(field='close_short', val_type='bool', title='平空'),
+    dict(field='exg_stoploss', val_type='bool', title='止损单'),
+    dict(field='exg_sl_price', val_type='float', title='止损价格'),
+    dict(field='exg_takeprofit', val_type='bool', title='止盈单'),
+    dict(field='exg_tp_price', val_type='float', title='止盈价格'),
+]
+
+
+def _restore_args(target, args_info: List[dict], cache: dict):
+    """从配置中恢复参数到指定对象"""
+    import builtins
+    for item in args_info:
+        name = item.get('field')
+        if not name or name not in cache:
+            continue
+        cache_val = cache[name]
+        if cache_val is None:
+            continue
+        type_name = item.get('val_type')
+        if type_name:
+            val_type = getattr(builtins, type_name)
+            cache_val = val_type(cache_val)
+        setattr(target, name, cache_val)
+
+
 class BaseStrategy:
     '''
     策略基类。每个交易对，每种时间帧，每个策略，对应一个策略实例。
@@ -23,9 +54,15 @@ class BaseStrategy:
     min_tfscore = 0.8
     nofee_tfscore = 0.6
     max_fee = 0.002
-    stop_loss = 0.05
     stake_amount = 0
     '每笔下单金额基数'
+
+    args_info = copy.copy(_stg_args_info)
+    '此策略通用可参数的描述信息，用于机器人面板中修改通用参数'
+
+    _restored = False
+    '指示此策略的通用参数，是否已从本地缓存的配置中恢复'
+
     version = 1
     __source__: str = ''
 
@@ -60,25 +97,39 @@ class BaseStrategy:
         '是否允许平多'
         self.close_short = True
         '是否允许平空'
-        self.allow_exg_stoploss = True
+        self.exg_stoploss = True
         '是否允许交易所止损'
-        self.allow_exg_takeprofit = True
+        self.exg_sl_price = None
+        '交易所止损单价格'
+        self.exg_takeprofit = True
         '是否允许交易所止盈'
+        self.exg_tp_price = None
+        '交易所止盈价格'
+        self.job_args_info: List[dict] = copy.copy(_job_args_info)
+        '此策略在当前币种下的可配置参数信息；用于机器人面板修改'
         self._restore_config()
 
     def _restore_config(self):
-        """从用户面板配置中恢复策略的状态"""
+        """从用户面板配置中恢复策略在当前job的状态"""
         config = UserConfig.get()
         pair_jobs: dict = config.get('pair_jobs') or dict()
         cur_key = f'{self.symbol.symbol}_{self.name}'
         stg_config: dict = pair_jobs.get(cur_key)
         if not stg_config:
             return
-        bool_keys = ['open_long', 'open_short', 'close_long', 'close_short', 'allow_exg_stoploss',
-                     'allow_exg_takeprofit']
-        for key in bool_keys:
-            if key in stg_config:
-                setattr(self, key, bool(stg_config[key]))
+        _restore_args(self, self.job_args_info, stg_config)
+        self._restore_args()
+
+    @classmethod
+    def _restore_args(cls):
+        """从用户面板缓存的配置中恢复策略的公共参数"""
+        if cls._restored:
+            return
+        config = UserConfig.get()
+        stg_config: dict = config.get('strategy')
+        if not stg_config:
+            return
+        _restore_args(cls, cls.args_info, stg_config)
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
@@ -141,13 +192,17 @@ class BaseStrategy:
             else:
                 od_args['cost_rate'] = cost_rate
                 od_args['legal_cost'] = self.custom_cost(od_args)
-        if stoploss:
-            if self.allow_exg_stoploss:
+        if self.exg_sl_price and self.exg_stoploss:
+            od_args['stoploss_price'] = self.exg_sl_price
+        elif stoploss:
+            if self.exg_stoploss:
                 od_args['stoploss_price'] = stoploss
             else:
                 logger.warning(f'[{self.name}] stoploss on exchange is disabled for {self.symbol}')
-        if takeprofit:
-            if self.allow_exg_takeprofit:
+        if self.exg_tp_price and self.exg_takeprofit:
+            od_args['takeprofit_price'] = self.exg_tp_price
+        elif takeprofit:
+            if self.exg_takeprofit:
                 od_args['takeprofit_price'] = takeprofit
             else:
                 logger.warning(f'[{self.name}] takeprofit on exchange is disabled for {self.symbol}')
@@ -212,18 +267,22 @@ class BaseStrategy:
             sigout = self.custom_exit(pair_arr, od)
             if not sigout:
                 # 检查是否需要修改条件单
-                new_sl_price = od.get_info('stoploss_price')
-                new_tp_price = od.get_info('takeprofit_price')
+                new_sl_price = self.exg_sl_price or od.get_info('stoploss_price')
+                new_tp_price = self.exg_tp_price or od.get_info('takeprofit_price')
                 if new_sl_price != sl_price:
-                    if self.allow_exg_stoploss:
+                    if self.exg_stoploss:
                         edit_ods.append((od, 'stoploss_'))
+                        od.set_info(stoploss_price=new_sl_price)
                     else:
                         skip_stoploss += 1
+                        od.set_info(stoploss_price=None)
                 if new_tp_price != tp_price:
-                    if self.allow_exg_takeprofit:
+                    if self.exg_takeprofit:
                         edit_ods.append((od, 'takeprofit_'))
+                        od.set_info(takeprofit_price=new_tp_price)
                     else:
                         skip_takeprofit += 1
+                        od.set_info(takeprofit_price=None)
         if skip_stoploss:
             logger.warning(f'[{self.name}] {self.symbol} stoploss on exchange is disabled, {skip_stoploss} orders')
         if skip_takeprofit:
