@@ -177,7 +177,7 @@ async def get_pair_jobs():
         od_num = len([od for od in open_ods if od.symbol == j[1] and od.strategy == stg.name])
         item = dict(stgy=j[0], pair=j[1], tf=j[2], price=price, od_num=od_num)
         args = []
-        for arg in stg.job_args_info:
+        for arg in stg.get_job_args_info():
             args.append(dict(**arg, value=getattr(stg, arg['field'])))
         item['args'] = args
         items.append(item)

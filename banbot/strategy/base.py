@@ -59,8 +59,11 @@ class BaseStrategy:
     stake_amount = 0
     '每笔下单金额基数'
 
-    args_info = copy.copy(_stg_args_info)
+    args_info: List[dict] = []
     '此策略通用可参数的描述信息，用于机器人面板中修改通用参数'
+
+    job_args_info: List[dict] = []
+    '此策略在当前币种下的可配置参数信息；用于机器人面板修改'
 
     _restored = False
     '指示此策略的通用参数，是否已从本地缓存的配置中恢复'
@@ -111,8 +114,6 @@ class BaseStrategy:
         '做多止盈价格'
         self.short_tp_price = None
         '做空止盈价格'
-        self.job_args_info: List[dict] = copy.copy(_job_args_info)
-        '此策略在当前币种下的可配置参数信息；用于机器人面板修改'
         self._restore_config()
 
     def _restore_config(self):
@@ -123,12 +124,20 @@ class BaseStrategy:
         stg_config: dict = pair_jobs.get(cur_key)
         if not stg_config:
             return
-        _restore_args(self, self.job_args_info, stg_config)
+        _restore_args(self, self.get_job_args_info(), stg_config)
         self._restore_args()
 
     def apply_args(self, job_args: dict):
         """更新job参数"""
-        _restore_args(self, self.job_args_info, job_args)
+        _restore_args(self, self.get_job_args_info(), job_args)
+
+    @classmethod
+    def get_job_args_info(cls):
+        return _job_args_info + cls.job_args_info
+
+    @classmethod
+    def get_args_info(cls):
+        return _stg_args_info + cls.args_info
 
     @classmethod
     def _restore_args(cls):
@@ -139,7 +148,7 @@ class BaseStrategy:
         stg_config: dict = config.get('strategy')
         if not stg_config:
             return
-        _restore_args(cls, cls.args_info, stg_config)
+        _restore_args(cls, cls.get_args_info(), stg_config)
 
     def _calc_state(self, key: str, *args, **kwargs):
         if key not in self.state:
