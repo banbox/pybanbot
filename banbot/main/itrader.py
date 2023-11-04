@@ -8,6 +8,10 @@ from sqlalchemy import exc
 from banbot.compute.tools import append_new_bar
 from banbot.main.od_manager import *
 from banbot.strategy.resolver import StrategyResolver
+from banbot.data.provider import *
+from banbot.storage import *
+from banbot.main.wallets import *
+from banbot.compute.ctx import *
 
 
 class Trader:

@@ -10,6 +10,11 @@ from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
 from banbot.util.misc import *
+from banbot.exchange import get_exchange
+from banbot.data.provider import LiveDataProvider
+from banbot.config import Config
+from banbot.main.wallets import CryptoWallet
+from banbot.util.common import logger
 
 
 class LiveTrader(Trader):
@@ -23,7 +28,7 @@ class LiveTrader(Trader):
         self.data_mgr = LiveDataProvider(config, self.on_data_feed)
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
-        self.order_mgr = LiveOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
+        self.order_mgr = LiveOrderMgr.init(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.loop = None
 
     def order_callback(self, od: InOutOrder, is_enter: bool):

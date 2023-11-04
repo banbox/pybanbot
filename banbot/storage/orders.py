@@ -453,7 +453,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         生成模式：提交请求到交易所。
         模拟模式：在下一个bar出现后完成退出
         '''
-        from banbot.main.od_manager import LiveOrderManager, LocalOrderManager
+        from banbot.main.od_manager import LiveOrderMgr, LocalOrderManager
         if not tag:
             tag = ExitTags.force_exit
         if status_msg:
@@ -463,13 +463,13 @@ class InOutOrder(BaseDbModel, InfoPart):
             if btime.prod_mode():
                 # 实盘模式，提交到交易所平仓
                 self.exit_tag = None
-                await LiveOrderManager.obj.exit_order(self, exit_dic)
+                await LiveOrderMgr.obj.exit_order(self, exit_dic)
             else:
                 # 模拟模式，从订单管理器平仓
                 await LocalOrderManager.obj.force_exit(self)
         else:
             if btime.prod_mode():
-                await LiveOrderManager.obj.exit_order(self, exit_dic)
+                await LiveOrderMgr.obj.exit_order(self, exit_dic)
             else:
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
