@@ -18,9 +18,11 @@ _job_args_info = [
     dict(field='close_long', val_type='bool', title='平多'),
     dict(field='close_short', val_type='bool', title='平空'),
     dict(field='exg_stoploss', val_type='bool', title='止损单'),
-    dict(field='exg_sl_price', val_type='float', title='止损价格'),
+    dict(field='long_sl_price', val_type='float', title='做多止损'),
+    dict(field='short_sl_price', val_type='float', title='做空止损'),
     dict(field='exg_takeprofit', val_type='bool', title='止盈单'),
-    dict(field='exg_tp_price', val_type='float', title='止盈价格'),
+    dict(field='long_tp_price', val_type='float', title='做多止盈'),
+    dict(field='short_tp_price', val_type='float', title='做空止盈'),
 ]
 
 
@@ -99,12 +101,16 @@ class BaseStrategy:
         '是否允许平空'
         self.exg_stoploss = True
         '是否允许交易所止损'
-        self.exg_sl_price = None
-        '交易所止损单价格'
+        self.long_sl_price = None
+        '做多止损价格'
+        self.short_sl_price = None
+        '做空止损价格'
         self.exg_takeprofit = True
         '是否允许交易所止盈'
-        self.exg_tp_price = None
-        '交易所止盈价格'
+        self.long_tp_price = None
+        '做多止盈价格'
+        self.short_tp_price = None
+        '做空止盈价格'
         self.job_args_info: List[dict] = copy.copy(_job_args_info)
         '此策略在当前币种下的可配置参数信息；用于机器人面板修改'
         self._restore_config()
@@ -119,6 +125,10 @@ class BaseStrategy:
             return
         _restore_args(self, self.job_args_info, stg_config)
         self._restore_args()
+
+    def apply_args(self, job_args: dict):
+        """更新job参数"""
+        _restore_args(self, self.job_args_info, job_args)
 
     @classmethod
     def _restore_args(cls):
@@ -192,15 +202,17 @@ class BaseStrategy:
             else:
                 od_args['cost_rate'] = cost_rate
                 od_args['legal_cost'] = self.custom_cost(od_args)
-        if self.exg_sl_price and self.exg_stoploss:
-            od_args['stoploss_price'] = self.exg_sl_price
+        fix_sl_price = self.short_sl_price if short else self.long_sl_price
+        if self.exg_stoploss and fix_sl_price:
+            od_args['stoploss_price'] = fix_sl_price
         elif stoploss:
             if self.exg_stoploss:
                 od_args['stoploss_price'] = stoploss
             else:
                 logger.warning(f'[{self.name}] stoploss on exchange is disabled for {self.symbol}')
-        if self.exg_tp_price and self.exg_takeprofit:
-            od_args['takeprofit_price'] = self.exg_tp_price
+        fix_tp_price = self.short_tp_price if short else self.long_tp_price
+        if self.exg_takeprofit and fix_tp_price:
+            od_args['takeprofit_price'] = fix_tp_price
         elif takeprofit:
             if self.exg_takeprofit:
                 od_args['takeprofit_price'] = takeprofit
@@ -267,8 +279,10 @@ class BaseStrategy:
             sigout = self.custom_exit(pair_arr, od)
             if not sigout:
                 # 检查是否需要修改条件单
-                new_sl_price = self.exg_sl_price or od.get_info('stoploss_price')
-                new_tp_price = self.exg_tp_price or od.get_info('takeprofit_price')
+                fix_sl_price = self.short_sl_price if od.short else self.long_sl_price
+                new_sl_price = fix_sl_price or od.get_info('stoploss_price')
+                fix_tp_price = self.short_tp_price if od.short else self.long_tp_price
+                new_tp_price = fix_tp_price or od.get_info('takeprofit_price')
                 if new_sl_price != sl_price:
                     if self.exg_stoploss:
                         edit_ods.append((od, 'stoploss_'))
@@ -287,6 +301,25 @@ class BaseStrategy:
             logger.warning(f'[{self.name}] {self.symbol} stoploss on exchange is disabled, {skip_stoploss} orders')
         if skip_takeprofit:
             logger.warning(f'[{self.name}] {self.symbol} takeprofit on exchange is disabled, {skip_takeprofit} orders')
+        return edit_ods
+
+    def get_trig_ods(self):
+        """根据当前job的止损价止盈价，检查是否有订单需要下止损止盈单"""
+        edit_ods = []
+        for od in self.orders:
+            new_sl_price = (self.short_sl_price if od.short else self.long_sl_price) if self.exg_stoploss else None
+            new_tp_price = (self.short_tp_price if od.short else self.long_tp_price) if self.exg_takeprofit else None
+            sl_price = od.get_info('stoploss_price')
+            tp_price = od.get_info('takeprofit_price')
+            if new_sl_price and new_sl_price != sl_price:
+                edit_ods.append((od, 'stoploss_'))
+                od.set_info(stoploss_price=new_sl_price)
+            else:
+                logger.info(f'new stoploss same, skip: {new_sl_price}')
+            if new_tp_price and new_tp_price != tp_price:
+                edit_ods.append((od, 'takeprofit_'))
+                od.set_info(takeprofit_price=new_tp_price)
+        logger.info(f'get_trig_ods test {len(self.orders)} orders')
         return edit_ods
 
     def on_bot_stop(self):

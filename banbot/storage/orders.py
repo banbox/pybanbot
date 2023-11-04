@@ -365,6 +365,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         '''
         enter_rate = enter_amt / self.enter.amount
         exit_rate = exit_amt / self.exit.amount if self.exit else 0
+        if not self.quote_cost:
+            self.quote_cost = 0
         part = InOutOrder(task_id=self.task_id, symbol=self.symbol, sid=self.sid, timeframe=self.timeframe,
                           short=self.short, status=self.status, enter_tag=self.enter_tag, init_price=self.init_price,
                           quote_cost=self.quote_cost * enter_rate, leverage=self.leverage, enter_at=self.enter_at,
@@ -472,17 +474,26 @@ class InOutOrder(BaseDbModel, InfoPart):
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
     def detach(self, sess: SqlSession):
-        detach_obj(sess, self)
+        detach_obj(sess, self, keep_map=True)
         if self.enter:
-            detach_obj(sess, self.enter)
+            detach_obj(sess, self.enter, keep_map=True)
         if self.exit:
-            detach_obj(sess, self.exit)
+            detach_obj(sess, self.exit, keep_map=True)
         return self
 
+    def update_by(self, other: 'InOutOrder'):
+        self.update_props(**other.dict(origin=True))
+        if other.enter:
+            self.enter.update_props(**other.enter.dict())
+        if other.exit:
+            self.exit.update_props(**other.exit.dict())
+
     def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None,
-             flat_sub: bool = False):
+             flat_sub: bool = False, origin: bool = False):
         from banbot.util.misc import add_dict_prefix
         result = super().dict(only, skips)
+        if origin:
+            return result
         in_price = self.enter.average or self.enter.price or self.init_price
         in_amount = self.enter.filled or self.enter.amount
         if in_amount:
@@ -621,7 +632,7 @@ class OrderJob:
     ACT_ENTER: ClassVar[str] = 'enter'
     ACT_EXIT: ClassVar[str] = 'exit'
     ACT_EDITTG: ClassVar[str] = 'edit_trigger'
-    od_id: int
+    od: InOutOrder
     action: str
     data: str = None
 

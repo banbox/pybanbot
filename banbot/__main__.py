@@ -10,6 +10,8 @@ import sys
 from banbot.cmds.arguments import *
 from banbot.util.common import logger, set_log_level
 
+# logging.basicConfig(level=logging.DEBUG)
+
 
 async def _run_main(run_func: Callable, nocompress: bool, args):
     from banbot.util.misc import run_async

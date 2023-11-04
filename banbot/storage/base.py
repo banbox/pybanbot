@@ -187,6 +187,8 @@ class DBSessionAsync(metaclass=DBSessionAsyncMeta):
                 f'dbsess fail: {sess} {sync_sess} {conn} {exc_type} {exc_value} inexc: {traceinfo} {stack} {e}')
         if not success:
             logger.debug('not commit: %s %s', reason, traceback.format_stack()[-2])
+        else:
+            logger.debug('committed: %s %s', sess, traceback.format_stack()[-2])
 
         key = id(sess)
         if key in self._callbacks:
@@ -282,7 +284,10 @@ class BaseDbModel(_BaseDbModel):
 
     def update_props(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, k, v)
+            try:
+                setattr(self, k, v)
+            except Exception:
+                continue
 
 
 def set_db_events(engine, Session):
@@ -390,9 +395,10 @@ def set_db_events(engine, Session):
             logger.exception(f'measure execute cost fail: {statement}')
 
 
-def detach_obj(sess: SqlSession, obj: BaseDbModel):
+def detach_obj(sess: SqlSession, obj: BaseDbModel, keep_map=False):
     sess.expunge(obj)
-    make_transient(obj)
+    if not keep_map:
+        make_transient(obj)
     return obj
 
 

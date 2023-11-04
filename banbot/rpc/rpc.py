@@ -352,6 +352,17 @@ class RPC:
             results.append(od_dict)
         return dict(data=results, total_num=total_num, offset=offset)
 
+    def apply_job_args(self, payload: EditJobPayload, job_config: dict):
+        insts = BotGlobal.pairtf_stgs.get(f'{payload.pair}_{payload.tf}')
+        edit_triggers = None
+        for inst in insts:
+            if inst.name == payload.stgy:
+                inst.apply_args(job_config)
+                edit_triggers = inst.get_trig_ods()
+                break
+        if edit_triggers:
+            self.bot.order_mgr.submit_triggers(edit_triggers)
+
     @run_in_loop
     async def get_exg_orders(self, symbol: str, start_time: int, limit: int):
         od_list = await self.bot.exchange.fetch_orders(symbol, start_time, limit)

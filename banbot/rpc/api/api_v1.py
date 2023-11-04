@@ -145,7 +145,7 @@ def reload_config(rpc: RPC = Depends(get_rpc)):
 
 
 @router.get('/pair_jobs', tags=['strategy'])
-def get_pair_jobs():
+async def get_pair_jobs():
     from banbot.strategy.resolver import get_strategy
     jobs = BotGlobal.stg_symbol_tfs
     jobs = sorted(jobs, key=lambda x: (x[1], x[2], x[0]))
@@ -166,11 +166,16 @@ def get_pair_jobs():
 
     items = []
     from banbot.strategy import BaseStrategy
+    from banbot.main.addons import MarketPrice
+    from banbot.storage import InOutOrder
+    open_ods: List[InOutOrder] = await InOutOrder.open_orders()
     for j in jobs:
         stg: BaseStrategy = stg_map.get(j)
         if not stg:
             continue
-        item = dict(stgy=j[0], pair=j[1], tf=j[2])
+        price = MarketPrice.get(j[1])
+        od_num = len([od for od in open_ods if od.symbol == j[1] and od.strategy == stg.name])
+        item = dict(stgy=j[0], pair=j[1], tf=j[2], price=price, od_num=od_num)
         args = []
         for arg in stg.job_args_info:
             args.append(dict(**arg, value=getattr(stg, arg['field'])))
@@ -180,7 +185,7 @@ def get_pair_jobs():
 
 
 @router.post('/edit_job')
-def edit_pair_job(payload: EditJobPayload):
+def edit_pair_job(payload: EditJobPayload, rpc: RPC = Depends(get_rpc)):
     import builtins
     config = UserConfig.get()
     pair_jobs: dict = config.get('pair_jobs')
@@ -203,11 +208,7 @@ def edit_pair_job(payload: EditJobPayload):
             arg['value'] = arg_val
         job_config[arg['field']] = arg['value']
     UserConfig.save()
-    insts = BotGlobal.pairtf_stgs.get(f'{payload.pair}_{payload.tf}')
-    for inst in insts:
-        if inst.name == payload.stgy:
-            for arg in payload.args:
-                setattr(inst, arg['field'], arg['value'])
+    rpc.apply_job_args(payload, job_config)
     return dict(code=200)
 
 

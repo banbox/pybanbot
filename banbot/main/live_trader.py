@@ -98,15 +98,17 @@ class LiveTrader(Trader):
     async def _init_strategies(self):
         open_ods = await InOutOrder.open_orders()
         for stg_name, pair, tf in BotGlobal.stg_symbol_tfs:
-            cur_ods = [od for od in open_ods if od.symbol == pair and od.timeframe == tf]
-            if not cur_ods:
-                continue
             stg_list = BotGlobal.pairtf_stgs[f'{pair}_{tf}']
             stg = next((s for s in stg_list if s.name == stg_name), None)
             if not stg:
                 logger.error(f'stg not found: {stg_name}')
                 continue
+            cur_ods = [od for od in open_ods if od.symbol == pair and od.strategy == stg_name]
+            if not cur_ods:
+                continue
             stg.enter_num = len(cur_ods)
+            for od in cur_ods:
+                od.timeframe = tf
 
     async def run(self):
         self.start_heartbeat_check(3)

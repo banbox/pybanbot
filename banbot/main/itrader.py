@@ -111,8 +111,20 @@ class Trader:
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
         if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
-            await self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
+            enter_ods, exit_ods = await self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
+            self._update_stgs(strategy_list, enter_ods, exit_ods)
         return enter_list, exit_list
+
+    def _update_stgs(self, strategy_list: List, enter_ods: List[InOutOrder], exit_ods: List[InOutOrder]):
+        """更新策略的orders"""
+        enter_ods.extend(exit_ods)
+        ods = [od for od in enter_ods if od.status < InOutStatus.FullExit]
+        for stg in strategy_list:
+            new_ods = [od for od in ods if od.strategy == stg.name]
+            old_ods = set(stg.orders)
+            for od in new_ods:
+                if od not in old_ods:
+                    stg.orders.append(od)
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')

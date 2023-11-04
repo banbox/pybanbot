@@ -19,12 +19,11 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
         self,
         app: ASGIApp,
         db_url: Optional[str] = None,
-        iso_level: Optional[str] = None,
         session_args: Optional[dict] = None,
-        commit_on_exit: bool = False,
+        commit_on_exit: bool = True,
     ):
         super().__init__(app)
-        db_base.init_db(iso_level, db_url=db_url)
+        db_base.init_db(db_url=db_url)
         self.session_args = session_args
         self.commit_on_exit = commit_on_exit
 

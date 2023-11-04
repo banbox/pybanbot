@@ -134,12 +134,17 @@ class OrderManager(metaclass=SingletonArg):
             await sess.flush()
             enter_ods = [od.detach(sess) for od in enter_ods if od]
             exit_ods = [od.detach(sess) for od in exit_ods if od]
-        for od, prefix in edit_triggers:
-            if od in exit_ods or od.enter.status < OrderStatus.PartOk:
+        edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
+        self.submit_triggers(edit_triggers)
+        return enter_ods, exit_ods
+
+    def submit_triggers(self, triggers: List[Tuple[InOutOrder, str]]):
+        """提交止损止盈单到交易所（这里加入队列）"""
+        for od, prefix in triggers:
+            if od.enter.status < OrderStatus.PartOk:
                 # 订单未成交时，不应该挂止损
                 continue
             self._put_order(od, OrderJob.ACT_EDITTG, prefix)
-        return enter_ods, exit_ods
 
     async def enter_order(self, ctx: Context, strategy: str, sigin: dict, do_check=True) -> Optional[InOutOrder]:
         '''
@@ -962,11 +967,19 @@ class LiveOrderManager(OrderManager):
         params['positionSide'] = 'SHORT' if od.short else 'LONG'
         trig_price = od.get_info(f'{prefix}price')
         if trig_price:
-            params.update(closePosition=True, triggerPrice=trig_price)  # 止损单
+            params.update(closePosition=True)
+            if prefix == 'takeprofit_':
+                params.update(takeProfitPrice=trig_price)
+            elif prefix == 'stoploss_':
+                params.update(stopLossPrice=trig_price)
+            else:
+                raise ValueError(f'invalid prefix: {prefix}')
         side = 'buy' if od.short else 'sell'
         amount = od.enter.amount
         order = None
         try:
+            logger.debug('create trigger %s %s %s %s %s %s %s',
+                         prefix, od.symbol, self.od_type, side, amount, trig_price, params)
             order = await self.exchange.create_order(od.symbol, self.od_type, side, amount, trig_price, params)
         except ccxt.OrderImmediatelyFillable:
             logger.error(f'[{od.id}] stop order, {side} {od.symbol}, price: {trig_price:.4f} invalid, skip')
@@ -987,6 +1000,7 @@ class LiveOrderManager(OrderManager):
                 raise e
         if order:
             od.set_info(**{f'{prefix}oid': order['id']})
+            logger.info('save trigger oid: %s %s %s %s', prefix, order, od.info, trigger_oid)
         if trigger_oid and (not order or order['status'] == 'open'):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
@@ -1084,7 +1098,7 @@ class LiveOrderManager(OrderManager):
 
         def do_put(success: bool):
             if success:
-                self.order_q.put_nowait(OrderJob(od.id, action, data))
+                self.order_q.put_nowait(OrderJob(od, action, data))
 
         dba.add_callback(dba.session, do_put)
 
@@ -1357,12 +1371,14 @@ class LiveOrderManager(OrderManager):
                     od.quote_cost = self.wallets.get_amount_by_legal(exs.quote_code, legal_cost)
                 else:
                     raise ValueError(f'quote_cost is required to calc enter_amount')
+            amount, real_price = None, None
             try:
                 real_price = MarketPrice.get(od.symbol)
+                amount = od.quote_cost / real_price
                 # 这里应使用市价计算数量，因传入价格可能和市价相差很大
-                od.enter.amount = self.exchange.pres_amount(od.symbol, od.quote_cost / real_price)
-            except Exception:
-                logger.error(f'pres_amount for order fail: {od.dict()}')
+                od.enter.amount = self.exchange.pres_amount(od.symbol, amount)
+            except Exception as e:
+                logger.error(f'pres_amount for order fail: {e} {od.dict()}, price: {real_price}, amt: {amount}')
 
         async def force_exit_od():
             od.local_exit(ExitTags.force_exit, status_msg='InsufficientFunds')
@@ -1423,11 +1439,12 @@ class LiveOrderManager(OrderManager):
 
     async def exec_od_job(self, job: OrderJob):
         try:
-            od: Optional[InOutOrder] = None
-            async with BanLock(f'iod_{job.od_id}', 5, force_on_fail=True):
+            old_od = job.od
+            async with BanLock(f'iod_{old_od.id}', 5, force_on_fail=True):
                 async with dba():
                     try:
-                        od = await InOutOrder.get(job.od_id)
+                        od = await InOutOrder.get(old_od.id)
+                        od.update_by(old_od)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
                         elif job.action == OrderJob.ACT_EXIT:
@@ -1439,7 +1456,6 @@ class LiveOrderManager(OrderManager):
                     except Exception as e:
                         if od and job.action in {OrderJob.ACT_ENTER, OrderJob.ACT_EXIT}:
                             err_msg = str(e)
-                            od = await InOutOrder.get(job.od_id)
                             # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                             od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
                             await od.save()
