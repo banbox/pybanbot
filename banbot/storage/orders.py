@@ -333,7 +333,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         if not profit_val:
             return
         self.profit = profit_val
-        ent_quote_value = self.enter.price * self.enter.filled
+        ent_price = self.enter.average or self.enter.price or self.init_price
+        ent_quote_value = ent_price * self.enter.filled
         if self.leverage:
             ent_quote_value /= self.leverage
         self.profit_rate = self.profit / ent_quote_value
