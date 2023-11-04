@@ -43,7 +43,7 @@ async def dump_orders(task_id: int, out_dir: str):
             enter_tag=iod.enter_tag,
         )
         enter_cost = 0
-        in_fee, out_fee, profit_val = iod.fee_profit()
+        profit_val = iod.calc_profit()
         if iod.enter and iod.enter.price and iod.enter.amount:
             enter_cost = iod.enter.price * iod.enter.amount
             if iod.leverage and iod.leverage > 1:
@@ -52,7 +52,7 @@ async def dump_orders(task_id: int, out_dir: str):
                 enter_price=round(iod.enter.price, 6),
                 enter_amount=iod.enter.amount,
                 enter_cost=enter_cost,
-                enter_fee=round(in_fee, 5)
+                enter_fee=round(iod.enter.fee, 5)
             ))
         item.update(dict(
             exit_at=btime.to_datestr(iod.exit_at),
@@ -63,7 +63,7 @@ async def dump_orders(task_id: int, out_dir: str):
                 exit_price=round(iod.exit.price, 6),
                 exit_amount=iod.exit.amount,
                 exit_got=enter_cost + iod.profit,
-                exit_fee=round(out_fee, 5)
+                exit_fee=round(iod.exit.fee, 5)
             ))
         item.update(dict(profit_rate=iod.profit_rate, profit=profit_val))
         result.append(item)

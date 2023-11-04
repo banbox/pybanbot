@@ -311,38 +311,17 @@ class InOutOrder(BaseDbModel, InfoPart):
             return self.enter.filled
         return self.enter.filled * (1 - self.enter.fee)
 
-    def fee_profit(self, price: float = None):
-        '''
-        返回入场手续费、出场手续费、净利润
-        '''
+    def calc_profit(self, price: float = None):
+        """返回利润（未扣除手续费）"""
         if not self.status or not self.enter.average or not self.enter.filled:
-            return 0, 0, 0
+            return 0
         if price is None:
             price = self.exit.price if self.exit and self.exit.price else self.enter.average
-        ent_fee, ext_fee, profit_val = 0, 0, 0
-        ent_fee_rate = self.enter.fee
         ent_quote_value = self.enter.average * self.enter.filled
-        if BotGlobal.market_type == 'future':
-            # 期货市场，手续费以定价币计算
-            get_amount = self.enter.filled
-            ent_fee = ent_quote_value * ent_fee_rate
-            ext_val = get_amount * price
-            if self.status == InOutStatus.FullExit and self.exit:
-                ext_fee = ext_val * self.exit.fee
-            clean_profit = ext_val - ent_quote_value
-            if self.short:
-                clean_profit = 0 - clean_profit
-            profit_val = clean_profit - ent_fee - ext_fee
-        else:
-            get_amount = self.enter.filled * (1 - ent_fee_rate)  # 入场后的数量
-            ent_fee = (self.enter.filled - get_amount) * self.enter.average
-            if self.status == InOutStatus.FullExit and self.exit:
-                # 已完全退出
-                fee_amt = get_amount * self.exit.fee
-                ext_fee = fee_amt * price
-                get_amount -= fee_amt  # 出场后的数量
-            profit_val = get_amount * price - ent_quote_value
-        return ent_fee, ext_fee, profit_val
+        profit_val = self.enter.filled * price - ent_quote_value
+        if self.short:
+            profit_val = 0 - profit_val
+        return profit_val
 
     def update_profits(self, price: float):
         '''
@@ -350,7 +329,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         :param price:
         :return:
         '''
-        ent_fee, ext_fee, profit_val = self.fee_profit(price)
+        profit_val = self.calc_profit(price)
         if not profit_val:
             return
         self.profit = profit_val

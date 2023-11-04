@@ -239,12 +239,10 @@ class ServerIO:
     def _wrap_handlers(self, conn: BanConn):
         async def _on_get_val(key: str):
             """处理远程端请求数据，读取数据并返回给远程端"""
-            logger.info(f'_on_get_val: {key}')
             val = self.get_val(key)
             await conn.write_msg('_on_get_val_res', (key, val))
 
         def _on_set_val(data):
-            logger.info(f'_on_set_val: {data}')
             key, val, expire_secs = data
             self.set_val(key, val, expire_secs)
 

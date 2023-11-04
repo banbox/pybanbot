@@ -447,7 +447,7 @@ class LiveOrderMgr(OrderManager):
                 raise e
         if order:
             od.set_info(**{f'{prefix}oid': order['id']})
-            logger.info('save trigger oid: %s %s %s %s', prefix, order, od.info, trigger_oid)
+            logger.debug('save trigger oid: %s %s %s %s', prefix, order, od.info, trigger_oid)
         if trigger_oid and (not order or order['status'] == 'open'):
             try:
                 await self.exchange.cancel_order(trigger_oid, od.symbol)
