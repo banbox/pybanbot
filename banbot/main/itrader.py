@@ -33,7 +33,7 @@ class Trader:
             -> Dict[str, Dict[str, int]]:
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
         if not run_jobs:
-            raise ValueError('no run jobs found')
+            raise ValueError(f'no run jobs found: {pairlist} {pair_tfscores}')
         pair_tfs = dict()
         for pair, timeframe, warm_num, stg_set in run_jobs:
             if pair not in pair_tfs:

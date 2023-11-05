@@ -61,3 +61,21 @@ class BotGlobal(metaclass=_BotStateMeta):
 
     bot_loop = None
     '异步循环，用于rpc中调用exchange的方法'
+
+    @classmethod
+    def get_jobs(cls, pairs: Iterable[str]) -> List[Tuple[str, str, str]]:
+        pair_set = set(pairs)
+        return [j for j in cls.stg_symbol_tfs if j[1] in pair_set]
+
+    @classmethod
+    def remove_jobs(cls, jobs: List[Tuple[str, str, str]]):
+        from banbot.compute.ctx import del_context
+        for j in jobs:
+            if j in cls.stg_symbol_tfs:
+                cls.stg_symbol_tfs.remove(j)
+                del_context(f'{cls.exg_name}_{cls.market_type}_{j[1]}_{j[2]}')
+            pairtf = f'{j[1]}_{j[2]}'
+            if pairtf in cls.pairtf_stgs:
+                stgs = cls.pairtf_stgs[pairtf]
+                cls.pairtf_stgs[pairtf] = [stg for stg in stgs if stg.name != j[0]]
+        cls.pairs = {j[1] for j in cls.stg_symbol_tfs}

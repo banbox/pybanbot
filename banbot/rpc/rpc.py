@@ -19,11 +19,15 @@ from banbot.util import btime
 from banbot.main.addons import MarketPrice
 from banbot.compute import get_context
 from banbot.util.common import bufferHandler
+from banbot.util.support import BanEvent
 from banbot.config import AppConfig, UserConfig
 from banbot.rpc.api.schemas import *
 
 
 def run_in_loop(func):
+    """使用机器人的event loop运行函数，用于解决访问交易所api报错问题。
+    注意不能在函数内访问数据库，否则会报Task attached to a different loop（请使用BanEvent.emit/on）
+    """
     async def wrapper(*args, **kwargs):
         coort = func(*args, **kwargs)
         fut = asyncio.run_coroutine_threadsafe(coort, BotGlobal.bot_loop)
@@ -517,15 +521,6 @@ class RPC:
             save_pairs = []
             config[save_key] = save_pairs
         saves = set(save_pairs)
-        if adds:
-            for pair in adds:
-                if pair not in saves:
-                    save_pairs.append(pair)
-        if deletes:
-            for pair in deletes:
-                if pair in saves:
-                    save_pairs.remove(pair)
-        UserConfig.save()
         # 更新到交易对
         errors = {}
         target = self.bot.pair_mgr.symbols if for_white else self.bot.pair_mgr.blacklist
@@ -537,6 +532,8 @@ class RPC:
                 if pair not in valid_keys:
                     errors[pair] = f'Pair {pair} is not a valid symbol.'
                     continue
+                if pair not in saves:
+                    save_pairs.append(pair)
                 if pair not in old_list:
                     target.append(pair)
                 else:
@@ -544,14 +541,21 @@ class RPC:
         if deletes:
             old_list = set(target)
             for pair in deletes:
+                if pair in saves:
+                    save_pairs.remove(pair)
                 if pair in old_list:
                     target.remove(pair)
                 else:
                     errors[pair] = {
                         'error_msg': f"Pair {pair} is not in current list."
                     }
+        UserConfig.save()
         if for_white:
-            asyncio.run_coroutine_threadsafe(self.bot.add_del_pairs(init_list), self.bot.loop)
+            fut = BanEvent.get_future('set_pairs_res')
+            BanEvent.emit('set_pairs', init_list)
+            save_errors = await BanEvent.wait_future('set_pairs_res', fut, timeout=30)
+            if save_errors:
+                errors.update(**save_errors)
         resp = self.pairlist()
         resp['errors'] = errors
         return resp

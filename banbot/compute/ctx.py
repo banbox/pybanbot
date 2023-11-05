@@ -68,6 +68,12 @@ def get_context(pair_tf: str) -> Context:
     return _symbol_ctx[pair_tf]
 
 
+def del_context(ctx_key: str):
+    "删除上下文，针对指定任务"
+    if ctx_key in _symbol_ctx:
+        del _symbol_ctx[ctx_key]
+
+
 def set_context(pair_tf: str):
     '''
     设置交易对和时间单元上下文。

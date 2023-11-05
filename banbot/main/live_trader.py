@@ -15,6 +15,7 @@ from banbot.data.provider import LiveDataProvider
 from banbot.config import Config
 from banbot.main.wallets import CryptoWallet
 from banbot.util.common import logger
+from banbot.util.support import BanEvent
 
 
 class LiveTrader(Trader):
@@ -136,6 +137,10 @@ class LiveTrader(Trader):
     async def _start_tasks(self):
         # 定期刷新交易对
         self._run_tasks.append(asyncio.create_task(self.loop_refresh_pairs()))
+        # 执行事件
+        self._run_tasks.append(asyncio.create_task(BanEvent.run_forever()))
+        # 监听交易对变化
+        BanEvent.on('set_pairs', self.add_del_pairs, with_db=True)
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
@@ -174,15 +179,20 @@ class LiveTrader(Trader):
         del_symbols = list(old_symbols.difference(now_symbols))
         add_symbols = list(now_symbols.difference(old_symbols))
         # 检查删除的交易对是否有订单，有则添加回去
+        errors = dict()
         if del_symbols:
             open_ods = await InOutOrder.open_orders(pairs=del_symbols)
             for od in open_ods:
                 if od.symbol in del_symbols:
+                    errors[od.symbol] = 'has open order, remove fail'
                     del_symbols.remove(od.symbol)
                     self.pair_mgr.symbols.append(od.symbol)
             if del_symbols:
                 logger.info(f"remove symbols: {del_symbols}")
                 await self.data_mgr.unsub_pairs(del_symbols)
+                jobs = BotGlobal.get_jobs(del_symbols)
+                BotGlobal.remove_jobs(jobs)
+
         # 处理新增的交易对
         if add_symbols:
             calc_keys = [s for s in add_symbols if s not in self.pair_mgr.pair_tfscores]
@@ -194,6 +204,8 @@ class LiveTrader(Trader):
             logger.info(f"listen new symbols: {add_symbols}")
             pair_tfs = self._load_strategies(add_symbols, self.pair_mgr.pair_tfscores)
             await self.data_mgr.sub_warm_pairs(pair_tfs)
+        BanEvent.set('set_pairs_res', errors)
+        return errors
 
     async def loop_refresh_pairs(self):
         reset_ctx()

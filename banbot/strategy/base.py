@@ -328,7 +328,7 @@ class BaseStrategy:
             if new_tp_price and new_tp_price != tp_price:
                 edit_ods.append((od, 'takeprofit_'))
                 od.set_info(takeprofit_price=new_tp_price)
-        logger.info(f'get_trig_ods test {len(self.orders)} orders')
+        logger.debug('get_trig_ods test %d orders', len(self.orders))
         return edit_ods
 
     def on_bot_stop(self):
