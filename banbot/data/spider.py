@@ -211,7 +211,7 @@ class WebsocketWatcher:
     async def init(self):
         from banbot.storage import dba
         async with dba():
-            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, self.pair)
+            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [self.pair])
 
     async def run(self):
         await self.init()
