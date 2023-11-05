@@ -129,33 +129,39 @@ class KlineLiveConsumer(ClientIO):
             logger.info(f'spider connected at {self.remote}')
 
     async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
-        pairs = [job.symbol for job in jobs]
-        tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
-        for job in jobs:
-            if job.symbol in self.jobs:
-                continue
-            tfsecs = tf_to_secs(job.timeframe)
-            if tfsecs < 60:
-                raise ValueError(f'spider not support {job.timeframe} currently')
-            self.jobs[job.symbol] = PairTFCache(job.timeframe, tfsecs, job.since or 0)
-        await self.write_msg('subscribe', tags)
-        args = (exg_name, market_type, pairs)
-        await self.write_msg('watch_pairs', args)
-        self._inits.extend([
-            ('subscribe', tags),
-            ('watch_pairs', args)
-        ])
+        step_size = 20
+        for i in range(0, len(jobs), step_size):
+            batch_jobs = jobs[i: i + step_size]
+            pairs = [job.symbol for job in batch_jobs]
+            tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
+            for job in batch_jobs:
+                if job.symbol in self.jobs:
+                    continue
+                tfsecs = tf_to_secs(job.timeframe)
+                if tfsecs < 60:
+                    raise ValueError(f'spider not support {job.timeframe} currently')
+                self.jobs[job.symbol] = PairTFCache(job.timeframe, tfsecs, job.since or 0)
+            await self.write_msg('subscribe', tags)
+            args = (exg_name, market_type, pairs)
+            await self.write_msg('watch_pairs', args)
+            self._inits.extend([
+                ('subscribe', tags),
+                ('watch_pairs', args)
+            ])
 
     async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str]):
-        tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
-        for p in pairs:
-            if p in self.jobs:
-                del self.jobs[p]
-        await self.write_msg('unsubscribe', tags)
-        # 其他端可能还需要此数据，这里不能直接取消。
-        # TODO: spider端应保留引用计数，没有客户端需要的才可删除
-        # args = (exg_name, market_type, pairs)
-        # await self.write_msg('unwatch_pairs', args)
+        step_size = 20
+        for i in range(0, len(pairs), step_size):
+            batch_pairs = pairs[i:i + step_size]
+            tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in batch_pairs]
+            for p in batch_pairs:
+                if p in self.jobs:
+                    del self.jobs[p]
+            await self.write_msg('unsubscribe', tags)
+            # 其他端可能还需要此数据，这里不能直接取消。
+            # TODO: spider端应保留引用计数，没有客户端需要的才可删除
+            # args = (exg_name, market_type, pairs)
+            # await self.write_msg('unwatch_pairs', args)
 
     async def on_spider_bar(self, msg_key: str, msg_data):
         logger.debug('receive ohlcv: %s %s', msg_key, msg_data)
