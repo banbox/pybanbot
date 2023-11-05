@@ -153,6 +153,7 @@ class ServerIO:
     Socket服务器端，监听端口，接受客户端连接，处理消息并发送响应。
     '''
     obj: ClassVar['ServerIO'] = None
+    max_conn_num = 1000
 
     def __init__(self, addr: str, name: str):
         host, port = addr.split(':')
@@ -166,7 +167,8 @@ class ServerIO:
         ServerIO.obj = self
 
     async def run_forever(self):
-        self.server = await asyncio.start_server(self._handle_conn, self.host, self.port)
+        self.server = await asyncio.start_server(self._handle_conn, self.host, self.port,
+                                                 backlog=self.max_conn_num)
         logger.info(f'{self.name} serving on {self.host}:{self.port}')
 
         async with self.server:
