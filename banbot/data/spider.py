@@ -390,7 +390,6 @@ class LiveMiner:
     async def _try_update(self, job: MinerJob):
         from banbot.util.common import MeasureTime
         import ccxt
-        from banbot.storage import dba
         measure = MeasureTime()
         do_print = False
         try:
