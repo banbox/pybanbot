@@ -295,18 +295,19 @@ class WalletsLocal:
         exs = ExSymbol.get_by_id(od.sid)
         sub_od = od.enter
         quote_amount = enter_price * sub_od.amount
+        cur_fee = sub_od.fee
         if exs.market == 'future':
             # 期货合约，只锁定定价币，不涉及base币的增加
             quote_amount /= od.leverage
-            got_amt = quote_amount - sub_od.fee
+            got_amt = quote_amount - cur_fee
             self.confirm_pending(od.key, exs.quote_code, quote_amount, exs.quote_code, got_amt, True)
         elif od.short:
             # 现货卖，手续费扣U
-            got_amt = quote_amount - sub_od.fee
+            got_amt = quote_amount - cur_fee
             self.confirm_pending(od.key, exs.base_code, sub_od.amount, exs.quote_code, got_amt, True)
         else:
             # 现货买，手续费扣币
-            base_amt = sub_od.amount - sub_od.fee
+            base_amt = sub_od.amount - cur_fee
             self.confirm_pending(od.key, exs.quote_code, quote_amount, exs.base_code, base_amt)
 
     def exit_od(self, od: InOutOrder, base_amount: float, after_ts=0):
@@ -335,9 +336,10 @@ class WalletsLocal:
             return
         exs = ExSymbol.get_by_id(od.sid)
         sub_od = od.exit
+        cur_fee = sub_od.fee
         if exs.market == 'future':
             # 期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
-            self.cancel(od.key, exs.quote_code, add_amount=od.profit - sub_od.fee, from_pending=False)
+            self.cancel(od.key, exs.quote_code, add_amount=od.profit - cur_fee, from_pending=False)
         elif od.short:
             # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
             org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
@@ -347,11 +349,11 @@ class WalletsLocal:
             if exit_price < od.enter.price:
                 # 空单，出场价低于入场价，有利润，将冻结的利润置为available
                 self.cancel(od.key, exs.quote_code, from_pending=False)
-            quote_amount = exit_price * org_amount + sub_od.fee
+            quote_amount = exit_price * org_amount + cur_fee
             self.confirm_pending(od.key, exs.quote_code, quote_amount, exs.base_code, org_amount)
         else:
             # 多单，从base的avaiable卖，兑换为quote的available
-            quote_amount = exit_price * sub_od.amount - sub_od.fee
+            quote_amount = exit_price * sub_od.amount - cur_fee
             self.confirm_pending(od.key, exs.base_code, sub_od.amount, exs.quote_code, quote_amount)
 
     def cut_part(self, src_key: str, tgt_key: str, symbol: str, rate: float):

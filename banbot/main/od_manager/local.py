@@ -51,12 +51,6 @@ class LocalOrderManager(OrderManager):
         await self._fill_pending_exit(od, price)
 
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
-        enter_price = self.exchange.pres_price(od.symbol, price)
-        sub_od = od.enter
-        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, enter_price)
-        if fees['rate']:
-            sub_od.fee = fees['cost']
-            sub_od.fee_type = fees['currency']
         try:
             self.wallets.enter_od(od, self.last_ts)
         except LackOfCash as e:
@@ -64,6 +58,8 @@ class LocalOrderManager(OrderManager):
             od.local_exit(ExitTags.force_exit, status_msg=str(e))
             await od.save()
             return
+        enter_price = self.exchange.pres_price(od.symbol, price)
+        sub_od = od.enter
         if not sub_od.amount:
             if od.short and self.market_type == 'spot' and od.leverage == 1:
                 # 现货空单，必须给定数量
@@ -79,6 +75,10 @@ class LocalOrderManager(OrderManager):
                 self.wallets.cancel(od.key, exs.quote_code)
                 await od.save()
                 return
+        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, enter_price)
+        if fees['rate']:
+            sub_od.fee = fees['cost']
+            sub_od.fee_type = fees['currency']
         if not sub_od.price:
             sub_od.price = enter_price
         ctx = self.get_context(od)
@@ -96,7 +96,7 @@ class LocalOrderManager(OrderManager):
     async def _fill_pending_exit(self, od: InOutOrder, exit_price: float):
         self.wallets.exit_od(od, od.exit.amount, self.last_ts)
         sub_od = od.exit
-        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, sub_od.price)
+        fees = self.exchange.calc_fee(sub_od.symbol, sub_od.order_type, sub_od.side, sub_od.amount, exit_price)
         if fees['rate']:
             sub_od.fee = fees['cost']
             sub_od.fee_type = fees['currency']

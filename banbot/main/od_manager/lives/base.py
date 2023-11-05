@@ -355,8 +355,8 @@ class LiveOrderMgr(OrderManager):
             filled_price = safe_value_fallback(data, 'average', 'price', sub_od.price)
             sub_od.update_props(average=filled_price, filled=filled, status=OrderStatus.PartOk)
             od.status = InOutStatus.PartEnter if is_enter else InOutStatus.PartExit
-            if fee and fee.get('rate'):
-                sub_od.fee = fee.get('rate')
+            if fee and fee.get('cost'):
+                sub_od.fee = fee.get('cost')
                 sub_od.fee_type = fee.get('currency')
             # 下单后立刻有成交的，认为是taker方（ccxt返回的信息中未明确）
             fee_key = f'{od.symbol}_taker'

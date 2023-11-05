@@ -94,7 +94,7 @@ class Order(BaseDbModel):
     filled = Column(sa.Float)
     '已成交数量，这里不用扣除手续费，完全成交时和amount相等'
     status = Column(sa.SMALLINT, default=OrderStatus.Init)
-    fee = Column(sa.Float)
+    fee = Column(sa.Float, default=0)
     fee_type = Column(sa.String(10))
     update_at = Column(sa.BIGINT)
     '13位，上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新'
