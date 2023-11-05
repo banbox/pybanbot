@@ -98,14 +98,16 @@ async def _consume_jobs():
             cur_ms = btime.utcstamp()
             async with dba():
                 for tf in _tf_stgy_cls:
-                    state = _get_state(exg_name, market, symbol, tf)
-                    cur_end = cur_ms // state.tf_msecs * state.tf_msecs
-                    if cur_end > state.end_ms:
-                        start = time.time()
-                        await run_on_bar(state)
-                        cost = time.time() - start
-                        if cost > 0.1:
-                            logger.info(f'done run_on_bar {symbol} {tf}, cost: {cost:.2f} s')
+                    pair_tf = f'{exg_name}_{market}_{symbol}_{tf}'
+                    with TempContext(pair_tf):
+                        state = _get_state(exg_name, market, symbol, tf)
+                        cur_end = cur_ms // state.tf_msecs * state.tf_msecs
+                        if cur_end > state.end_ms:
+                            start = time.time()
+                            await run_on_bar(state)
+                            cost = time.time() - start
+                            if cost > 0.1:
+                                logger.info(f'done run_on_bar {symbol} {tf}, cost: {cost:.2f} s')
         except Exception:
             logger.exception(f'_run_watch_job error: {exg_name} {market} {symbol}')
 

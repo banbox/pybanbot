@@ -208,7 +208,11 @@ class WebsocketWatcher:
         self.sid = 0
         self.running = True
 
+    async def init(self):
+        await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, self.pair)
+
     async def run(self):
+        await self.init()
         while self.running:
             try:
                 await self.try_update()
