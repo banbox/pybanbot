@@ -114,7 +114,7 @@ class BanConn:
             while True:
                 data = await self.reader.readuntil(line_end)
                 data = data[:-len(line_end)]
-                # logger.debug(f'%s receive %s', name, data)
+                logger.debug('%s receive %s', name, data)
                 des_data = marshal.loads(data)
                 if not des_data or not hasattr(des_data, '__len__') or len(des_data) != 2:
                     logger.warning(f'{name} invalid msg: {data}')
@@ -258,6 +258,7 @@ class ClientIO(BanConn):
     客户端可从此类继承，实现成员函数，处理服务器主动发送的消息。
     '''
     _obj: ClassVar['ClientIO'] = None
+    wait_timeout = 120
 
     def __init__(self, server_addr: str):
         super().__init__()
@@ -278,13 +279,17 @@ class ClientIO(BanConn):
         await self.read()
         '收到服务器第一个消息后认为服务器就绪，不管消息是什么'
 
-    async def get_val(self, key: str):
+    async def get_val(self, key: str, timeout: int = None):
         """从远程端获取指定key的值。"""
         fut = asyncio.get_running_loop().create_future()
         wait_key = f'get_{key}'
         self._waits[wait_key] = fut
         await self.write_msg('_on_get_val', key)
+        if timeout is None:
+            timeout = self.wait_timeout
         try:
+            if timeout:
+                return await asyncio.wait_for(fut, timeout)
             return await fut
         finally:
             del self._waits[wait_key]
