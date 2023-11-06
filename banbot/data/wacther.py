@@ -129,6 +129,11 @@ class KlineLiveConsumer(ClientIO):
             logger.info(f'spider connected at {self.remote}')
 
     async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
+        from banbot.storage import ExSymbol
+        from banbot.util.misc import BanLock
+        all_pairs = [job.symbol for job in jobs]
+        async with BanLock('edit_pairs'):
+            await ExSymbol.ensures(exg_name, market_type, all_pairs)
         step_size = 20
         for i in range(0, len(jobs), step_size):
             batch_jobs = jobs[i: i + step_size]

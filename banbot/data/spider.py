@@ -208,13 +208,7 @@ class WebsocketWatcher:
         self.sid = 0
         self.running = True
 
-    async def init(self):
-        from banbot.storage import dba
-        async with dba():
-            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [self.pair])
-
     async def run(self):
-        await self.init()
         while self.running:
             try:
                 await self.try_update()
@@ -435,7 +429,7 @@ class LiveMiner:
         tf_msecs = tf_to_secs(save_tf) * 1000
         cur_ms = align_tfmsecs(btime.utcstamp(), tf_msecs)
         start_ms = align_tfmsecs(cur_ms - tf_msecs * prefetch, tf_msecs)
-        exs = (await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, [symbol]))[0]
+        exs = ExSymbol.get(self.exchange.name, self.exchange.market_type, symbol)
         _, end_ms = await KLine.query_range(exs.id, save_tf)
         if not end_ms or (cur_ms - end_ms) // tf_msecs > 30:
             # 当缺失数据超过30个时，才执行批量下载
