@@ -8,7 +8,7 @@ import time
 import asyncio
 
 from banbot.util.common import MeasureTime, logger
-from banbot.util.misc import BanLock
+from banbot.util.misc import LocalLock
 
 
 def test_measure():
@@ -83,7 +83,7 @@ async def test_ban_lock():
 
 
 async def only_run_once(name: str):
-    async with BanLock('test', 10, force_on_fail=True):
+    async with LocalLock('test', 10, force_on_fail=True):
         cost = random.random()
         logger.info(f'{name} runing {round(cost * 1000)} ms')
         await asyncio.sleep(cost)

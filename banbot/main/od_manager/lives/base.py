@@ -590,12 +590,12 @@ class LiveOrderMgr(OrderManager):
             related_ods = set()
             for od_key, data in valid_items:
                 iod_id, sub_id = self.exg_orders[od_key]
-                async with BanLock(f'iod_{iod_id}', 5, force_on_fail=True):
+                async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
                     sub_od: Order = await sess.get(Order, sub_id)
                     await self._update_order(sub_od, data)
                     related_ods.add(sub_od)
             for sub_od in related_ods:
-                async with BanLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
+                async with LocalLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
                     await self._consume_unmatchs(sub_od)
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
@@ -743,7 +743,7 @@ class LiveOrderMgr(OrderManager):
     async def exec_od_job(self, job: OrderJob):
         try:
             old_od = job.od
-            async with BanLock(f'iod_{old_od.id}', 5, force_on_fail=True):
+            async with LocalLock(f'iod_{old_od.id}', 5, force_on_fail=True):
                 async with dba():
                     try:
                         od = await InOutOrder.get(old_od.id)

@@ -290,18 +290,19 @@ class LazyTqdm:
             self.bar = None
 
 
-class BanLock:
+class LocalLock:
     '''
     带超时的异步锁。
     根据键维护锁对象。超时未获取锁时发出asyncio.TimeoutError异常
     '''
     _locks: ClassVar[Dict[str, asyncio.Lock]] = dict()
     _holds: ClassVar[Dict[str, int]] = dict()
+    _lock: ClassVar[asyncio.Lock] = asyncio.Lock()  # 全局锁用于同步 _locks 和 _holds
 
-    def __init__(self, key: str, timeout=0, force_on_fail=False):
+    def __init__(self, key: str, timeout=60, force_on_fail=False):
         '''
         :param key: 锁的键
-        :param timeout: 超时时间，默认0，永远等待
+        :param timeout: 超时时间，默认60秒
         :param force_on_fail: 超时是否强制获取锁而不发出异常
         '''
         self.key = key
@@ -310,33 +311,45 @@ class BanLock:
         self._obj: Optional[asyncio.Lock] = None
 
     async def __aenter__(self):
-        if self.key not in self._locks:
-            lock = asyncio.Lock()
-            self._locks[self.key] = lock
-            self._holds[self.key] = 1
-        else:
-            lock = self._locks[self.key]
-            self._holds[self.key] += 1
-        if not self.timeout:
-            await lock.acquire()
-        elif self.force:
-            try:
+        async with self._lock:
+            if self.key not in self._locks:
+                self._locks[self.key] = asyncio.Lock()
+                self._holds[self.key] = 1
+            else:
+                self._holds[self.key] += 1
+
+        lock = self._locks[self.key]
+
+        try:
+            if not self.timeout:
+                await lock.acquire()
+            else:
                 await asyncio.wait_for(lock.acquire(), self.timeout)
-            except asyncio.TimeoutError:
+            self._obj = lock
+        except asyncio.TimeoutError:
+            async with self._lock:
+                if self.key in self._holds:
+                    self._holds[self.key] -= 1
+            if self.force:
                 from banbot.util.common import logger
                 logger.error(f'get lock timeout, force lock: {self.key}')
-        else:
-            await asyncio.wait_for(lock.acquire(), self.timeout)
-        self._obj = lock
+            else:
+                raise
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.key in self._holds:
-            self._holds[self.key] -= 1
-        if not self._obj:
+        if self._obj is None:
             return
-        lock = self._obj
-        if lock.locked():
-            lock.release()
-        if not self._holds.get(self.key) and self.key in self._locks:
-            # 只有当此锁没有其他使用者时，才删除引用
-            del self._locks[self.key]
+        try:
+            if self._obj.locked():
+                self._obj.release()
+        finally:
+            async with self._lock:
+                if self.key in self._holds:
+                    self._holds[self.key] -= 1
+                hold_num = self._holds.get(self.key) or 0
+                if hold_num <= 0 and self.key in self._locks:
+                    # 只有当此锁没有其他使用者时，才删除引用
+                    del self._locks[self.key]
+                    if self.key in self._holds:
+                        del self._holds[self.key]
