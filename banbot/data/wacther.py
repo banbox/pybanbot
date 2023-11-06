@@ -130,9 +130,8 @@ class KlineLiveConsumer(ClientIO):
 
     async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
         from banbot.storage import ExSymbol
-        from banbot.util.misc import LocalLock
         all_pairs = [job.symbol for job in jobs]
-        async with LocalLock('edit_pairs'):
+        async with ClientIO.lock('edit_pairs'):
             await ExSymbol.ensures(exg_name, market_type, all_pairs)
         step_size = 20
         for i in range(0, len(jobs), step_size):

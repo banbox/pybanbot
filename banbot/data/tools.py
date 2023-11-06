@@ -417,8 +417,7 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
     适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
     '''
     from banbot.storage import KLine
-    from banbot.util.misc import LocalLock
-    async with LocalLock('edit_pairs'):
+    async with ClientIO.lock('edit_pairs'):
         exs_list = await ExSymbol.ensures(exg.name, exg.market_type, symbols)
     exs_map = {item.id: item for item in exs_list}
     item_ranges = await KLine.load_kline_ranges()
