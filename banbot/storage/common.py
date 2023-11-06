@@ -56,6 +56,9 @@ class BotGlobal(metaclass=_BotStateMeta):
     pairtf_stgs: Dict[str, List] = dict()
     '{pair}_{timeframe}: [stg1, stg2]'
 
+    info_pairtfs: Dict[str, List] = dict()
+    '策略额外订阅K线 {pair}_{timeframe}: [stg1, stg2]'
+
     last_bar_ms = 0
     '上次收到bar的结束时间，13位时间戳'
 

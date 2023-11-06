@@ -8,6 +8,7 @@ from sqlalchemy import exc
 from banbot.compute.tools import append_new_bar
 from banbot.main.od_manager import *
 from banbot.strategy.resolver import StrategyResolver
+from banbot.strategy.base import BaseStrategy
 from banbot.data.provider import *
 from banbot.storage import *
 from banbot.main.wallets import *
@@ -47,7 +48,7 @@ class Trader:
                     job = (cls.__name__, pair, timeframe)
                     if job in BotGlobal.stg_symbol_tfs:
                         continue
-                    stg_insts.append(cls(self.config))
+                    stg_insts.append(self._load_stg(cls, pair_tfs, pair, timeframe))
                     BotGlobal.stg_symbol_tfs.append(job)
                 BotGlobal.pairtf_stgs[pair_tf_key] = stg_insts
         from itertools import groupby
@@ -57,6 +58,26 @@ class Trader:
             items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
             logger.info(f'{key}: {items}')
         return pair_tfs
+
+    def _load_stg(self, cls: Type[BaseStrategy], pair_tfs: dict, pair: str, timeframe: str):
+        stg_obj = cls(self.config)
+        # 记录策略额外订阅的信息
+        for info in cls.pair_infos:
+            info_pair = pair if info.pair == '_cur_' else info.pair
+            cur_ptf = f"{info_pair}_{info.timeframe}"
+            if cur_ptf not in BotGlobal.info_pairtfs:
+                BotGlobal.info_pairtfs[cur_ptf] = [stg_obj]
+            else:
+                BotGlobal.info_pairtfs[cur_ptf].append(stg_obj)
+            # 额外订阅数据登记
+            if info_pair not in pair_tfs:
+                pair_tfs[info_pair] = dict()
+            tfwarms = pair_tfs[info_pair]
+            if info.timeframe not in tfwarms:
+                tfwarms[info.timeframe] = info.warmup_num
+            else:
+                tfwarms[info.timeframe] = max(info.warmup_num, tfwarms[info.timeframe])
+        return stg_obj
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
         BotGlobal.last_bar_ms = btime.time_ms()
@@ -79,11 +100,12 @@ class Trader:
                 logger.exception('itrader run_bar SQLAlchemyError %s %s', pair, timeframe)
 
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
-        pair_tf = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
+        ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         edit_triggers = []
-        with TempContext(pair_tf):
+        with TempContext(ctx_key):
             # 策略计算部分，会用到上下文变量
-            strategy_list = BotGlobal.pairtf_stgs[f'{pair}_{timeframe}']
+            pair_tf = f'{pair}_{timeframe}'
+            strategy_list = BotGlobal.pairtf_stgs.get(pair_tf) or []
             try:
                 pair_arr = append_new_bar(row, tf_secs)
             except ValueError as e:
@@ -113,9 +135,13 @@ class Trader:
             if calc_cost >= 20 and btime.run_mode in LIVE_MODES:
                 logger.info('{2} calc with {0} strategies at {3}, cost: {1:.1f} ms',
                             len(strategy_list), calc_cost, symbol_tf.get(), bar_num.get())
+            # 更新辅助订阅的数据
+            if pair_tf in BotGlobal.info_pairtfs:
+                for stg in BotGlobal.info_pairtfs[pair_tf]:
+                    stg.on_info_bar(pair, timeframe, pair_arr)
         if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
-            enter_ods, exit_ods = await self.order_mgr.process_orders(pair_tf, enter_list, exit_list, edit_tgs)
+            enter_ods, exit_ods = await self.order_mgr.process_orders(ctx_key, enter_list, exit_list, edit_tgs)
             self._update_stgs(strategy_list, enter_ods, exit_ods)
         return enter_list, exit_list
 

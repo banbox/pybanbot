@@ -8,6 +8,7 @@ from banbot.rpc import Notify, NotifyType  # noqa
 from banbot.storage import ExSymbol
 from banbot.main.addons import MarketPrice  # noqa
 from banbot.config import UserConfig
+from banbot.types.common import *
 
 
 _stg_args_info = []
@@ -58,6 +59,9 @@ class BaseStrategy:
     max_fee = 0.002
     stake_amount = 0
     '每笔下单金额基数'
+
+    pair_infos: List[PairInfo] = []
+    '需要的其他币种或周期辅助K线数据'
 
     args_info: List[dict] = []
     '此策略通用可参数的描述信息，用于机器人面板中修改通用参数'
@@ -168,6 +172,10 @@ class BaseStrategy:
         self.state = dict()
         self.bar_signals = dict()
         self.calc_num += 1
+
+    def on_info_bar(self, pair: str, timeframe: str, arr: np.ndarray):
+        """其他币种或周期的辅助数据"""
+        pass
 
     def open_order(self, tag: str,
                    short: bool = False,
