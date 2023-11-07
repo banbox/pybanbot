@@ -61,6 +61,8 @@ class Trader:
 
     def _load_stg(self, cls: Type[BaseStrategy], pair_tfs: dict, pair: str, timeframe: str):
         stg_obj = cls(self.config)
+        # 恢复配置
+        stg_obj.restore_config()
         # 记录策略额外订阅的信息
         for info in cls.pair_infos:
             info_pair = pair if info.pair == '_cur_' else info.pair

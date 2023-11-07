@@ -118,9 +118,8 @@ class BaseStrategy:
         '做多止盈价格'
         self.short_tp_price = None
         '做空止盈价格'
-        self._restore_config()
 
-    def _restore_config(self):
+    def restore_config(self):
         """从用户面板配置中恢复策略在当前job的状态"""
         config = UserConfig.get()
         pair_jobs: dict = config.get('pair_jobs') or dict()
@@ -148,6 +147,7 @@ class BaseStrategy:
         """从用户面板缓存的配置中恢复策略的公共参数"""
         if cls._restored:
             return
+        cls._restored = True
         config = UserConfig.get()
         stg_config: dict = config.get('strategy')
         if not stg_config:

@@ -11,6 +11,8 @@ def validate_trigger_price(pair: str, short: bool, stoploss: float = None, takep
         return stoploss, takeprofit
     from banbot.main.addons import MarketPrice
     cur_price = MarketPrice.get(pair)
+    if not cur_price:
+        return stoploss, takeprofit
     pos_flag = -1 if short else 1
     od_tag = 'short' if short else 'long'
     if stoploss:
