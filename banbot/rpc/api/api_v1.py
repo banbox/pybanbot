@@ -185,7 +185,7 @@ async def get_pair_jobs():
 
 
 @router.post('/edit_job')
-def edit_pair_job(payload: EditJobPayload, rpc: RPC = Depends(get_rpc)):
+async def edit_pair_job(payload: EditJobPayload, rpc: RPC = Depends(get_rpc)):
     import builtins
     config = UserConfig.get()
     pair_jobs: dict = config.get('pair_jobs')
@@ -208,7 +208,7 @@ def edit_pair_job(payload: EditJobPayload, rpc: RPC = Depends(get_rpc)):
             arg['value'] = arg_val
         job_config[arg['field']] = arg['value']
     UserConfig.save()
-    rpc.apply_job_args(payload, job_config)
+    await rpc.apply_job_args(payload, job_config)
     return dict(code=200)
 
 

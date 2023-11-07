@@ -15,10 +15,11 @@ from banbot.config.consts import *
 from banbot.storage import (dba, sa, InOutOrder, InOutStatus, get_db_orders, BotTask, get_order_filters,
                             ExitTags, EnterTags)
 from banbot.data.metrics import *
+from banbot.strategy import BaseStrategy
 from banbot.util import btime
 from banbot.main.addons import MarketPrice
 from banbot.compute import get_context
-from banbot.util.common import bufferHandler
+from banbot.util.common import bufferHandler, logger
 from banbot.util.support import BanEvent
 from banbot.config import AppConfig, UserConfig
 from banbot.rpc.api.schemas import *
@@ -356,16 +357,36 @@ class RPC:
             results.append(od_dict)
         return dict(data=results, total_num=total_num, offset=offset)
 
-    def apply_job_args(self, payload: EditJobPayload, job_config: dict):
+    async def apply_job_args(self, payload: EditJobPayload, job_config: dict):
         insts = BotGlobal.pairtf_stgs.get(f'{payload.pair}_{payload.tf}')
         edit_triggers = None
         for inst in insts:
             if inst.name == payload.stgy:
                 inst.apply_args(job_config)
-                edit_triggers = inst.get_trig_ods()
+                orders = await InOutOrder.open_orders(payload.stgy, payload.pair)
+                edit_triggers = self.get_trig_ods(inst, orders)
                 break
         if edit_triggers:
             self.bot.order_mgr.submit_triggers(edit_triggers)
+
+    def get_trig_ods(self, stgy: BaseStrategy, orders: List[InOutOrder]):
+        """根据当前job的止损价止盈价，检查是否有订单需要下止损止盈单"""
+        edit_ods = []
+        for od in orders:
+            new_sl_price = (stgy.short_sl_price if od.short else stgy.long_sl_price) if stgy.exg_stoploss else None
+            new_tp_price = (stgy.short_tp_price if od.short else stgy.long_tp_price) if stgy.exg_takeprofit else None
+            sl_price = od.get_info('stoploss_price')
+            tp_price = od.get_info('takeprofit_price')
+            if new_sl_price and new_sl_price != sl_price:
+                edit_ods.append((od, 'stoploss_'))
+                od.set_info(stoploss_price=new_sl_price)
+            else:
+                logger.info(f'new stoploss same, skip: {new_sl_price}')
+            if new_tp_price and new_tp_price != tp_price:
+                edit_ods.append((od, 'takeprofit_'))
+                od.set_info(takeprofit_price=new_tp_price)
+        logger.debug('get_trig_ods test %d orders', len(orders))
+        return edit_ods
 
     @run_in_loop
     async def get_exg_orders(self, symbol: str, start_time: int, limit: int):

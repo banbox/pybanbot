@@ -88,7 +88,7 @@ class BaseStrategy:
         '策略创建的出场信号'
         self.calc_num = 0
         self.orders: List[InOutOrder] = []
-        '当前打开的订单'
+        '当前打开的订单，新bar出现时更新，其他时间无效'
         symbol, timeframe = get_cur_symbol(catch_err=True)
         self.symbol: ExSymbol = symbol
         '当前处理的币种'
@@ -199,6 +199,7 @@ class BaseStrategy:
         :param stoploss: 止损价格，不为空时在交易所提交一个止损单
         :param takeprofit: 止盈价格，不为空时在交易所提交一个止盈单。
         '''
+        from banbot.util.trade_utils import validate_trigger_price
         if short and not self.open_short or not short and not self.open_long:
             tag = 'short' if short else 'long'
             logger.warning(f'[{self.name}] open {tag} is disabled for {self.symbol}')
@@ -220,21 +221,28 @@ class BaseStrategy:
                 od_args['cost_rate'] = cost_rate
                 od_args['legal_cost'] = self.custom_cost(od_args)
         fix_sl_price = self.short_sl_price if short else self.long_sl_price
+        cur_stoploss = None
         if self.exg_stoploss and fix_sl_price:
-            od_args['stoploss_price'] = fix_sl_price
+            cur_stoploss = fix_sl_price
         elif stoploss:
             if self.exg_stoploss:
-                od_args['stoploss_price'] = stoploss
+                cur_stoploss = stoploss
             else:
                 logger.warning(f'[{self.name}] stoploss on exchange is disabled for {self.symbol}')
         fix_tp_price = self.short_tp_price if short else self.long_tp_price
+        cur_takeprofit = None
         if self.exg_takeprofit and fix_tp_price:
-            od_args['takeprofit_price'] = fix_tp_price
+            cur_takeprofit = fix_tp_price
         elif takeprofit:
             if self.exg_takeprofit:
-                od_args['takeprofit_price'] = takeprofit
+                cur_takeprofit = takeprofit
             else:
                 logger.warning(f'[{self.name}] takeprofit on exchange is disabled for {self.symbol}')
+        cur_stoploss, cur_takeprofit = validate_trigger_price(self.symbol.symbol, short, cur_stoploss, cur_takeprofit)
+        if cur_stoploss:
+            od_args['stoploss_price'] = cur_stoploss
+        if cur_takeprofit:
+            od_args['takeprofit_price'] = cur_takeprofit
         self.entrys.append(od_args)
         self.enter_num += 1
 
@@ -318,25 +326,6 @@ class BaseStrategy:
             logger.warning(f'[{self.name}] {self.symbol} stoploss on exchange is disabled, {skip_stoploss} orders')
         if skip_takeprofit:
             logger.warning(f'[{self.name}] {self.symbol} takeprofit on exchange is disabled, {skip_takeprofit} orders')
-        return edit_ods
-
-    def get_trig_ods(self):
-        """根据当前job的止损价止盈价，检查是否有订单需要下止损止盈单"""
-        edit_ods = []
-        for od in self.orders:
-            new_sl_price = (self.short_sl_price if od.short else self.long_sl_price) if self.exg_stoploss else None
-            new_tp_price = (self.short_tp_price if od.short else self.long_tp_price) if self.exg_takeprofit else None
-            sl_price = od.get_info('stoploss_price')
-            tp_price = od.get_info('takeprofit_price')
-            if new_sl_price and new_sl_price != sl_price:
-                edit_ods.append((od, 'stoploss_'))
-                od.set_info(stoploss_price=new_sl_price)
-            else:
-                logger.info(f'new stoploss same, skip: {new_sl_price}')
-            if new_tp_price and new_tp_price != tp_price:
-                edit_ods.append((od, 'takeprofit_'))
-                od.set_info(takeprofit_price=new_tp_price)
-        logger.debug('get_trig_ods test %d orders', len(self.orders))
         return edit_ods
 
     def on_bot_stop(self):

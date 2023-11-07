@@ -100,7 +100,6 @@ class OrderManager(metaclass=SingletonArg):
         :param edit_triggers: 编辑止损止盈订单
         :return:
         '''
-        sess = dba.session
         if enters or exits:
             logger.debug('bar signals: %s %s', enters, exits)
             ctx = get_context(pair_tf)
@@ -127,10 +126,12 @@ class OrderManager(metaclass=SingletonArg):
                                                                 with_unopen=True))
         else:
             enter_ods, exit_ods = [], []
-        if btime.run_mode in btime.LIVE_MODES:
-            await sess.flush()
-            enter_ods = [od.detach(sess) for od in enter_ods if od]
-            exit_ods = [od.detach(sess) for od in exit_ods if od]
+        # 返回值不处理了，这不不用detach
+        # if btime.run_mode in btime.LIVE_MODES:
+        #     sess = dba.session
+        #     await sess.flush()
+        #     enter_ods = [od.detach(sess) for od in enter_ods if od]
+        #     exit_ods = [od.detach(sess) for od in exit_ods if od]
         edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
         self.submit_triggers(edit_triggers)
         return enter_ods, exit_ods
