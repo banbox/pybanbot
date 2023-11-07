@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/3/1
 from banbot.strategy.common import *
-from banbot.rpc import Notify, NotifyType  # noqa
+from banbot.rpc.notify_mgr import Notify, NotifyType  # noqa
 from banbot.storage import ExSymbol
 from banbot.main.addons import MarketPrice  # noqa
 from banbot.config import UserConfig

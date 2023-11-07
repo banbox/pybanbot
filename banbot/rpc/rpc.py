@@ -15,7 +15,6 @@ from banbot.config.consts import *
 from banbot.storage import (dba, sa, InOutOrder, InOutStatus, get_db_orders, BotTask, get_order_filters,
                             ExitTags, EnterTags)
 from banbot.data.metrics import *
-from banbot.strategy import BaseStrategy
 from banbot.util import btime
 from banbot.main.addons import MarketPrice
 from banbot.compute import get_context
@@ -369,8 +368,10 @@ class RPC:
         if edit_triggers:
             self.bot.order_mgr.submit_triggers(edit_triggers)
 
-    def get_trig_ods(self, stgy: BaseStrategy, orders: List[InOutOrder]):
+    def get_trig_ods(self, stgy, orders: List[InOutOrder]):
         """根据当前job的止损价止盈价，检查是否有订单需要下止损止盈单"""
+        from banbot.strategy.base import BaseStrategy
+        stgy: BaseStrategy = stgy
         edit_ods = []
         for od in orders:
             new_sl_price = (stgy.short_sl_price if od.short else stgy.long_sl_price) if stgy.exg_stoploss else None
