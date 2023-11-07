@@ -311,6 +311,7 @@ class LiveOrderMgr(OrderManager):
         return buy_price, sell_price
 
     async def _consume_unmatchs(self, sub_od: Order):
+        has_match = False
         for trade in list(self.unmatch_trades.values()):
             if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
                 continue
@@ -319,7 +320,9 @@ class LiveOrderMgr(OrderManager):
             if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
             logger.info('exec unmatch trade: %s', trade)
-            await self._update_order(sub_od, trade)
+            cur_mat = await self._update_order(sub_od, trade)
+            has_match = has_match or cur_mat
+        return has_match
 
     def _check_new_trades(self, trades: List[dict]):
         if not trades:
@@ -392,7 +395,10 @@ class LiveOrderMgr(OrderManager):
         if new_num or self.market_type != 'spot':
             # 期货市场未返回trades
             await self._update_order_res(od, is_enter, order)
+        else:
+            logger.debug('no new trades: %s %s %s', od.symbol, sub_od.order_id, order)
         await self._consume_unmatchs(sub_od)
+        logger.debug('apply ccxtres to order: %s %s %s %s', od, is_enter, order, sub_od.dict())
 
     async def _finish_order(self, od: InOutOrder):
         if od.enter.order_id:
@@ -558,6 +564,7 @@ class LiveOrderMgr(OrderManager):
             logger.debug('order: %s %s complete, ignore trade: %s', od, tag, data)
             return
         await self._apply_exg_order(od, data)
+        return True
 
     @loop_forever
     async def listen_orders_forever(self):
@@ -594,9 +601,12 @@ class LiveOrderMgr(OrderManager):
                     sub_od: Order = await sess.get(Order, sub_id)
                     await self._update_order(sub_od, data)
                     related_ods.add(sub_od)
+                    logger.debug('update order by push %s %s', data, sub_od.dict())
             for sub_od in related_ods:
                 async with LocalLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
-                    await self._consume_unmatchs(sub_od)
+                    has_match = await self._consume_unmatchs(sub_od)
+                    if has_match:
+                        logger.debug('update order by unmatch %s', sub_od.dict())
             if len(self.handled_trades) > 500:
                 cut_keys = list(self.handled_trades.keys())[-300:]
                 self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -683,8 +693,8 @@ class LiveOrderMgr(OrderManager):
             except Exception as e:
                 logger.error(f'pres_amount for order fail: {e} {od.dict()}, price: {real_price}, amt: {amount}')
 
-        async def force_exit_od():
-            od.local_exit(ExitTags.force_exit, status_msg='InsufficientFunds')
+        async def force_del_od():
+            od.local_exit(ExitTags.force_exit, status_msg='del')
             sess = dba.session
             await sess.delete(od)
             if od.enter:
@@ -694,7 +704,7 @@ class LiveOrderMgr(OrderManager):
         try:
             await self._create_exg_order(od, True)
         except ccxt.InsufficientFunds:
-            await force_exit_od()
+            await force_del_od()
             err_msg = f'InsufficientFunds open cancel: {od}'
             if btime.time() - self.last_lack_ts > 3600:
                 logger.error(err_msg)
@@ -706,7 +716,7 @@ class LiveOrderMgr(OrderManager):
             if err_msg.find(':-4061') > 0:
                 side = 'SHORT' if od.short else 'LONG'
                 logger.error(f'enter fail, SideNotMatch: order: {side}, {e}')
-                await force_exit_od()
+                await force_del_od()
             else:
                 raise
 
@@ -765,6 +775,11 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                         else:
                             logger.exception('consume order exception: %s', job)
+                    before_save = od.dict()
+                async with dba():
+                    od = await InOutOrder.get(old_od.id)
+                    after_save = od.dict()
+                logger.debug('exec od queue, %s %s %s', job.action, before_save, after_save)
         except Exception:
             logger.exception("consume order_q error")
 
