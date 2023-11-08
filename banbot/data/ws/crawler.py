@@ -86,7 +86,8 @@ class my_binanceusdm(binanceusdm):
 
     def __init__(self, config: dict):
         super().__init__(config)
-        self.data_dir = os.path.join(config.get('data_dir'), 'binanceusdm')
+        stamp = int(time.time())  # 本次下载的时间戳
+        self.data_dir = os.path.join(config.get('data_dir'), 'binanceusdm', str(stamp))
         if not os.path.exists(self.data_dir):
             os.mkdir(self.data_dir)
         self.file_ods: Dict[str, IO] = dict()
@@ -97,10 +98,9 @@ class my_binanceusdm(binanceusdm):
     async def watch_order_book_for_symbols(self, symbols: List[str], limit: Optional[int] = None, params={}):
         """订阅订单簿，初始化要保存的文件对象"""
         if not self.file_ods:
-            stamp = int(time.time())
             for symbol in symbols:
                 safe_pair = symbol.replace(':', '_').replace('/', '_')
-                fname = f'od_{safe_pair}_{stamp}.pkl'
+                fname = f'od_{safe_pair}.pkl'
                 out_path = os.path.join(self.data_dir, fname)
                 self.file_ods[symbol] = open(out_path, 'wb')
                 self.pair_odmsgs[symbol] = []
@@ -124,11 +124,11 @@ class my_binanceusdm(binanceusdm):
         marketId = self.safe_string(message, 's')
         market = self.safe_market(marketId, None, None, marketType)
         symbol = market['symbol']
-        trades = self.pair_odmsgs[symbol]
-        trades.append(message)
-        if len(trades) > batch_size:
-            saves = trades[:batch_size]
-            self.pair_odmsgs[symbol] = trades[batch_size:]
+        books = self.pair_odmsgs[symbol]
+        books.append(message)
+        if len(books) > batch_size:
+            saves = books[:batch_size]
+            self.pair_odmsgs[symbol] = books[batch_size:]
             file = self.file_ods[symbol]
             file.write(pickle.dumps(saves))
             file.flush()
@@ -139,10 +139,9 @@ class my_binanceusdm(binanceusdm):
                                        limit: Optional[int] = None, params={}):
         """监听币种的交易流，初始化要保存的文件对象"""
         if not self.file_tds:
-            stamp = int(time.time())
             for symbol in symbols:
                 safe_pair = symbol.replace(':', '_').replace('/', '_')
-                fname = f'trade_{safe_pair}_{stamp}.pkl'
+                fname = f'trade_{safe_pair}.pkl'
                 out_path = os.path.join(self.data_dir, fname)
                 self.file_tds[symbol] = open(out_path, 'wb')
                 self.pair_tdmsgs[symbol] = []

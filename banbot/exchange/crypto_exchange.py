@@ -73,37 +73,10 @@ def _get_credits(exg_cfg: dict, run_env: str) -> dict:
     return ret_data
 
 
-def _create_exchange(module, override_map: dict, cfg: dict, exg_name: str = None, market_type: str = None):
-    exg_cfg = AppConfig.get_exchange(cfg, exg_name)
-    exg_name = exg_cfg['name']
-    if not market_type:
-        market_type = cfg['market_type']
-    if market_type == 'future':
-        exg_name = exg_fut_map.get(exg_name) or exg_name
-    if exg_name in override_map:
-        exg_class = override_map[exg_name]
-    else:
-        exg_class = getattr(module, exg_name)
-    run_env = cfg["env"]
-    has_proxy = bool(exg_cfg.get('proxies'))
-    exg_args = dict(trust_env=has_proxy)
-    if exg_cfg.get('options'):
-        exg_args['options'] = exg_cfg.get('options')
-    cred_args = _get_credits(exg_cfg, run_env)
-    exchange = exg_class(dict(**exg_args, **cred_args))
-    if run_env == 'test':
-        exchange.set_sandbox_mode(True)
-        logger.warning('running in TEST mode!!!')
-    if has_proxy:
-        exchange.proxies = exg_cfg['proxies']
-        exchange.aiohttp_proxy = exg_cfg['proxies']['http']
-    logger.info(f'Create Exg: {module.__name__}.{exchange.__class__.__name__} {run_env} '
-                f'proxy:{exchange.proxies}  {exg_args}')
-    return exchange
-
-
-def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
-        -> Tuple[ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
+def apply_exg_proxy(exg_name: str = None, cfg: dict = None):
+    """应用交易所的代理设置"""
+    if not cfg:
+        cfg = AppConfig.get()
     exg_cfg = AppConfig.get_exchange(cfg, exg_name)
     exg_name = exg_cfg['name']
     has_proxy = bool(exg_cfg.get('proxies'))
@@ -113,25 +86,64 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
         os.environ['WS_PROXY'] = exg_cfg['proxies']['http']
         os.environ['WSS_PROXY'] = exg_cfg['proxies']['http']
         logger.warning("[PROXY] %s", exg_cfg['proxies'])
-    # exchange = _create_exchange(ccxt, api_overrides, cfg, exg_name, market_type)
-    exchange_async = _create_exchange(ccxt_async, asy_overrides, cfg, exg_name, market_type)
-    exchange_async.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
-    if not with_ws:
-        return exchange_async, None
+    return exg_name
+
+
+def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
+    """从交易所类实例化对象，并设置代理等"""
     run_env = cfg["env"]
+    is_ws = hasattr(exg_cls, 'watch_trades')
+    exg_cfg = AppConfig.get_exchange(cfg, exg_name)
+    has_proxy = bool(exg_cfg.get('proxies'))
+    if is_ws:
+        exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
+    else:
+        exg_args = dict(trust_env=has_proxy)
+        if exg_cfg.get('options'):
+            exg_args['options'] = exg_cfg.get('options')
+    cred_args = _get_credits(exg_cfg, run_env)
+    exchange = exg_cls(dict(**exg_args, **cred_args, **kwargs))
+    if run_env == 'test':
+        exchange.set_sandbox_mode(True)
+        logger.warning('running in TEST mode!!!')
+    if has_proxy:
+        exchange.proxies = exg_cfg['proxies']
+        exchange.aiohttp_proxy = exg_cfg['proxies']['http']
+    if not is_ws:
+        exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
+    return exchange, exg_args
+
+
+def _create_exchange(is_ws: bool, cfg: dict, exg_name: str, market_type: str = None):
+    """根据交易所名称和市场初始化交易所对象"""
+    run_env = cfg["env"]
+    if not market_type:
+        market_type = cfg['market_type']
     if market_type == 'future':
         exg_name = exg_fut_map.get(exg_name) or exg_name
-    if exg_name in pro_overrides:
-        exg_class = pro_overrides[exg_name]
+    if is_ws:
+        if exg_name in pro_overrides:
+            exg_class = pro_overrides[exg_name]
+        else:
+            exg_class = getattr(ccxtpro, exg_name)
     else:
-        exg_class = getattr(ccxtpro, exg_name)
-    exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
-    cred_args = _get_credits(exg_cfg, run_env)
-    exchange_ws = exg_class(dict(**exg_args, **cred_args))
-    if run_env == 'test':
-        exchange_ws.set_sandbox_mode(True)
-    if has_proxy:
-        exchange_ws.aiohttp_proxy = exg_cfg['proxies']['http']
+        if exg_name in asy_overrides:
+            exg_class = asy_overrides[exg_name]
+        else:
+            exg_class = getattr(ccxt_async, exg_name)
+    exchange, exg_args = init_exchange(exg_name, exg_class, cfg)
+    logger.info(f'Create Exg: {ccxt_async.__name__}.{exchange.__class__.__name__} {run_env} '
+                f'proxy:{exchange.proxies}  {exg_args}')
+    return exchange
+
+
+def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
+        -> Tuple[ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
+    apply_exg_proxy(exg_name, cfg)
+    exchange_async = _create_exchange(False, cfg, exg_name, market_type)
+    if not with_ws:
+        return exchange_async, None
+    exchange_ws = _create_exchange(True, cfg, exg_name, market_type)[0]
     return exchange_async, exchange_ws
 
 
@@ -508,6 +520,9 @@ class CryptoExchange:
     async def watch_trades(self, symbol, since=None, limit=None, params={}):
         return await self.api_ws.watch_trades(symbol, since, limit, params)
 
+    async def watch_trades_for_symbols(self, symbols: List[str], since: Optional[int] = None, limit: Optional[int] = None, params={}):
+        return await self.api_ws.watch_trades_for_symbols(symbols, since, limit, params)
+
     async def watch_ohlcv(self, symbol: str, timeframe: str, since=None, limit=None, params={}):
         return await self.api_ws.watch_ohlcv(symbol, timeframe, since, limit, params)
 
@@ -518,6 +533,12 @@ class CryptoExchange:
     @net_retry
     async def fetch_order_book(self, symbol, limit=None, params={}):
         return await self.api_async.fetch_order_book(symbol, limit, params)
+
+    async def watch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
+        return await self.api_ws.watch_order_book(symbol, limit, params)
+
+    async def watch_order_book_for_symbols(self, symbols: List[str], limit: Optional[int] = None, params={}):
+        return await self.api_ws.watch_order_book_for_symbols(symbols, limit, params)
 
     async def watch_balance(self, params={}):
         '''
