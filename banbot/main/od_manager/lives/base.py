@@ -3,11 +3,14 @@
 # File  : main.py
 # Author: anyongjin
 # Date  : 2023/3/30
+import json
+
 from banbot.main.od_manager.base import *
 from asyncio import Queue
 from collections import OrderedDict
 from banbot.main.wallets import CryptoWallet
 from banbot.data.tools import auto_fetch_ohlcv
+from sqlalchemy.orm import object_session
 
 
 class LiveOrderMgr(OrderManager):
@@ -757,6 +760,7 @@ class LiveOrderMgr(OrderManager):
                 async with dba():
                     try:
                         od = await InOutOrder.get(old_od.id)
+                        self._check_od_sess(od)
                         od.update_by(old_od)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
@@ -775,13 +779,26 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                         else:
                             logger.exception('consume order exception: %s', job)
-                    before_save = od.dict()
+                    before_save = json.dumps(od.dict())
                 async with dba():
                     od = await InOutOrder.get(old_od.id)
-                    after_save = od.dict()
-                logger.debug('exec od queue, %s %s %s', job.action, before_save, after_save)
+                    after_save = json.dumps(od.dict())
+                if before_save != after_save:
+                    logger.error('exec od queue, save_order_fail: %s \n%s \n%s', job.action, before_save, after_save)
+                else:
+                    logger.debug('exec od queue, %s \n%s \n%s', job.action, before_save, after_save)
         except Exception:
             logger.exception("consume order_q error")
+
+    def _check_od_sess(self, od: InOutOrder):
+        sess: SqlSession = dba.session
+        sess1 = object_session(od)
+        same1 = sess1 is sess
+        same1_1 = od in sess.identity_map.values()
+        sess2 = object_session(od.enter)
+        same2 = sess2 is sess
+        same2_1 = od.enter in sess.identity_map.values()
+        logger.info(f"check order in sess: {same1} {same1_1} {same2} {same2_1} {od} {sess} {sess1} {sess2}")
 
     async def edit_pending_order(self, od: InOutOrder, is_enter: bool, price: float):
         sub_od = od.enter if is_enter else od.exit
