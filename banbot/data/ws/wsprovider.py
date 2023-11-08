@@ -30,7 +30,7 @@ class WSProvider:
     def __init__(self, config: Config, callback: Callable):
         self.config = config
         self.exg_name = config['exchange']['name']
-        self.market_type = config['market_type']
+        self.market = config['market_type']
         self.exg = init_ws_exg(config)
         self.pairs: Set[str] = set()
         self.odbooks: Dict[str, dict] = dict()
@@ -43,22 +43,23 @@ class WSProvider:
                 logger.exception('RTData Callback Exception %s %s', args, kwargs)
         self._callback = handler
 
-    def sub_pairs(self, pairs: List[str]):
-        self.pairs.update(pairs)
+    def sub_pairs(self, pairs: Iterable[str]):
+        for p in pairs:
+            self.pairs.add(p)
 
     async def loop_main(self):
         await self.exg.load_markets()
         BotGlobal.state = BotState.RUNNING
         if hasattr(self.exg, 'run_loop'):
             asyncio.create_task(self.exg.run_loop())
-        asyncio.create_task(self.watch_books())
+        asyncio.create_task(self._watch_books())
         while BotGlobal.state == BotState.RUNNING:
             trades = await self.exg.watch_trades_for_symbols(self.pairs)
             if not trades:
                 continue
             await self._callback(trades[0]['symbol'], trades)
 
-    async def watch_books(self):
+    async def _watch_books(self):
         while BotGlobal.state == BotState.RUNNING:
             # 读取订单簿快照并保存
             books = await self.exg.watch_order_book_for_symbols(self.pairs)

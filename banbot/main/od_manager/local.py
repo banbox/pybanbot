@@ -46,8 +46,7 @@ class LocalOrderManager(OrderManager):
             tag = 'force_exit'
         await self.exit_order(od, dict(tag=tag), price)
         if not price:
-            candle = self.data_mgr.get_latest_ohlcv(od.symbol)
-            price = self._sim_market_price(od.symbol, od.timeframe, candle)
+            price = MarketPrice.get(od.symbol)
         await self._fill_pending_exit(od, price)
 
     async def _fill_pending_enter(self, od: InOutOrder, price: float):
@@ -117,17 +116,15 @@ class LocalOrderManager(OrderManager):
         self.wallets.confirm_od_exit(od, exit_price)
         await self._fire(od, False)
 
-    def _sim_market_price(self, pair: str, timeframe: str, candle: np.ndarray) -> float:
+    def _sim_market_price(self, timeframe: str, candle: np.ndarray) -> float:
         '''
-        计算从收到bar数据，到订单提交到交易所的时间延迟：对应的价格。
+        根据收到的下一个bar数据，计算到订单提交到交易所的时间延迟：对应的价格。
         阳线和阴线对应不同的模拟方法。
         阳线一般是先略微下调，再上冲到最高点，最后略微回调出现上影线。
         阴线一般是先略微上调，再下跌到最低点，最后略微回调出现下影线。
         :return:
         '''
         rate = min(1., self.network_cost / tf_to_secs(timeframe))
-        if candle is None:
-            candle = self.data_mgr.get_latest_ohlcv(pair)
         open_p, high_p, low_p, close_p = candle[ocol: vcol]
         if open_p <= close_p:
             # 阳线，一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
@@ -179,6 +176,7 @@ class LocalOrderManager(OrderManager):
             elif od.enter.status != OrderStatus.Close:
                 sub_od = od.enter
             else:
+                # 已入场完成，尚未出现出场信号，检查是否触发止损
                 if not od.exit_tag:
                     # 检查是否触发止盈止损
                     sl_price = od.get_info('stoploss_price')
@@ -199,6 +197,7 @@ class LocalOrderManager(OrderManager):
                     self.wallets.confirm_od_exit(od, od.exit.price)
                     await od.save()
                 continue
+            # 更新待执行的订单
             od_type = sub_od.order_type or self.od_type
             if od_type == OrderType.Limit.value and sub_od.price:
                 price = sub_od.price
@@ -213,7 +212,8 @@ class LocalOrderManager(OrderManager):
                     elif price < cur_candle[ocol]:
                         price = cur_candle[ocol]
             else:
-                price = self._sim_market_price(od.symbol, od.timeframe, cur_candle)
+                # 按网络延迟，模拟成交价格，和开盘价接近
+                price = self._sim_market_price(od.timeframe, cur_candle)
             if sub_od.enter:
                 await self._fill_pending_enter(od, price)
             else:

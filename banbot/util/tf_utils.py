@@ -10,8 +10,8 @@ import six
 from banbot.config.consts import *
 
 
-_tfsecs_map = dict()
-_secstf_map = dict()
+_tfsecs_map = dict(ws=0)
+_secstf_map = {0: 'ws'}
 _tfsecs_origins = [
     (604800, 345600, '1970-01-05'),  # 周级别，从1970-01-05星期一开始
 ]

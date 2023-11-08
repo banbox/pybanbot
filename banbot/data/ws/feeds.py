@@ -78,29 +78,36 @@ class my_binanceusdm(binanceusdm):
         '已就绪可读取的交易流'
 
     def _sub_pairs(self, symbols: List[str]):
-        new_pairs = []
         for symbol in symbols:
             if symbol in self.pairs:
                 continue
             safe_pair = symbol.replace(':', '_').replace('/', '_')
-            book_name = f'od_{safe_pair}.pkl'
-            trade_name = f'trade_{safe_pair}.pkl'
-            self.io_books[symbol] = open(os.path.join(self.data_dir, book_name), 'rb')
-            self.io_trades[symbol] = open(os.path.join(self.data_dir, trade_name), 'rb')
-            new_pairs.append(symbol)
-        if not new_pairs:
-            return
-        subscription = {
-            'id': str(len(self.pairs)),
-            'messageHash': 'messageHash',
-            'name': 'depth',
-            'symbols': new_pairs,
-            'limit': 1000,
-            'type': type,
-            'params': {},
-        }
-        self.handle_order_book_subscription(FakeClient(), '', subscription)
-        self.pairs.update(new_pairs)
+            book_path = os.path.join(self.data_dir, f'od_{safe_pair}.pkl')
+            trade_path = os.path.join(self.data_dir, f'trade_{safe_pair}.pkl')
+            if not os.path.isfile(trade_path):
+                logger.error(f'sub pair ws skip, no data found: {symbol}')
+                self.pairs.add(symbol)
+                continue
+            self.io_books[symbol] = open(book_path, 'rb')
+            self.io_trades[symbol] = open(trade_path, 'rb')
+            subscription = {
+                'id': str(len(self.pairs)),
+                'messageHash': 'messageHash',
+                'name': 'depth',
+                'symbol': symbol,
+                'limit': 1000,
+                'type': type,
+                'params': {},
+            }
+            try:
+                client = FakeClient()
+                client.subscriptions['messageHash'] = subscription
+                self.handle_order_book_subscription(client, '', subscription)
+            except Exception as e:
+                logger.error(f"init odbook fail: {symbol}: {e}")
+                del self.io_books[symbol]
+                del self.io_trades[symbol]
+            self.pairs.add(symbol)
 
     async def watch_order_book(self, symbol: str, limit: Optional[int] = None, params={}):
         self._sub_pairs([symbol])
@@ -124,7 +131,10 @@ class my_binanceusdm(binanceusdm):
         if not stream:
             raise ValueError(f'odbook not init: {symbol}')
         self._pairs_init.add(symbol)
-        return pickle.load(stream)
+        snapshot = pickle.load(stream)
+        if not isinstance(snapshot, dict):
+            raise ValueError(f'invalid odbook snapshot: {symbol}')
+        return snapshot
 
     async def watch_trades(self, symbol: str, since: Optional[int] = None, limit: Optional[int] = None, params={}):
         self._sub_pairs([symbol])

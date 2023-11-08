@@ -272,13 +272,8 @@ class LiveOrderMgr(OrderManager):
 
     async def calc_price(self, pair: str, vol_secs=0):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
-        candle = self.data_mgr.get_latest_ohlcv(pair)
-        if not candle:
-            # 机器人刚启动，没有最新bar时，如果有之前的未完成订单，这里需要给默认值
-            high_price, low_price, close_price, vol_amount = 99999, 0.0000001, 1, 10
-        else:
-            high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
-        od = Order(symbol=pair, order_type=self.od_type, side='buy', amount=vol_amount, price=close_price)
+        # 这里只使用手续费率，所以提供假的amount和price即可
+        od = Order(symbol=pair, order_type=self.od_type, side='buy', amount=10, price=1.)
         fees = self.exchange.calc_fee(od.symbol, od.order_type, od.side, od.amount, od.price)
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
@@ -294,8 +289,7 @@ class LiveOrderMgr(OrderManager):
             buy_price = await self._get_odbook_price(pair, 'buy', depth)
             sell_price = await self._get_odbook_price(pair, 'sell', depth)
         else:
-            buy_price = high_price * 2
-            sell_price = low_price / 2
+            buy_price = sell_price = MarketPrice.get(pair)
         return buy_price, sell_price
 
     async def _get_pair_prices(self, pair: str, vol_sec=0):

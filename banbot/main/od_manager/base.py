@@ -68,7 +68,7 @@ class OrderManager(metaclass=SingletonArg):
 
     async def _fire(self, od: InOutOrder, enter: bool):
         from banbot.util.misc import run_async
-        pair_tf = f'{self.name}_{self.data_mgr.market}_{od.symbol}_{od.timeframe}'
+        pair_tf = f'{self.name}_{self.market_type}_{od.symbol}_{od.timeframe}'
         with TempContext(pair_tf):
             try:
                 await run_async(self.callback, od, enter)
@@ -90,7 +90,7 @@ class OrderManager(metaclass=SingletonArg):
         pass
 
     async def process_orders(self, pair_tf: str, enters: List[Tuple[str, dict]],
-                             exits: List[Tuple[str, dict]], edit_triggers: List[Tuple[InOutOrder, str]]) \
+                             exits: List[Tuple[str, dict]], edit_triggers: List[Tuple[InOutOrder, str]] = None) \
             -> Tuple[List[InOutOrder], List[InOutOrder]]:
         '''
         批量创建指定交易对的订单
@@ -132,8 +132,9 @@ class OrderManager(metaclass=SingletonArg):
         #     await sess.flush()
         #     enter_ods = [od.detach(sess) for od in enter_ods if od]
         #     exit_ods = [od.detach(sess) for od in exit_ods if od]
-        edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
-        self.submit_triggers(edit_triggers)
+        if edit_triggers:
+            edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
+            self.submit_triggers(edit_triggers)
         return enter_ods, exit_ods
 
     def submit_triggers(self, triggers: List[Tuple[InOutOrder, str]]):
@@ -288,17 +289,21 @@ class OrderManager(metaclass=SingletonArg):
         await od.save()
 
     async def update_by_bar(self, row):
+        exs, _ = get_cur_symbol()
+        await self.update_by_price(exs.symbol, float(row[ccol]))
+
+    async def update_by_price(self, pair: str, price: float):
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
-        exs, _ = get_cur_symbol()
         op_orders = await InOutOrder.open_orders()
-        cur_orders = [od for od in op_orders if od.symbol == exs.symbol]
+        cur_orders = [od for od in op_orders if od.symbol == pair]
         # 更新订单利润
-        close_price = float(row[ccol])
+        close_price = float(price)
         for od in cur_orders:
             od.update_profits(close_price)
         if op_orders and self.market_type == 'future' and not btime.prod_mode():
             # 为合约更新此定价币的所有订单保证金和钱包情况
+            exs = ExSymbol.get(self.exchange.name, self.market_type, pair)
             quote_suffix = exs.quote_suffix()
             quote_orders = [od for od in op_orders if od.symbol.endswith(quote_suffix)]
             try:

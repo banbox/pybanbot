@@ -15,7 +15,7 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.exchange = get_exchange()
         self.wallets = WalletsLocal(self.exchange)
-        self.data_mgr = DBDataProvider(config, self.on_data_feed)
+        self.data_mgr = self._init_data_mgr()
         self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = LocalOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
@@ -58,6 +58,21 @@ class BackTest(Trader):
         self.min_balance = min(self.min_balance, quote_legal)
         self.max_balance = max(self.max_balance, quote_legal)
 
+    def _init_data_mgr(self):
+        if self.is_ws_mode():
+            from banbot.data.ws import WSProvider
+            return WSProvider(self.config, self.on_pair_trades)
+        return DBDataProvider(self.config, self.on_data_feed)
+
+    def is_ws_mode(self):
+        tfs = self.config.get('run_timeframes')
+        if tfs and 'ws' in tfs:
+            return True
+        for item in self.config.get('run_policy'):
+            if 'ws' in item['run_timeframes']:
+                return True
+        return False
+
     async def init(self):
         await AppConfig.test_db()
         from banbot.data.toolbox import sync_timeframes
@@ -94,8 +109,10 @@ class BackTest(Trader):
         await self.init()
         BotGlobal.state = BotState.RUNNING
         # 轮训数据
-        async with dba():
-            await self.data_mgr.down_data()
+        if hasattr(self.data_mgr, 'down_data'):
+            # 按ohlcv回测，下载必要数据
+            async with dba():
+                await self.data_mgr.down_data()
         async with dba():
             bt_start = time.monotonic()
             await self.data_mgr.loop_main()

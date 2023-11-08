@@ -177,6 +177,9 @@ class BaseStrategy:
         """其他币种或周期的辅助数据"""
         pass
 
+    def on_trades(self, trades: List[dict]):
+        pass
+
     def open_order(self, tag: str,
                    short: bool = False,
                    limit: float = None,

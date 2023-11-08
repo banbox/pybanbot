@@ -14,6 +14,10 @@ class _BotStateMeta(type):
         return cls.market_type == 'future'
 
     @property
+    def ws_mode(cls: Type['BotGlobal']):
+        return any(p for p in cls.run_tf_secs if p[0] == 'ws')
+
+    @property
     def live_mode(cls):
         from banbot.util import btime
         return btime.run_mode in btime.LIVE_MODES

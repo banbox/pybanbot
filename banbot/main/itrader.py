@@ -101,6 +101,20 @@ class Trader:
             except exc.SQLAlchemyError:
                 logger.exception('itrader run_bar SQLAlchemyError %s %s', pair, timeframe)
 
+    async def on_pair_trades(self, pair: str, trades: List[dict]):
+        if not trades:
+            return
+        BotGlobal.last_bar_ms = btime.time_ms()
+        if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
+            self.last_process = btime.utcstamp()
+        # 更新最新价格
+        MarketPrice.set_bar_price(pair, trades[-1]['price'])
+        async with dba():
+            try:
+                await self._run_ws(pair, trades)
+            except exc.SQLAlchemyError:
+                logger.exception('itrader run_ws SQLAlchemyError %s', pair)
+
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
         ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         edit_triggers = []
@@ -145,6 +159,29 @@ class Trader:
             edit_tgs = list(set(edit_triggers))
             await self.order_mgr.process_orders(ctx_key, enter_list, exit_list, edit_tgs)
         return enter_list, exit_list
+
+    async def _run_ws(self, pair: str, trades: List[dict]):
+        pair_tf = f'{pair}_ws'
+        strategy_list = BotGlobal.pairtf_stgs.get(pair_tf) or []
+        price = trades[-1]['price']
+        if not BotGlobal.is_warmup:
+            await self.order_mgr.update_by_price(pair, price)
+        enter_list, exit_list = [], []
+        for strategy in strategy_list:
+            stg_name = strategy.name
+            if BotGlobal.is_warmup:
+                strategy.orders = []
+            elif strategy.enter_num:
+                strategy.orders = await InOutOrder.open_orders(stg_name, strategy.symbol.symbol)
+                strategy.enter_tags = {od.enter_tag for od in strategy.orders}
+                strategy.enter_num = len(strategy.orders)
+            strategy.on_trades(trades)
+            # 调用策略生成入场和出场信号
+            enter_list.extend([(stg_name, d) for d in strategy.entrys])
+            exit_list.extend([(stg_name, d) for d in strategy.exits])
+        if not BotGlobal.is_warmup:
+            ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
+            await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')

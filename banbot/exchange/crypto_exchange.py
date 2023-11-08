@@ -119,18 +119,19 @@ def _create_exchange(is_ws: bool, cfg: dict, exg_name: str, market_type: str = N
     run_env = cfg["env"]
     if not market_type:
         market_type = cfg['market_type']
+    cls_name = exg_name
     if market_type == 'future':
-        exg_name = exg_fut_map.get(exg_name) or exg_name
+        cls_name = exg_fut_map.get(exg_name) or exg_name
     if is_ws:
-        if exg_name in pro_overrides:
-            exg_class = pro_overrides[exg_name]
+        if cls_name in pro_overrides:
+            exg_class = pro_overrides[cls_name]
         else:
-            exg_class = getattr(ccxtpro, exg_name)
+            exg_class = getattr(ccxtpro, cls_name)
     else:
-        if exg_name in asy_overrides:
-            exg_class = asy_overrides[exg_name]
+        if cls_name in asy_overrides:
+            exg_class = asy_overrides[cls_name]
         else:
-            exg_class = getattr(ccxt_async, exg_name)
+            exg_class = getattr(ccxt_async, cls_name)
     exchange, exg_args = init_exchange(exg_name, exg_class, cfg)
     logger.info(f'Create Exg: {ccxt_async.__name__}.{exchange.__class__.__name__} {run_env} '
                 f'proxy:{exchange.proxies}  {exg_args}')
@@ -143,7 +144,7 @@ def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: 
     exchange_async = _create_exchange(False, cfg, exg_name, market_type)
     if not with_ws:
         return exchange_async, None
-    exchange_ws = _create_exchange(True, cfg, exg_name, market_type)[0]
+    exchange_ws = _create_exchange(True, cfg, exg_name, market_type)
     return exchange_async, exchange_ws
 
 
