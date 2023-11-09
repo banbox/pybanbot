@@ -29,6 +29,10 @@ class Trader:
         self._run_tasks: List[asyncio.Task] = []
         self.last_process = 0
         '上次处理bar的毫秒时间戳，用于判断是否工作正常'
+        self.last_check_hang = 0
+        '上次检查没有新数据的时间戳'
+        self.check_hang_intv = 60
+        '全局检查没有新数据的间隔，单位：秒'
 
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
             -> Dict[str, Dict[str, int]]:
@@ -57,6 +61,8 @@ class Trader:
         for key, gp in sp_groups:
             items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
             logger.info(f'{key}: {items}')
+        if BotGlobal.run_tf_secs and BotGlobal.run_tf_secs[0][1]:
+            self.check_hang_intv = BotGlobal.run_tf_secs[0][1]
         return pair_tfs
 
     def _load_stg(self, cls: Type[BaseStrategy], pair_tfs: dict, pair: str, timeframe: str):
@@ -158,6 +164,8 @@ class Trader:
         if not BotGlobal.is_warmup:
             edit_tgs = list(set(edit_triggers))
             await self.order_mgr.process_orders(ctx_key, enter_list, exit_list, edit_tgs)
+        if self.last_check_hang + self.check_hang_intv < btime.time_ms():
+            await self._check_pair_hang()
         return enter_list, exit_list
 
     async def _run_ws(self, pair: str, trades: List[dict]):
@@ -169,6 +177,7 @@ class Trader:
         enter_list, exit_list = [], []
         for strategy in strategy_list:
             stg_name = strategy.name
+            strategy.check_ms = trades[-1]['timestamp']
             if BotGlobal.is_warmup:
                 strategy.orders = []
             elif strategy.enter_num:
@@ -182,6 +191,26 @@ class Trader:
         if not BotGlobal.is_warmup:
             ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
             await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
+        if self.last_check_hang + self.check_hang_intv < btime.time_ms():
+            await self._check_pair_hang()
+
+    async def _check_pair_hang(self):
+        """检查是否有交易对数据长期未收到卡住，如有则平掉订单"""
+        self.last_check_hang = btime.time_ms()
+        open_ods = await InOutOrder.open_orders()
+        prefix = f'{self.data_mgr.exg_name}_{self.data_mgr.market}'
+        for od in open_ods:
+            stg_list = BotGlobal.pairtf_stgs.get(f'{od.symbol}_{od.timeframe}')
+            if not stg_list:
+                continue
+            stg: BaseStrategy = next((stg for stg in stg_list if stg.name == od.strategy), None)
+            if not stg:
+                continue
+            exp_intv = max(tf_to_secs(od.timeframe), 30)
+            if stg.check_ms + exp_intv * 2 < btime.time_ms():
+                ctx_key = f'{prefix}_{od.symbol}_{od.timeframe}'
+                exit_d = dict(tag=ExitTags.data_stuck, short=od.short, order_id=od.id)
+                await self.order_mgr.process_orders(ctx_key, [], [(od.strategy, exit_d)])
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')

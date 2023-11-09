@@ -98,6 +98,8 @@ class BaseStrategy:
         '已入场订单的标签'
         self.enter_num = 0
         '记录已提交入场订单数量，避免访问数据库过于频繁'
+        self.check_ms = 0
+        '上次处理信号的时间戳，13位毫秒'
         self.open_long = True
         '是否允许开多'
         self.open_short = True
@@ -167,6 +169,7 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
+        self.check_ms = int(arr[tcol])
         self.entrys = []
         self.exits = []
         self.state = dict()

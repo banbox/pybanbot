@@ -57,6 +57,8 @@ class ExitTags:
     '止损'
     takeprofit = 'takeprofit'
     '止盈'
+    data_stuck = 'data_stuck'
+    '数据反馈超时'
 
 
 class Order(BaseDbModel):
