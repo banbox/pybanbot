@@ -26,8 +26,10 @@ def init_ws_exg(config: Config):
 
 class WSProvider:
     """实时数据提供器"""
+    obj: ClassVar['WSProvider'] = None
 
     def __init__(self, config: Config, callback: Callable):
+        WSProvider.obj = self
         self.config = config
         self.exg_name = config['exchange']['name']
         self.market = config['market_type']
@@ -58,12 +60,16 @@ class WSProvider:
             if not trades:
                 continue
             await self._callback(trades[0]['symbol'], trades)
+            await asyncio.sleep(0)
+        logger.info('WSProvider.loop_main finished.')
 
     async def _watch_books(self):
         while BotGlobal.state == BotState.RUNNING:
             # 读取订单簿快照并保存
             books = await self.exg.watch_order_book_for_symbols(self.pairs)
             self.odbooks[books['symbol']] = books
+            await asyncio.sleep(0)
+        logger.info('WSProvider._watch_books stopped.')
 
 
 async def _run_test():

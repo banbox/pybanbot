@@ -9,6 +9,7 @@ from banbot.storage import ExSymbol
 from banbot.main.addons import MarketPrice  # noqa
 from banbot.config import UserConfig
 from banbot.types.common import *
+from banbot.data.ws import WSProvider
 
 
 _stg_args_info = []
@@ -353,6 +354,11 @@ class BaseStrategy:
         else:
             total_cost = 0
         return total_cost / self.get_stake_amount()
+
+    def get_orderbook(self):
+        if not WSProvider.obj:
+            raise ValueError('WSProvider is not inited!')
+        return WSProvider.obj.odbooks.get(self.symbol.symbol)
 
     def init_third_od(self, od: InOutOrder):
         pass

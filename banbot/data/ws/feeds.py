@@ -196,6 +196,7 @@ class my_binanceusdm(binanceusdm):
                     items.append((book['E'], book))
             await self._emit_datas(items)
             self.last_ms = next_end
+            await asyncio.sleep(0)
         logger.info(f'trades for {len(self._pairs_init)} pairs loop done')
         BotGlobal.state = BotState.STOPPED
 
