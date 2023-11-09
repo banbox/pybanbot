@@ -61,4 +61,6 @@ DbSession不能用于多线程或asyncio的多个协程并发访问。会导致�
 在使用`create_task`或`gather`等启动异步并发任务时，上下文整体会被复制一份。  
 如一些变量DbSession不能用于并发时，在启动并发任务后，必须手动调用`myvar.set(None)`进行重置。  
 另外在一些地方批量更新上下文时(`ctx.py`)，应确保只更新自己需要的，不要更新所有变量，否则会导致其他上下文变量的值难以排查的bug
-
+### expire_on_commit
+之前为了方便在commit后继续使用ORM对象，给所有DbSession设置了expire_on_commit=False，但后来发现这样可能导致Session.get获取对象后，
+commit时偶发未保存数据的问题，故保留默认值expire_on_commit=True

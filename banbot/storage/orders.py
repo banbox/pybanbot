@@ -588,6 +588,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             ex_ods = list(await sess.scalars(select(Order).where(Order.inout_id == od_id)))
             op_od.enter = next((o for o in ex_ods if o.enter), None)
             op_od.exit = next((o for o in ex_ods if not o.enter), None)
+            logger.debug(f'InoutOrder.get: {od_id}: {op_od}, {sess}')
             return op_od
         op_od = cls._open_ods.get(od_id)
         if op_od is not None:

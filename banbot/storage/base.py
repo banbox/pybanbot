@@ -92,8 +92,8 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
         create_args['echo'] = debug
     # 实例化异步engine
     db_engine = create_async_engine(**create_args)
-    SyncSession = sessionmaker(db_engine.sync_engine, class_=Session, expire_on_commit=False)
-    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False,
+    SyncSession = sessionmaker(db_engine.sync_engine, class_=Session)
+    DbSession = async_sessionmaker(db_engine, class_=AsyncSession,
                                    sync_session_class=SyncSession)
     set_db_events(db_engine.sync_engine, SyncSession)
     _db_engines[thread_id] = db_engine
@@ -106,8 +106,8 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
             isolation_level='AUTOCOMMIT'
         )
         _db_engine_ac = create_async_engine(**create_args)
-        SyncSession = sessionmaker(_db_engine_ac.sync_engine, class_=Session, expire_on_commit=False)
-        _DbSessionClsAC = async_sessionmaker(_db_engine_ac, class_=AsyncSession, expire_on_commit=False,
+        SyncSession = sessionmaker(_db_engine_ac.sync_engine, class_=Session)
+        _DbSessionClsAC = async_sessionmaker(_db_engine_ac, class_=AsyncSession,
                                              sync_session_class=SyncSession)
         set_db_events(_db_engine_ac.sync_engine, SyncSession)
     return db_engine

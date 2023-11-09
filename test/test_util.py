@@ -199,7 +199,7 @@ async def test_get_obj():
     from sqlalchemy import pool
     db_url = 'postgresql+asyncpg://postgres:123@[127.0.0.1]:5432/bantd2'
     db_engine = create_async_engine(url=db_url, poolclass=pool.NullPool, echo=True)
-    DbSession = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    DbSession = async_sessionmaker(db_engine, class_=AsyncSession)
 
     sess = DbSession()
     async with sess.begin():
