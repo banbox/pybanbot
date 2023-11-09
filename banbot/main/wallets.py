@@ -389,7 +389,7 @@ class WalletsLocal:
             margin_ratio = abs(tot_profit) / wallet.total()
             if margin_ratio > 0.99:
                 # 总亏损超过总资产，爆仓
-                self.on_acc_bomb(exs.quote_code, od_list)
+                self.on_acc_bomb(exs.quote_code)
                 return
         from banbot.exchange import get_exchange
         exchange = get_exchange(exs.exchange, exs.market)
@@ -420,14 +420,13 @@ class WalletsLocal:
             except LackOfCash as e:
                 logger.debug('cash lack, add margin fail: %s %.5f', od.key, e.amount)
 
-    def on_acc_bomb(self, coin: str, od_list: List[InOutOrder]):
+    def on_acc_bomb(self, coin: str):
         """
         账户爆仓，相关订单退出，钱包重置。
         """
         wallet = self.get(coin)
-        for od in od_list:
-            od.local_exit(ExitTags.bomb)
-        wallet.reset()
+        if wallet:
+            wallet.reset()
         raise AccountBomb(coin)
 
     def get(self, symbol: str, after_ts: float = 0):

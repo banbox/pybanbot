@@ -111,7 +111,7 @@ class LocalOrderManager(OrderManager):
             filled=sub_od.amount,
             average=exit_price,
         )
-        await self._finish_order(od)
+        self._finish_order(od)
         # 用计算的利润更新钱包
         self.wallets.confirm_od_exit(od, exit_price)
         await self._fire(od, False)

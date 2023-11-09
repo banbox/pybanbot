@@ -397,6 +397,11 @@ class InOutOrder(BaseDbModel, InfoPart):
             if self.enter.filled:
                 self._his_ods.append(self)
 
+    def save_mem(self):
+        if btime.run_mode not in btime.LIVE_MODES:
+            self._save_to_mem()
+        return self
+
     async def save(self):
         if btime.run_mode not in btime.LIVE_MODES:
             self._save_to_mem()
@@ -455,12 +460,12 @@ class InOutOrder(BaseDbModel, InfoPart):
             else:
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
-    def detach(self, sess: SqlSession):
-        detach_obj(sess, self, keep_map=True)
+    def detach(self, sess: SqlSession, keep_map=False):
+        detach_obj(sess, self, keep_map=keep_map)
         if self.enter:
-            detach_obj(sess, self.enter, keep_map=True)
+            detach_obj(sess, self.enter, keep_map=keep_map)
         if self.exit:
-            detach_obj(sess, self.exit, keep_map=True)
+            detach_obj(sess, self.exit, keep_map=keep_map)
         return self
 
     def update_by(self, other: 'InOutOrder'):

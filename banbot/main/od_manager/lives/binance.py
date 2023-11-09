@@ -59,7 +59,7 @@ class BinanceOrderMgr(LiveOrderMgr):
         if inout_status:
             inout_od.status = inout_status
         if inout_status == InOutStatus.FullExit:
-            await self._finish_order(inout_od)
+            self._finish_order(inout_od)
             logger.debug('fire exg od: %s', inout_od)
             await self._cancel_trigger_ods(od)
             await self._fire(inout_od, od.enter)
@@ -93,7 +93,7 @@ class BinanceOrderMgr(LiveOrderMgr):
             filled, part = await self._try_fill_exit(iod, filled, od_price, od_time, order_id,
                                                      od_type, fee_name, fee_val)
             if part.status == InOutStatus.FullExit:
-                await self._finish_order(part)
+                self._finish_order(part)
                 logger.info('exit : %s by third %s', part, trade)
                 await self._fire(part, False)
             if filled <= min_dust:

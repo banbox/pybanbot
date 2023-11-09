@@ -338,7 +338,7 @@ class LiveOrderMgr(OrderManager):
             cur_ts = int(data_info.get('updateTime', '0'))
         return cur_ts
 
-    async def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
+    def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
         sub_od = od.enter if is_enter else od.exit
         cur_ts = self._get_trade_ts(data)
         if cur_ts < sub_od.update_at:
@@ -373,7 +373,7 @@ class LiveOrderMgr(OrderManager):
             else:
                 od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
         if od.status == InOutStatus.FullExit:
-            await self._finish_order(od)
+            self._finish_order(od)
         return True
 
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
@@ -388,18 +388,18 @@ class LiveOrderMgr(OrderManager):
         new_num, old_num = self._check_new_trades(order['trades'])
         if new_num or self.market_type != 'spot':
             # 期货市场未返回trades
-            await self._update_order_res(od, is_enter, order)
+            self._update_order_res(od, is_enter, order)
         else:
             logger.debug('no new trades: %s %s %s', od.symbol, sub_od.order_id, order)
         await self._consume_unmatchs(sub_od)
         logger.debug('apply ccxtres to order: %s %s %s %s', od, is_enter, order, sub_od.dict())
 
-    async def _finish_order(self, od: InOutOrder):
+    def _finish_order(self, od: InOutOrder):
         if od.enter.order_id:
             self._done_keys[(od.symbol, od.enter.order_id)] = 1
         if od.exit and od.exit.order_id:
             self._done_keys[(od.symbol, od.exit.order_id)] = 1
-        await super(LiveOrderMgr, self)._finish_order(od)
+        super(LiveOrderMgr, self)._finish_order(od)
         if len(self._done_keys) > 1500:
             done_keys = list(self._done_keys.keys())
             self._done_keys = OrderedDict.fromkeys(done_keys[800:], value=1)
@@ -495,7 +495,8 @@ class LiveOrderMgr(OrderManager):
                 # 没有入场，直接本地退出。
                 od.status = InOutStatus.FullExit
                 od.update_exit(price=od.enter.price)
-                await self._finish_order(od)
+                await od.save()
+                self._finish_order(od)
                 await self._cancel_trigger_ods(od)
                 return
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
@@ -631,7 +632,7 @@ class LiveOrderMgr(OrderManager):
         part.exit_tag = ExitTags.third
         part.exit_at = od_time
         part.status = InOutStatus.FullExit
-        await iod.save()
+        iod.save_mem()
         if not part.id:
             # 没有id说明是分离出来的订单，需要保存
             await part.save()
@@ -726,7 +727,8 @@ class LiveOrderMgr(OrderManager):
             if not od.enter.filled:
                 od.status = InOutStatus.FullExit
                 od.update_exit(price=od.enter.price)
-                await self._finish_order(od)
+                await od.save()
+                self._finish_order(od)
                 await self._cancel_trigger_ods(od)
                 # 这里未入场直接退出的，不应该fire
                 return

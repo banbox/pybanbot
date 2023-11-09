@@ -277,25 +277,28 @@ class OrderManager(metaclass=SingletonArg):
         self._put_order(od, OrderJob.ACT_EXIT)
         return od
 
-    async def _finish_order(self, od: InOutOrder):
+    def _finish_order(self, od: InOutOrder):
         # fee_rate = (od.enter.fee or 0) + (od.exit.fee or 0)
         if od.exit.price and od.enter.price:
             od.update_profits(od.exit.price)
+        if od.id in BotCache.open_ods:
+            del BotCache.open_ods[od.id]
         # if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
         #     limit_fee = self.pair_fee_limits.get(od.symbol)
         #     if limit_fee is not None and fee_rate > limit_fee * 2:
         #         self.forbid_pairs.add(od.symbol)
         #         logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
-        await od.save()
+        od.save_mem()
 
     async def update_by_bar(self, row):
         exs, _ = get_cur_symbol()
-        await self.update_by_price(exs.symbol, float(row[ccol]))
+        op_orders = await InOutOrder.open_orders()
+        self.update_by_price(op_orders, exs.symbol, float(row[ccol]))
 
-    async def update_by_price(self, pair: str, price: float):
+    def update_by_price(self, op_orders: List[InOutOrder], pair: str, price: float):
+        """使用价格更新订单的利润等。可能会触发爆仓：AccountBomb"""
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
-        op_orders = await InOutOrder.open_orders()
         cur_orders = [od for od in op_orders if od.symbol == pair]
         # 更新订单利润
         close_price = float(price)
@@ -306,13 +309,8 @@ class OrderManager(metaclass=SingletonArg):
             exs = ExSymbol.get(self.exchange.name, self.market_type, pair)
             quote_suffix = exs.quote_suffix()
             quote_orders = [od for od in op_orders if od.symbol.endswith(quote_suffix)]
-            try:
-                self.wallets.update_ods(quote_orders)
-            except AccountBomb:
-                # 保存订单状态
-                for od in quote_orders:
-                    await od.save()
-                raise
+            # 这里可能触发爆仓：AccountBomb
+            self.wallets.update_ods(quote_orders)
 
     async def on_lack_of_cash(self):
         pass

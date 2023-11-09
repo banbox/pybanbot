@@ -114,12 +114,26 @@ class Trader:
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             self.last_process = btime.utcstamp()
         # 更新最新价格
-        MarketPrice.set_bar_price(pair, trades[-1]['price'])
-        async with dba():
-            try:
-                await self._run_ws(pair, trades)
-            except exc.SQLAlchemyError:
-                logger.exception('itrader run_ws SQLAlchemyError %s', pair)
+        cur_price = trades[-1]['price']
+        MarketPrice.set_bar_price(pair, cur_price)
+        all_open_ods = list(BotCache.open_ods.values())
+        if not BotGlobal.is_warmup:
+            self.order_mgr.update_by_price(all_open_ods, pair, cur_price)
+        pair_ods = [od for od in all_open_ods if od.symbol == pair]
+        enter_list, exit_list = self._run_ws(pair_ods, pair, trades)
+
+        if enter_list or exit_list or BotCache.updod_at + 60 < btime.time():
+            async with dba():
+                sess = dba.session
+                if BotCache.updod_at + 60 < btime.time():
+                    BotCache.updod_at = btime.time()
+                    open_ods = await InOutOrder.open_orders()
+                    BotCache.open_ods = {od.id: od.detach(sess) for od in open_ods}
+                if enter_list or exit_list:
+                    ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
+                    await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
+                    if self.last_check_hang + self.check_hang_intv < btime.time_ms():
+                        await self._check_pair_hang(all_open_ods)
 
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
         ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
@@ -137,12 +151,13 @@ class Trader:
                 await self.order_mgr.update_by_bar(row)
             start_time = time.monotonic()
             enter_list, exit_list = [], []
+            open_ods = await InOutOrder.open_orders(pairs=pair)
             for strategy in strategy_list:
                 stg_name = strategy.name
                 if BotGlobal.is_warmup:
                     strategy.orders = []
                 elif strategy.enter_num:
-                    strategy.orders = await InOutOrder.open_orders(stg_name, strategy.symbol.symbol)
+                    strategy.orders = [od for od in open_ods if od.strategy == stg_name]
                     strategy.enter_tags = {od.enter_tag for od in strategy.orders}
                     strategy.enter_num = len(strategy.orders)
                 strategy.on_bar(pair_arr)
@@ -168,12 +183,9 @@ class Trader:
             await self._check_pair_hang()
         return enter_list, exit_list
 
-    async def _run_ws(self, pair: str, trades: List[dict]):
+    def _run_ws(self, open_ods: List[InOutOrder], pair: str, trades: List[dict]):
         pair_tf = f'{pair}_ws'
         strategy_list = BotGlobal.pairtf_stgs.get(pair_tf) or []
-        price = trades[-1]['price']
-        if not BotGlobal.is_warmup:
-            await self.order_mgr.update_by_price(pair, price)
         enter_list, exit_list = [], []
         for strategy in strategy_list:
             stg_name = strategy.name
@@ -181,7 +193,7 @@ class Trader:
             if BotGlobal.is_warmup:
                 strategy.orders = []
             elif strategy.enter_num:
-                strategy.orders = await InOutOrder.open_orders(stg_name, strategy.symbol.symbol)
+                strategy.orders = [od for od in open_ods if od.strategy == stg_name]
                 strategy.enter_tags = {od.enter_tag for od in strategy.orders}
                 strategy.enter_num = len(strategy.orders)
             strategy.on_trades(trades)
@@ -189,15 +201,14 @@ class Trader:
             enter_list.extend([(stg_name, d) for d in strategy.entrys])
             exit_list.extend([(stg_name, d) for d in strategy.exits])
         if not BotGlobal.is_warmup:
-            ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
-            await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
-        if self.last_check_hang + self.check_hang_intv < btime.time_ms():
-            await self._check_pair_hang()
+            return enter_list, exit_list
+        return [], []
 
-    async def _check_pair_hang(self):
+    async def _check_pair_hang(self, open_ods: List[InOutOrder] = None):
         """检查是否有交易对数据长期未收到卡住，如有则平掉订单"""
         self.last_check_hang = btime.time_ms()
-        open_ods = await InOutOrder.open_orders()
+        if not open_ods:
+            open_ods = await InOutOrder.open_orders()
         prefix = f'{self.data_mgr.exg_name}_{self.data_mgr.market}'
         for od in open_ods:
             stg_list = BotGlobal.pairtf_stgs.get(f'{od.symbol}_{od.timeframe}')

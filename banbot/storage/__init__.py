@@ -6,6 +6,7 @@
 from banbot.storage.base import dba, sa, select, delete, update, insert, SqlSession, detach_obj, reset_ctx  # noqa
 from banbot.storage.bot_task import BotTask
 from banbot.storage.common import *
+from banbot.storage.biz import BotCache
 from banbot.storage.klines import KLine, KHole, KInfo, DisContiError
 from banbot.storage.orders import (Order, InOutOrder, InOutStatus, OrderStatus, EnterTags, ExitTags, get_db_orders,
                                    get_order_filters)
