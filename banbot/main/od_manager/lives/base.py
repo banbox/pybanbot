@@ -554,7 +554,7 @@ class LiveOrderMgr(OrderManager):
 
         def do_put(success: bool):
             if success:
-                self.order_q.put_nowait(OrderJob(od, action, data))
+                self.order_q.put_nowait(OrderJob(od.id, action, data))
 
         dba.add_callback(dba.session, do_put)
 
@@ -755,13 +755,11 @@ class LiveOrderMgr(OrderManager):
 
     async def exec_od_job(self, job: OrderJob):
         try:
-            old_od = job.od
-            async with LocalLock(f'iod_{old_od.id}', 5, force_on_fail=True):
+            async with LocalLock(f'iod_{job.od_id}', 5, force_on_fail=True):
                 async with dba():
                     try:
-                        od = await InOutOrder.get(old_od.id)
+                        od = await InOutOrder.get(job.od_id)
                         self._check_od_sess(od)
-                        od.update_by(old_od)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
                         elif job.action == OrderJob.ACT_EXIT:
@@ -781,7 +779,7 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order exception: %s', job)
                     before_save = json.dumps(od.dict())
                 async with dba():
-                    od = await InOutOrder.get(old_od.id)
+                    od = await InOutOrder.get(job.od_id)
                     after_save = json.dumps(od.dict())
                 if before_save != after_save:
                     logger.error('exec od queue, save_order_fail: %s \n%s \n%s', job.action, before_save, after_save)

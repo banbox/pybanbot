@@ -613,7 +613,7 @@ class OrderJob:
     ACT_ENTER: ClassVar[str] = 'enter'
     ACT_EXIT: ClassVar[str] = 'exit'
     ACT_EDITTG: ClassVar[str] = 'edit_trigger'
-    od: InOutOrder
+    od_id: int
     action: str
     data: str = None
 
