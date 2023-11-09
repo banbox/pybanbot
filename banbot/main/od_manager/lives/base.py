@@ -551,10 +551,11 @@ class LiveOrderMgr(OrderManager):
         if action == OrderJob.ACT_EDITTG:
             tg_price = od.get_info(data + 'price')
             logger.debug('edit push: %s %s', od, tg_price)
+        od_id = od.id
 
         def do_put(success: bool):
             if success:
-                self.order_q.put_nowait(OrderJob(od.id, action, data))
+                self.order_q.put_nowait(OrderJob(od_id, action, data))
 
         dba.add_callback(dba.session, do_put)
 
