@@ -22,7 +22,8 @@ class LocalOrderManager(OrderManager):
             self.network_cost = 0.3 if timeframe == 'ws' else 3.
         super(LocalOrderManager, self).update_by_bar(all_opens, pair, timeframe, row)
         if all_opens and not btime.prod_mode():
-            affect_num = self.fill_pending_orders(all_opens, timeframe, row)
+            cur_ods = [od for od in all_opens if od.symbol == pair]
+            affect_num = self.fill_pending_orders(cur_ods, timeframe, row)
             if affect_num:
                 logger.debug("wallets: %s", self.wallets)
 

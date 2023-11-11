@@ -223,12 +223,9 @@ class Trader:
                 strategy.check_ms = trades[-1]['timestamp']
                 strategy.entrys = []
                 strategy.exits = []
-                if BotGlobal.is_warmup:
-                    strategy.orders = []
-                elif strategy.enter_num:
-                    strategy.orders = [od for od in open_ods if od.strategy == stg_name]
-                    strategy.enter_tags = {od.enter_tag for od in strategy.orders}
-                    strategy.enter_num = len(strategy.orders)
+                strategy.orders = [od for od in open_ods if od.strategy == stg_name]
+                strategy.enter_tags = {od.enter_tag for od in strategy.orders}
+                strategy.enter_num = len(strategy.orders)
                 strategy.on_trades(trades)
                 # 调用策略生成入场和出场信号
                 enter_list.extend([(stg_name, d) for d in strategy.entrys])

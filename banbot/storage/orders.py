@@ -336,7 +336,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         profit_val = self.calc_profit(price)
         if not profit_val:
             return
-        self.profit = profit_val
+        fee_cost = ((self.enter.fee or 0) if self.enter else 0) + ((self.exit.fee or 0) if self.exit else 0)
+        self.profit = profit_val - fee_cost
         ent_price = self.enter.average or self.enter.price or self.init_price
         ent_quote_value = ent_price * self.enter.filled
         if self.leverage:
