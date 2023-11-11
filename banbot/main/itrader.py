@@ -220,7 +220,7 @@ class Trader:
         with TempContext(f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair_tf}'):
             for strategy in strategy_list:
                 stg_name = strategy.name
-                strategy.check_ms = trades[-1]['timestamp']
+                strategy.check_ms = btime.time_ms()
                 strategy.entrys = []
                 strategy.exits = []
                 strategy.orders = [od for od in open_ods if od.strategy == stg_name]
@@ -247,7 +247,7 @@ class Trader:
             stg: BaseStrategy = next((stg for stg in stg_list if stg.name == od.strategy), None)
             if not stg:
                 continue
-            exp_intv = max(tf_to_secs(od.timeframe), 30)
+            exp_intv = max(tf_to_secs(od.timeframe), 30) * 1000
             if stg.check_ms + exp_intv * 2 < btime.time_ms():
                 ctx_key = f'{prefix}_{od.symbol}_{od.timeframe}'
                 exit_d = dict(tag=ExitTags.data_stuck, short=od.short, order_id=od.id)

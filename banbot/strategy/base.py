@@ -170,7 +170,7 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
-        self.check_ms = int(arr[tcol])
+        self.check_ms = btime.time_ms()
         self.entrys = []
         self.exits = []
         self.state = dict()
