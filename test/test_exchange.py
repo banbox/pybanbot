@@ -5,21 +5,26 @@
 # Date  : 2023/8/16
 
 import logging
+import time
 
 from banbot.exchange.crypto_exchange import *
 from banbot.main.wallets import CryptoWallet
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 async def test_watch_trades():
     AppConfig.init_by_args()
     config = AppConfig.get()
     exchange = get_exchange()
-    wallet = CryptoWallet(config, exchange)
+    # wallet = CryptoWallet(config, exchange)
     # data_hd = LiveDataProvider(config, lambda x: x)
     # od_manager = LiveOrderManager(config, exchange, wallet, data_hd, lambda x: x)
-    await wallet.watch_balance_forever()
+    # await wallet.watch_balance_forever()
+    stop = time.time() + 10
+    while time.time() < stop:
+        datas = await exchange.watch_order_book_for_symbols(['ADA/USDT:USDT', 'ETC/USDT:USDT'])
+        print(datas)
 
 
 async def test_ccxt_future():
@@ -70,5 +75,5 @@ async def test_watch_mark_prices():
 
 
 if __name__ == '__main__':
-    # asyncio.run(test_watch_trades())
-    asyncio.run(test_watch_mark_prices())
+    asyncio.run(test_watch_trades())
+    # asyncio.run(test_watch_mark_prices())

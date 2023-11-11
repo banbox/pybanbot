@@ -7,9 +7,6 @@ from banbot.main.od_manager.lives.base import *
 
 
 class BinanceOrderMgr(LiveOrderMgr):
-    def __init__(self, config: dict, exchange: CryptoExchange, wallets: CryptoWallet, data_hd: LiveDataProvider,
-                 callback: Callable):
-        super().__init__(config, exchange, wallets, data_hd, callback)
 
     async def _apply_exg_order(self, od: Order, data: dict):
         info: dict = data['info']
@@ -59,10 +56,10 @@ class BinanceOrderMgr(LiveOrderMgr):
         if inout_status:
             inout_od.status = inout_status
         if inout_status == InOutStatus.FullExit:
-            await self._finish_order(inout_od)
+            self._finish_order(inout_od)
             logger.debug('fire exg od: %s', inout_od)
             await self._cancel_trigger_ods(od)
-            await self._fire(inout_od, od.enter)
+            self._fire(inout_od, od.enter)
 
     async def _exit_by_exg_order(self, trade: dict) -> bool:
         info: dict = trade['info']
@@ -93,9 +90,9 @@ class BinanceOrderMgr(LiveOrderMgr):
             filled, part = await self._try_fill_exit(iod, filled, od_price, od_time, order_id,
                                                      od_type, fee_name, fee_val)
             if part.status == InOutStatus.FullExit:
-                await self._finish_order(part)
+                self._finish_order(part)
                 logger.info('exit : %s by third %s', part, trade)
-                await self._fire(part, False)
+                self._fire(part, False)
             if filled <= min_dust:
                 break
         if not is_reduce_only and filled > min_dust and self.allow_take_over:
@@ -106,7 +103,7 @@ class BinanceOrderMgr(LiveOrderMgr):
             if iod:
                 await iod.save()
                 logger.debug('enter for left: %s', iod)
-                await self._fire(iod, True)
+                self._fire(iod, True)
         return True
 
     async def _trace_exg_order(self, trade: dict):
@@ -146,7 +143,7 @@ class BinanceOrderMgr(LiveOrderMgr):
         if od:
             await od.save()
             logger.debug('enter od: %s', od)
-            await self._fire(od, True)
+            self._fire(od, True)
             stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')
             stg = next((stg for stg in stg_list if stg.name == self.take_over_stgy), None)
             if stg:

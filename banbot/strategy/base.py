@@ -9,6 +9,7 @@ from banbot.storage import ExSymbol
 from banbot.main.addons import MarketPrice  # noqa
 from banbot.config import UserConfig
 from banbot.types.common import *
+from banbot.data.ws import WSProvider
 
 
 _stg_args_info = []
@@ -98,6 +99,8 @@ class BaseStrategy:
         '已入场订单的标签'
         self.enter_num = 0
         '记录已提交入场订单数量，避免访问数据库过于频繁'
+        self.check_ms = 0
+        '上次处理信号的时间戳，13位毫秒'
         self.open_long = True
         '是否允许开多'
         self.open_short = True
@@ -167,6 +170,7 @@ class BaseStrategy:
         :param arr:
         :return:
         '''
+        self.check_ms = int(arr[tcol])
         self.entrys = []
         self.exits = []
         self.state = dict()
@@ -175,6 +179,9 @@ class BaseStrategy:
 
     def on_info_bar(self, pair: str, timeframe: str, arr: np.ndarray):
         """其他币种或周期的辅助数据"""
+        pass
+
+    def on_trades(self, trades: List[dict]):
         pass
 
     def open_order(self, tag: str,
@@ -347,6 +354,11 @@ class BaseStrategy:
         else:
             total_cost = 0
         return total_cost / self.get_stake_amount()
+
+    def get_orderbook(self):
+        if not WSProvider.obj:
+            raise ValueError('WSProvider is not inited!')
+        return WSProvider.obj.odbooks.get(self.symbol.symbol)
 
     def init_third_od(self, od: InOutOrder):
         pass

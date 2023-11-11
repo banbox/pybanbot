@@ -57,6 +57,8 @@ class ExitTags:
     '止损'
     takeprofit = 'takeprofit'
     '止盈'
+    data_stuck = 'data_stuck'
+    '数据反馈超时'
 
 
 class Order(BaseDbModel):
@@ -274,6 +276,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         '''
         if self.exit_tag:
             return False
+        if self.timeframe == 'ws':
+            return True
         return self.elp_num_enter > 0
 
     def pending_type(self, timeouts: int):
@@ -313,7 +317,7 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     def calc_profit(self, price: float = None):
         """返回利润（未扣除手续费）"""
-        if not self.status or not self.enter.average or not self.enter.filled:
+        if not self.status or not self.enter or not self.enter.average or not self.enter.filled:
             return 0
         if price is None:
             price = self.exit.price if self.exit and self.exit.price else self.enter.average
@@ -332,7 +336,8 @@ class InOutOrder(BaseDbModel, InfoPart):
         profit_val = self.calc_profit(price)
         if not profit_val:
             return
-        self.profit = profit_val
+        fee_cost = ((self.enter.fee or 0) if self.enter else 0) + ((self.exit.fee or 0) if self.exit else 0)
+        self.profit = profit_val - fee_cost
         ent_price = self.enter.average or self.enter.price or self.init_price
         ent_quote_value = ent_price * self.enter.filled
         if self.leverage:
@@ -395,6 +400,11 @@ class InOutOrder(BaseDbModel, InfoPart):
             if self.enter.filled:
                 self._his_ods.append(self)
 
+    def save_mem(self):
+        if btime.run_mode not in btime.LIVE_MODES:
+            self._save_to_mem()
+        return self
+
     async def save(self):
         if btime.run_mode not in btime.LIVE_MODES:
             self._save_to_mem()
@@ -453,13 +463,23 @@ class InOutOrder(BaseDbModel, InfoPart):
             else:
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
-    def detach(self, sess: SqlSession):
-        detach_obj(sess, self, keep_map=True)
+    def detach(self, sess: SqlSession, keep_map=False):
+        result = detach_obj(sess, self, keep_map=keep_map)
         if self.enter:
-            detach_obj(sess, self.enter, keep_map=True)
+            result.enter = detach_obj(sess, self.enter, keep_map=keep_map)
         if self.exit:
-            detach_obj(sess, self.exit, keep_map=True)
-        return self
+            result.exit = detach_obj(sess, self.exit, keep_map=keep_map)
+        return result
+
+    async def attach(self, sess: SqlSession) -> 'InOutOrder':
+        if self in sess:
+            return self
+        db_od = await sess.merge(self)
+        if self.enter:
+            db_od.enter = await sess.merge(self.enter)
+        if self.exit:
+            db_od.exit = await sess.merge(self.exit)
+        return db_od
 
     def update_by(self, other: 'InOutOrder'):
         self.update_props(**other.dict(origin=True))
@@ -616,6 +636,47 @@ class OrderJob:
     od_id: int
     action: str
     data: str = None
+
+
+def get_od_sign(od: InOutOrder):
+    """获取订单的状态签名，只跟踪是否有新对象创建"""
+    od_sign, ent_sign, exit_sign = None, None, None
+    od_sign = od.id or 0
+    if od.enter:
+        ent_sign = od.enter.id or 0
+    if od.exit:
+        exit_sign = od.exit.id or 0
+    return od_sign, ent_sign, exit_sign
+
+
+class InOutTracer:
+    """
+    跟踪订单的前后状态，对比是否有新建的ORM对象需要保存到数据库的。
+    """
+    def __init__(self, ods: List[InOutOrder]):
+        self.state = dict()
+        self.orders = ods
+
+    def _set_state(self):
+        for od in self.orders:
+            self.state[id(od)] = get_od_sign(od)
+
+    def get_changes(self):
+        result = []
+        for od in self.orders:
+            old_sign = self.state.get(id(od))
+            if old_sign:
+                cur_sign = get_od_sign(od)
+                if old_sign == cur_sign:
+                    continue
+            result.append(od)
+        return result
+
+    async def save(self):
+        chg_ods = self.get_changes()
+        for od in chg_ods:
+            await od.save()
+        self._set_state()
 
 
 def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,

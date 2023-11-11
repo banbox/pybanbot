@@ -275,13 +275,8 @@ class LiveOrderMgr(OrderManager):
 
     async def calc_price(self, pair: str, vol_secs=0):
         # 如果taker的费用为0，直接使用市价单，否则获取订单簿，使用限价单
-        candle = self.data_mgr.get_latest_ohlcv(pair)
-        if not candle:
-            # 机器人刚启动，没有最新bar时，如果有之前的未完成订单，这里需要给默认值
-            high_price, low_price, close_price, vol_amount = 99999, 0.0000001, 1, 10
-        else:
-            high_price, low_price, close_price, vol_amount = candle[hcol: vcol + 1]
-        od = Order(symbol=pair, order_type=self.od_type, side='buy', amount=vol_amount, price=close_price)
+        # 这里只使用手续费率，所以提供假的amount和price即可
+        od = Order(symbol=pair, order_type=self.od_type, side='buy', amount=10, price=1.)
         fees = self.exchange.calc_fee(od.symbol, od.order_type, od.side, od.amount, od.price)
         if fees['rate'] > self.max_market_rate and btime.run_mode in LIVE_MODES:
             # 手续费率超过指定市价单费率，使用限价单
@@ -297,8 +292,7 @@ class LiveOrderMgr(OrderManager):
             buy_price = await self._get_odbook_price(pair, 'buy', depth)
             sell_price = await self._get_odbook_price(pair, 'sell', depth)
         else:
-            buy_price = high_price * 2
-            sell_price = low_price / 2
+            buy_price = sell_price = MarketPrice.get(pair)
         return buy_price, sell_price
 
     async def _get_pair_prices(self, pair: str, vol_sec=0):
@@ -347,7 +341,7 @@ class LiveOrderMgr(OrderManager):
             cur_ts = int(data_info.get('updateTime', '0'))
         return cur_ts
 
-    async def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
+    def _update_order_res(self, od: InOutOrder, is_enter: bool, data: dict):
         sub_od = od.enter if is_enter else od.exit
         cur_ts = self._get_trade_ts(data)
         if cur_ts < sub_od.update_at:
@@ -382,7 +376,7 @@ class LiveOrderMgr(OrderManager):
             else:
                 od.status = InOutStatus.FullEnter if is_enter else InOutStatus.FullExit
         if od.status == InOutStatus.FullExit:
-            await self._finish_order(od)
+            self._finish_order(od)
         return True
 
     async def _update_subod_by_ccxtres(self, od: InOutOrder, is_enter: bool, order: dict):
@@ -397,18 +391,18 @@ class LiveOrderMgr(OrderManager):
         new_num, old_num = self._check_new_trades(order['trades'])
         if new_num or self.market_type != 'spot':
             # 期货市场未返回trades
-            await self._update_order_res(od, is_enter, order)
+            self._update_order_res(od, is_enter, order)
         else:
             logger.debug('no new trades: %s %s %s', od.symbol, sub_od.order_id, order)
         await self._consume_unmatchs(sub_od)
         logger.debug('apply ccxtres to order: %s %s %s %s', od, is_enter, order, sub_od.dict())
 
-    async def _finish_order(self, od: InOutOrder):
+    def _finish_order(self, od: InOutOrder):
         if od.enter.order_id:
             self._done_keys[(od.symbol, od.enter.order_id)] = 1
         if od.exit and od.exit.order_id:
             self._done_keys[(od.symbol, od.exit.order_id)] = 1
-        await super(LiveOrderMgr, self)._finish_order(od)
+        super(LiveOrderMgr, self)._finish_order(od)
         if len(self._done_keys) > 1500:
             done_keys = list(self._done_keys.keys())
             self._done_keys = OrderedDict.fromkeys(done_keys[800:], value=1)
@@ -504,7 +498,8 @@ class LiveOrderMgr(OrderManager):
                 # 没有入场，直接本地退出。
                 od.status = InOutStatus.FullExit
                 od.update_exit(price=od.enter.price)
-                await self._finish_order(od)
+                await od.save()
+                self._finish_order(od)
                 await self._cancel_trigger_ods(od)
                 return
         side, amount, price = sub_od.side, sub_od.amount, sub_od.price
@@ -541,7 +536,7 @@ class LiveOrderMgr(OrderManager):
                 await self._cancel_trigger_ods(od)
             if sub_od.status == OrderStatus.Close:
                 logger.debug('fire od: %s %s %s %s', is_enter, sub_od.status, sub_od.filled, sub_od.amount)
-                await self._fire(od, is_enter)
+                self._fire(od, is_enter)
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
 
@@ -641,7 +636,7 @@ class LiveOrderMgr(OrderManager):
         part.exit_tag = ExitTags.third
         part.exit_at = od_time
         part.status = InOutStatus.FullExit
-        await iod.save()
+        iod.save_mem()
         if not part.id:
             # 没有id说明是分离出来的订单，需要保存
             await part.save()
@@ -736,12 +731,13 @@ class LiveOrderMgr(OrderManager):
             if not od.enter.filled:
                 od.status = InOutStatus.FullExit
                 od.update_exit(price=od.enter.price)
-                await self._finish_order(od)
+                await od.save()
+                self._finish_order(od)
                 await self._cancel_trigger_ods(od)
                 # 这里未入场直接退出的，不应该fire
                 return
             logger.debug('exit uncomple od: %s', od)
-            await self._fire(od, True)
+            self._fire(od, True)
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 

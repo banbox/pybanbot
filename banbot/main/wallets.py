@@ -162,7 +162,7 @@ class WalletsLocal:
         :return 实际扣除数量
         '''
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            logger.warning(f'cost_ava wallet expired: expect > {after_ts}, delay: {(after_ts - self.update_at):.3f} s')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet(symbol)
         wallet = self.data[symbol]
@@ -189,7 +189,8 @@ class WalletsLocal:
         扣除后，添加到pending中
         '''
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            delay = after_ts - self.update_at
+            logger.warning(f'cost_frozen wallet expired: expect > {after_ts}, delay: {delay:.3f} s')
         if symbol not in self.data:
             return 0
         wallet = self.data[symbol]
@@ -389,12 +390,12 @@ class WalletsLocal:
             margin_ratio = abs(tot_profit) / wallet.total()
             if margin_ratio > 0.99:
                 # 总亏损超过总资产，爆仓
-                self.on_acc_bomb(exs.quote_code, od_list)
+                self.on_acc_bomb(exs.quote_code)
                 return
         from banbot.exchange import get_exchange
         exchange = get_exchange(exs.exchange, exs.market)
         for od in od_list:
-            if not od.enter.filled:
+            if not od.enter or not od.enter.filled:
                 continue
             cur_price = MarketPrice.get(od.symbol)
             # 计算名义价值
@@ -420,19 +421,18 @@ class WalletsLocal:
             except LackOfCash as e:
                 logger.debug('cash lack, add margin fail: %s %.5f', od.key, e.amount)
 
-    def on_acc_bomb(self, coin: str, od_list: List[InOutOrder]):
+    def on_acc_bomb(self, coin: str):
         """
         账户爆仓，相关订单退出，钱包重置。
         """
         wallet = self.get(coin)
-        for od in od_list:
-            od.local_exit(ExitTags.bomb)
-        wallet.reset()
+        if wallet:
+            wallet.reset()
         raise AccountBomb(coin)
 
     def get(self, symbol: str, after_ts: float = 0):
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            logger.warning(f'get wallet expired: expect > {after_ts}, delay: {(after_ts - self.update_at):.3f} s')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet(symbol)
         return self.data[symbol]

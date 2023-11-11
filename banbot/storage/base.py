@@ -396,7 +396,14 @@ def set_db_events(engine, Session):
 
 
 def detach_obj(sess: SqlSession, obj: BaseDbModel, keep_map=False):
-    sess.expunge(obj)
+    """
+    将一个对象从DbSession中解除关联。
+    :param sess:
+    :param obj: 要解除关联的对象
+    :param keep_map: 默认False，为True时无法访问属性的值
+    """
+    if obj in sess:
+        sess.expunge(obj)
     if not keep_map:
         make_transient(obj)
     return obj

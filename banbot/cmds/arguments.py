@@ -82,7 +82,7 @@ def _reg_down_data(subparsers, **kwargs):
 
 
 def _reg_down_ws(subparsers, **kwargs):
-    from banbot.data.crawler import down_ws
+    from banbot.data.ws.crawler import down_ws
     _reg_sub(subparsers, 'down_ws', [], down_ws, help='download trades and orderbooks', **kwargs)
 
 

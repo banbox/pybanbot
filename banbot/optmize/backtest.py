@@ -15,7 +15,7 @@ class BackTest(Trader):
         super(BackTest, self).__init__(config)
         self.exchange = get_exchange()
         self.wallets = WalletsLocal(self.exchange)
-        self.data_mgr = DBDataProvider(config, self.on_data_feed)
+        self.data_mgr = self._init_data_mgr()
         self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = LocalOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
@@ -28,27 +28,45 @@ class BackTest(Trader):
         self.max_balance = 0
         self.bar_count = 0
         self.graph_data = dict(ava=[], profit=[], real=[], withdraw=[])
+        self.last_check_trades = 0
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
         try:
             await super(BackTest, self).on_data_feed(pair, timeframe, row)
         except AccountBomb as e:
-            date_str = btime.to_datestr(row[0])
-            if self.config.get('charge_on_bomb'):
-                self.reset_wallet(e.coin)
-                self.result['total_invest'] += self.wallets.total_legal(self.quote_symbols)
-                logger.error(f'wallet {e.coin} BOMB at {date_str}, reset wallet and continue...')
-            else:
-                BotGlobal.state = BotState.STOPPED
-                logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
+            self._on_bomb(e, row[0])
             return
+        self._log_state(row[0])
+
+    async def on_pair_trades(self, pair: str, trades: List[dict]):
+        try:
+            await super(BackTest, self).on_pair_trades(pair, trades)
+        except AccountBomb as e:
+            self._on_bomb(e, trades[-1]['timestamp'])
+            return
+        if self.last_check_trades + 60000 > btime.time_ms():
+            return
+        self.last_check_trades = btime.time_ms()
+        self._log_state(btime.time_ms())
+
+    def _on_bomb(self, e: AccountBomb, time_ms: int):
+        date_str = btime.to_datestr(time_ms)
+        if self.config.get('charge_on_bomb'):
+            self.reset_wallet(e.coin)
+            self.result['total_invest'] += self.wallets.total_legal(self.quote_symbols)
+            logger.error(f'wallet {e.coin} BOMB at {date_str}, reset wallet and continue...')
+        else:
+            BotGlobal.state = BotState.STOPPED
+            logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
+
+    def _log_state(self, time_ms: int):
         # 更新总资产
         ava_legal = self.wallets.ava_legal()
         total_legal = self.wallets.total_legal(with_upol=True)
         profit_legal = self.wallets.profit_legal()
         draw_legal = self.wallets.get_withdraw_legal()
-        cur_date = btime.to_datetime(row[0])
+        cur_date = btime.to_datetime(time_ms)
         self.graph_data['real'].append((cur_date, total_legal))
         self.graph_data['ava'].append((cur_date, ava_legal))
         self.graph_data['profit'].append((cur_date, profit_legal))
@@ -57,6 +75,21 @@ class BackTest(Trader):
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
         self.max_balance = max(self.max_balance, quote_legal)
+
+    def _init_data_mgr(self):
+        if self.is_ws_mode():
+            from banbot.data.ws import WSProvider
+            return WSProvider(self.config, self.on_pair_trades)
+        return DBDataProvider(self.config, self.on_data_feed)
+
+    def is_ws_mode(self):
+        tfs = self.config.get('run_timeframes')
+        if tfs and 'ws' in tfs:
+            return True
+        for item in self.config.get('run_policy'):
+            if 'ws' in item['run_timeframes']:
+                return True
+        return False
 
     async def init(self):
         await AppConfig.test_db()
@@ -94,8 +127,10 @@ class BackTest(Trader):
         await self.init()
         BotGlobal.state = BotState.RUNNING
         # 轮训数据
-        async with dba():
-            await self.data_mgr.down_data()
+        if hasattr(self.data_mgr, 'down_data'):
+            # 按ohlcv回测，下载必要数据
+            async with dba():
+                await self.data_mgr.down_data()
         async with dba():
             bt_start = time.monotonic()
             await self.data_mgr.loop_main()
@@ -110,10 +145,9 @@ class BackTest(Trader):
             await BTAnalysis(**self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    async def order_callback(self, od: InOutOrder, is_enter: bool):
-        open_orders = await InOutOrder.open_orders()
+    def order_callback(self, od: InOutOrder, is_enter: bool):
         if is_enter:
-            self.max_open_orders = max(self.max_open_orders, len(open_orders))
+            self.max_open_orders = max(self.max_open_orders, len(BotCache.open_ods))
         elif self.draw_balance_over:
             quote_legal = self.wallets.ava_legal(self.quote_symbols)
             if self.draw_balance_over < quote_legal:
@@ -144,8 +178,7 @@ class BackTest(Trader):
         self.result['abs_profit'] = f"{abs_profit:.3f} {quote_s}"
         self.result['total_profit_pct'] = f"{abs_profit / total_invest * 100:.2f}%"
         if his_orders:
-            total_fee = sum((od.enter.fee + od.exit.fee or 0) * od.enter.amount * od.enter.price
-                            for od in his_orders if od.enter.amount and od.enter.price)
+            total_fee = sum((od.enter.fee + od.exit.fee or 0) for od in his_orders)
             self.result['total_fee'] = f"{total_fee:.3f} {quote_s}"
             tot_amount = sum(r.enter.amount * r.enter.price for r in his_orders
                              if r.enter.amount and r.enter.price)

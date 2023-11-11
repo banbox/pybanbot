@@ -24,6 +24,7 @@ fatal_stop:  # 全局止损，当全局损失达到限制时，禁止下单
   '30': 0.3  # 半小时损失30%
 fatal_stop_hours: 8  # 全局止损的禁止时间，默认8小时
 timerange: "20230701-20230808"  # 使用的K线范围，用于回测
+ws_stamp: null  # WS回测使用的数据集时间戳，不提供时默认使用第一个
 run_timeframes: [5m]
 watch_jobs:  # K线监听执行的任务，仅用于爬虫端运行
   1h: [Demo]

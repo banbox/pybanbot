@@ -43,7 +43,6 @@ async def dump_orders(task_id: int, out_dir: str):
             enter_tag=iod.enter_tag,
         )
         enter_cost = 0
-        profit_val = iod.calc_profit()
         if iod.enter and iod.enter.price and iod.enter.amount:
             enter_cost = iod.enter.price * iod.enter.amount
             if iod.leverage and iod.leverage > 1:
@@ -65,7 +64,7 @@ async def dump_orders(task_id: int, out_dir: str):
                 exit_got=enter_cost + iod.profit,
                 exit_fee=round(iod.exit.fee, 5)
             ))
-        item.update(dict(profit_rate=iod.profit_rate, profit=profit_val))
+        item.update(dict(profit_rate=iod.profit_rate, profit=iod.profit))
         result.append(item)
     df = pd.DataFrame(result)
     out_path = os.path.join(out_dir, 'orders.csv')
