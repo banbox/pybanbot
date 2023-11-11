@@ -162,7 +162,7 @@ class WalletsLocal:
         :return 实际扣除数量
         '''
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            logger.warning(f'cost_ava wallet expired: expect > {after_ts}, delay: {(after_ts - self.update_at):.3f} s')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet(symbol)
         wallet = self.data[symbol]
@@ -189,7 +189,8 @@ class WalletsLocal:
         扣除后，添加到pending中
         '''
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            delay = after_ts - self.update_at
+            logger.warning(f'cost_frozen wallet expired: expect > {after_ts}, delay: {delay:.3f} s')
         if symbol not in self.data:
             return 0
         wallet = self.data[symbol]
@@ -431,7 +432,7 @@ class WalletsLocal:
 
     def get(self, symbol: str, after_ts: float = 0):
         if self.update_at + 1 < after_ts:
-            logger.warning(f'wallet expired: expect > {after_ts}, delay: {after_ts - self.update_at} ms')
+            logger.warning(f'get wallet expired: expect > {after_ts}, delay: {(after_ts - self.update_at):.3f} s')
         if symbol not in self.data:
             self.data[symbol] = ItemWallet(symbol)
         return self.data[symbol]

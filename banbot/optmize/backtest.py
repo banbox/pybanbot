@@ -28,27 +28,45 @@ class BackTest(Trader):
         self.max_balance = 0
         self.bar_count = 0
         self.graph_data = dict(ava=[], profit=[], real=[], withdraw=[])
+        self.last_check_trades = 0
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
         try:
             await super(BackTest, self).on_data_feed(pair, timeframe, row)
         except AccountBomb as e:
-            date_str = btime.to_datestr(row[0])
-            if self.config.get('charge_on_bomb'):
-                self.reset_wallet(e.coin)
-                self.result['total_invest'] += self.wallets.total_legal(self.quote_symbols)
-                logger.error(f'wallet {e.coin} BOMB at {date_str}, reset wallet and continue...')
-            else:
-                BotGlobal.state = BotState.STOPPED
-                logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
+            self._on_bomb(e, row[0])
             return
+        self._log_state(row[0])
+
+    async def on_pair_trades(self, pair: str, trades: List[dict]):
+        try:
+            await super(BackTest, self).on_pair_trades(pair, trades)
+        except AccountBomb as e:
+            self._on_bomb(e, trades[-1]['timestamp'])
+            return
+        if self.last_check_trades + 60000 > btime.time_ms():
+            return
+        self.last_check_trades = btime.time_ms()
+        self._log_state(btime.time_ms())
+
+    def _on_bomb(self, e: AccountBomb, time_ms: int):
+        date_str = btime.to_datestr(time_ms)
+        if self.config.get('charge_on_bomb'):
+            self.reset_wallet(e.coin)
+            self.result['total_invest'] += self.wallets.total_legal(self.quote_symbols)
+            logger.error(f'wallet {e.coin} BOMB at {date_str}, reset wallet and continue...')
+        else:
+            BotGlobal.state = BotState.STOPPED
+            logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
+
+    def _log_state(self, time_ms: int):
         # 更新总资产
         ava_legal = self.wallets.ava_legal()
         total_legal = self.wallets.total_legal(with_upol=True)
         profit_legal = self.wallets.profit_legal()
         draw_legal = self.wallets.get_withdraw_legal()
-        cur_date = btime.to_datetime(row[0])
+        cur_date = btime.to_datetime(time_ms)
         self.graph_data['real'].append((cur_date, total_legal))
         self.graph_data['ava'].append((cur_date, ava_legal))
         self.graph_data['profit'].append((cur_date, profit_legal))

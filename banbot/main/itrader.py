@@ -120,30 +120,45 @@ class Trader:
         if not BotGlobal.is_warmup:
             tracer = InOutTracer(all_open_ods)
             fake_bar = [0, cur_price, cur_price, cur_price, cur_price, 0]
-            self.order_mgr.update_by_bar(all_open_ods, pair, fake_bar)
+            self.order_mgr.update_by_bar(all_open_ods, pair, 'ws', fake_bar)
             chg_ods = tracer.get_changes()
             if chg_ods or BotCache.updod_at + 60 < btime.time():
-                async with dba():
-                    sess: SqlSession = dba.session
-                    BotCache.updod_at = btime.time()
-                    open_ods = await InOutOrder.open_orders()
-                    if chg_ods:
-                        for od in chg_ods:
-                            db_od = await od.attach(sess)
-                            await db_od.save()
-                        await sess.flush()
-                        open_ods = [od for od in open_ods if od.status < InOutStatus.FullExit]
-                    BotCache.open_ods = {od.id: od.detach(sess) for od in open_ods}
-                    all_open_ods = list(BotCache.open_ods.values())
+                all_open_ods = await self._flush_cache_orders(chg_ods)
         pair_ods = [od for od in all_open_ods if od.symbol == pair]
         enter_list, exit_list = self._run_ws(pair_ods, pair, trades)
 
         if enter_list or exit_list:
-            async with dba():
-                ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
-                await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
-                if self.last_check_hang + self.check_hang_intv < btime.time_ms():
-                    await self._check_pair_hang(all_open_ods)
+            if not BotGlobal.live_mode:
+                await self._apply_signals(pair, enter_list, exit_list, all_open_ods)
+            else:
+                async with dba():
+                    await self._apply_signals(pair, enter_list, exit_list, all_open_ods)
+
+    async def _flush_cache_orders(self, chg_ods: List[InOutOrder]):
+        if not BotGlobal.live_mode:
+            for od in chg_ods:
+                od.save_mem()
+            open_ods = await InOutOrder.open_orders()
+            BotCache.open_ods = {od.id: od for od in open_ods}
+            return list(BotCache.open_ods.values())
+        async with dba():
+            sess: SqlSession = dba.session
+            BotCache.updod_at = btime.time()
+            open_ods = await InOutOrder.open_orders()
+            if chg_ods:
+                for od in chg_ods:
+                    db_od = await od.attach(sess)
+                    await db_od.save()
+                await sess.flush()
+                open_ods = [od for od in open_ods if od.status < InOutStatus.FullExit]
+            BotCache.open_ods = {od.id: od.detach(sess) for od in open_ods}
+            return list(BotCache.open_ods.values())
+
+    async def _apply_signals(self, pair: str, enter_list, exit_list, all_open_ods):
+        ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
+        await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
+        if self.last_check_hang + self.check_hang_intv < btime.time_ms():
+            await self._check_pair_hang(all_open_ods)
 
     async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
         ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
@@ -162,7 +177,7 @@ class Trader:
             if not BotGlobal.is_warmup:
                 open_ods = await InOutOrder.open_orders()
                 tracer = InOutTracer(open_ods)
-                self.order_mgr.update_by_bar(open_ods, pair, row)
+                self.order_mgr.update_by_bar(open_ods, pair, timeframe, row)
                 await tracer.save()
                 open_ods = [od for od in open_ods if od.symbol == pair and od.status < InOutStatus.FullExit]
             else:

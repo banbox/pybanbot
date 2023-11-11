@@ -463,12 +463,12 @@ class InOutOrder(BaseDbModel, InfoPart):
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
     def detach(self, sess: SqlSession, keep_map=False):
-        detach_obj(sess, self, keep_map=keep_map)
+        result = detach_obj(sess, self, keep_map=keep_map)
         if self.enter:
-            detach_obj(sess, self.enter, keep_map=keep_map)
+            result.enter = detach_obj(sess, self.enter, keep_map=keep_map)
         if self.exit:
-            detach_obj(sess, self.exit, keep_map=keep_map)
-        return self
+            result.exit = detach_obj(sess, self.exit, keep_map=keep_map)
+        return result
 
     async def attach(self, sess: SqlSession) -> 'InOutOrder':
         if self in sess:

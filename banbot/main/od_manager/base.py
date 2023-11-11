@@ -130,8 +130,6 @@ class OrderManager(metaclass=SingletonArg):
             exit_ods = [od.detach(sess) for od in exit_ods if od]
         for od in enter_ods:
             BotCache.open_ods[od.id] = od
-        if enter_ods:
-            print(f'enter orders: {enter_ods}')
         if edit_triggers:
             edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
             self.submit_triggers(edit_triggers)
@@ -290,7 +288,7 @@ class OrderManager(metaclass=SingletonArg):
         #         logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
         od.save_mem()
 
-    def update_by_bar(self, all_opens: List[InOutOrder], pair: str, row):
+    def update_by_bar(self, all_opens: List[InOutOrder], pair: str, timeframe: str, row):
         """使用价格更新订单的利润等。可能会触发爆仓：AccountBomb"""
         price = float(row[ccol])
         if btime.run_mode not in LIVE_MODES:

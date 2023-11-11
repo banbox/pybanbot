@@ -199,6 +199,7 @@ class my_binanceusdm(binanceusdm):
             await asyncio.sleep(0)
         logger.info(f'trades for {len(self._pairs_init)} pairs loop done')
         BotGlobal.state = BotState.STOPPED
+        await self._reset()
 
     def _load_caches(self, until_ms: int):
         load_num = 0
@@ -219,7 +220,7 @@ class my_binanceusdm(binanceusdm):
                         del self.io_trades[pair]
                         del self.io_books[pair]
                         last_ts = trades[-1]['timestamp'] if trades else None
-                        logger.info(f'read trade eof: {pair}, last: {last_ts}')
+                        logger.debug(f'read trade eof: %s, last: %s', pair, last_ts)
                 else:
                     done_num += 1
             books = self._q_books.get(pair)
@@ -243,7 +244,7 @@ class my_binanceusdm(binanceusdm):
                         del self.io_trades[pair]
                         del self.io_books[pair]
                         last_ts = books[-1]['E'] if books else None
-                        logger.info(f'read odbook eof: {pair}, last: {last_ts}')
+                        logger.debug('read odbook eof: %s, last: %s', pair, last_ts)
                 else:
                     done_num += 1
         if not load_num and done_num == len(self._pairs_init):
@@ -293,7 +294,8 @@ class my_binanceusdm(binanceusdm):
         waits = self.trade_waits.get(pair)
         is_copied = False
         if waits:
-            btime.cur_timestamp = trades[-1]['timestamp'] / 1000
+            if trades:
+                btime.cur_timestamp = trades[-1]['timestamp'] / 1000
             self.trade_waits[pair] = collections.deque()
             for fut in waits:
                 if fut.done():
@@ -335,6 +337,16 @@ class my_binanceusdm(binanceusdm):
                 fut.set_result(book)
                 is_copied = True
         return is_copied
+
+    async def _reset(self):
+        for pair in set(self.book_watis):
+            if self._emit_books(pair, {}):
+                await asyncio.sleep(0)
+        for pair in set(self.trade_waits):
+            if self._emit_trades(pair, []):
+                await asyncio.sleep(0)
+        self.book_watis = dict()
+        self.trade_waits = dict()
 
 
 def get_local_wsexg(config: dict):
