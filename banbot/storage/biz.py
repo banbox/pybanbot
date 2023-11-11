@@ -4,7 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/11/9
 from typing import *
-from banbot.storage import InOutOrder
+from banbot.storage.orders import InOutOrder
 
 
 class BotCache:

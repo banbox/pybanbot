@@ -533,7 +533,7 @@ class LiveOrderMgr(OrderManager):
                 await self._cancel_trigger_ods(od)
             if sub_od.status == OrderStatus.Close:
                 logger.debug('fire od: %s %s %s %s', is_enter, sub_od.status, sub_od.filled, sub_od.amount)
-                await self._fire(od, is_enter)
+                self._fire(od, is_enter)
         except Exception:
             logger.exception(f'error after put exchange order: {od}')
 
@@ -733,7 +733,7 @@ class LiveOrderMgr(OrderManager):
                 # 这里未入场直接退出的，不应该fire
                 return
             logger.debug('exit uncomple od: %s', od)
-            await self._fire(od, True)
+            self._fire(od, True)
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 

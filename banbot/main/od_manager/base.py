@@ -9,7 +9,6 @@ from banbot.main.wallets import WalletsLocal
 from banbot.storage.orders import *
 from banbot.util.misc import *
 from banbot.util.common import SingletonArg
-from banbot.util.num_utils import to_pytypes
 
 min_dust = 0.00000001
 
@@ -66,12 +65,11 @@ class OrderManager(metaclass=SingletonArg):
         for k, v in fatal_cfg.items():
             self.fatal_stop[int(k)] = v
 
-    async def _fire(self, od: InOutOrder, enter: bool):
-        from banbot.util.misc import run_async
+    def _fire(self, od: InOutOrder, enter: bool):
         pair_tf = f'{self.name}_{self.market_type}_{od.symbol}_{od.timeframe}'
         with TempContext(pair_tf):
             try:
-                await run_async(self.callback, od, enter)
+                self.callback(od, enter)
             except Exception:
                 logger.exception(f'fire od callback fail {od.id} {od}, enter: {enter} {traceback.format_stack()}')
 
@@ -107,8 +105,7 @@ class OrderManager(metaclass=SingletonArg):
             enter_ods, exit_ods = [], []
             if enters:
                 if btime.allow_order_enter(ctx) and self.allow_pair(exs.symbol):
-                    open_ods = await InOutOrder.open_orders()
-                    if len(open_ods) < self.max_open_orders:
+                    if len(BotCache.open_ods) < self.max_open_orders:
                         for stg_name, sigin in enters:
                             try:
                                 ent_od = await self.enter_order(ctx, stg_name, sigin, do_check=False)
@@ -117,7 +114,7 @@ class OrderManager(metaclass=SingletonArg):
                                 logger.warning(f'enter fail, lack of cash: {e} {stg_name} {sigin}')
                                 await self.on_lack_of_cash()
                             except Exception as e:
-                                logger.warning(f'enter fail: {e} {stg_name} {sigin}')
+                                logger.exception(f'enter fail: {e} {stg_name} {sigin}')
                 else:
                     logger.debug('pair %s enter not allow: %s', exs.symbol, enters)
             if exits:
@@ -126,12 +123,15 @@ class OrderManager(metaclass=SingletonArg):
                                                                 with_unopen=True))
         else:
             enter_ods, exit_ods = [], []
-        # 返回值不处理了，这不不用detach
-        # if btime.run_mode in btime.LIVE_MODES:
-        #     sess = dba.session
-        #     await sess.flush()
-        #     enter_ods = [od.detach(sess) for od in enter_ods if od]
-        #     exit_ods = [od.detach(sess) for od in exit_ods if od]
+        if btime.run_mode in btime.LIVE_MODES:
+            sess = dba.session
+            await sess.flush()
+            enter_ods = [od.detach(sess) for od in enter_ods if od]
+            exit_ods = [od.detach(sess) for od in exit_ods if od]
+        for od in enter_ods:
+            BotCache.open_ods[od.id] = od
+        if enter_ods:
+            print(f'enter orders: {enter_ods}')
         if edit_triggers:
             edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
             self.submit_triggers(edit_triggers)
@@ -175,7 +175,7 @@ class OrderManager(metaclass=SingletonArg):
             timeframe=timeframe,
             enter_tag=tag,
             enter_at=btime.time_ms(),
-            init_price=to_pytypes(ctx[bar_arr][-1][ccol]),
+            init_price=MarketPrice.get(exs.symbol),
             strategy=strategy
         )
         await od.save()
@@ -290,25 +290,21 @@ class OrderManager(metaclass=SingletonArg):
         #         logger.error('%s fee Over limit: %f', od.symbol, self.pair_fee_limits.get(od.symbol, 0))
         od.save_mem()
 
-    async def update_by_bar(self, row):
-        exs, _ = get_cur_symbol()
-        op_orders = await InOutOrder.open_orders()
-        self.update_by_price(op_orders, exs.symbol, float(row[ccol]))
-
-    def update_by_price(self, op_orders: List[InOutOrder], pair: str, price: float):
+    def update_by_bar(self, all_opens: List[InOutOrder], pair: str, row):
         """使用价格更新订单的利润等。可能会触发爆仓：AccountBomb"""
+        price = float(row[ccol])
         if btime.run_mode not in LIVE_MODES:
             self.wallets.update_at = btime.time()
-        cur_orders = [od for od in op_orders if od.symbol == pair]
+        cur_orders = [od for od in all_opens if od.symbol == pair]
         # 更新订单利润
         close_price = float(price)
         for od in cur_orders:
             od.update_profits(close_price)
-        if op_orders and self.market_type == 'future' and not btime.prod_mode():
+        if all_opens and self.market_type == 'future' and not btime.prod_mode():
             # 为合约更新此定价币的所有订单保证金和钱包情况
             exs = ExSymbol.get(self.exchange.name, self.market_type, pair)
             quote_suffix = exs.quote_suffix()
-            quote_orders = [od for od in op_orders if od.symbol.endswith(quote_suffix)]
+            quote_orders = [od for od in all_opens if od.symbol.endswith(quote_suffix)]
             # 这里可能触发爆仓：AccountBomb
             self.wallets.update_ods(quote_orders)
 

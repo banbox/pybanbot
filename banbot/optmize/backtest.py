@@ -127,10 +127,9 @@ class BackTest(Trader):
             await BTAnalysis(**self.result).save(self.out_dir)
         print(f'complete, write to: {self.out_dir}')
 
-    async def order_callback(self, od: InOutOrder, is_enter: bool):
-        open_orders = await InOutOrder.open_orders()
+    def order_callback(self, od: InOutOrder, is_enter: bool):
         if is_enter:
-            self.max_open_orders = max(self.max_open_orders, len(open_orders))
+            self.max_open_orders = max(self.max_open_orders, len(BotCache.open_ods))
         elif self.draw_balance_over:
             quote_legal = self.wallets.ava_legal(self.quote_symbols)
             if self.draw_balance_over < quote_legal:

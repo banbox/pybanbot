@@ -394,7 +394,7 @@ class WalletsLocal:
         from banbot.exchange import get_exchange
         exchange = get_exchange(exs.exchange, exs.market)
         for od in od_list:
-            if not od.enter.filled:
+            if not od.enter or not od.enter.filled:
                 continue
             cur_price = MarketPrice.get(od.symbol)
             # 计算名义价值

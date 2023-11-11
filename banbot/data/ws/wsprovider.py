@@ -42,7 +42,7 @@ class WSProvider:
             try:
                 await callback(*args, **kwargs)
             except Exception:
-                logger.exception('RTData Callback Exception %s %s', args, kwargs)
+                logger.exception('RTData Callback Exception')
         self._callback = handler
 
     def sub_pairs(self, pairs: Iterable[str]):
@@ -70,6 +70,11 @@ class WSProvider:
             self.odbooks[books['symbol']] = books
             await asyncio.sleep(0)
         logger.info('WSProvider._watch_books stopped.')
+
+    def get_latest_ohlcv(self, pair: str):
+        from banbot.main.addons import MarketPrice
+        price = MarketPrice.get(pair)
+        return [0, price, price, price, price, 0]
 
 
 async def _run_test():
