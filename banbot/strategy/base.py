@@ -234,7 +234,7 @@ class BaseStrategy:
         elif stoploss:
             if self.exg_stoploss:
                 cur_stoploss = stoploss
-            else:
+            elif BotGlobal.live_mode:
                 logger.warning(f'[{self.name}] stoploss on exchange is disabled for {self.symbol}')
         fix_tp_price = self.short_tp_price if short else self.long_tp_price
         cur_takeprofit = None
@@ -243,7 +243,7 @@ class BaseStrategy:
         elif takeprofit:
             if self.exg_takeprofit:
                 cur_takeprofit = takeprofit
-            else:
+            elif BotGlobal.live_mode:
                 logger.warning(f'[{self.name}] takeprofit on exchange is disabled for {self.symbol}')
         cur_stoploss, cur_takeprofit = validate_trigger_price(self.symbol.symbol, short, cur_stoploss, cur_takeprofit)
         if cur_stoploss:
@@ -329,10 +329,9 @@ class BaseStrategy:
                     else:
                         skip_takeprofit += 1
                         od.set_info(takeprofit_price=None)
-        if skip_stoploss:
-            logger.warning(f'[{self.name}] {self.symbol} stoploss on exchange is disabled, {skip_stoploss} orders')
-        if skip_takeprofit:
-            logger.warning(f'[{self.name}] {self.symbol} takeprofit on exchange is disabled, {skip_takeprofit} orders')
+        if BotGlobal.live_mode and (skip_stoploss or skip_takeprofit):
+            prefix = f'[{self.name}] {self.symbol} triggers on exchange is disabled, '
+            logger.warning(f'{prefix} stoploss:{skip_stoploss}, takeprofit:{skip_takeprofit}')
         return edit_ods
 
     def on_bot_stop(self):
