@@ -182,7 +182,7 @@ class BackTest(Trader):
             self.result['total_fee'] = f"{total_fee:.3f} {quote_s}"
             tot_amount = sum(r.enter.amount * r.enter.price for r in his_orders
                              if r.enter.amount and r.enter.price)
-            self.result['avg_profit_pct'] = f"{abs_profit / total_invest / len(his_orders) * 1000:.3f}%o"
+            self.result['avg_profit_pct'] = f"{abs_profit / total_invest / len(his_orders) * 1000:.3f}‰"
             self.result['avg_stake_amount'] = f"{tot_amount / len(his_orders):.3f} {quote_s}"
             self.result['tot_stake_amount'] = f"{tot_amount:.3f} {quote_s}"
             od_sort = sorted(his_orders, key=lambda x: x.profit_rate)

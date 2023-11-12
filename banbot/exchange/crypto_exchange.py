@@ -346,15 +346,20 @@ class CryptoExchange:
         返回值目前只用到：rate + currency
         返回：{'type': 'taker', 'currency': 'USDT', 'rate': 0.001, 'cost': 0.029733297910755734}
         '''
-        taker_maker = 'maker' if order_type != OrderType.Market.value else 'taker'
+        taker_maker = 'maker' if order_type == OrderType.Limit.value else 'taker'
         cache = self.pair_fees.get(f'{symbol}_{taker_maker}')
         if cache:
             return dict(rate=cache[1], currency=cache[0])
         fee_limit = self.pair_fee_limits.get(symbol)
+        quote_code = symbol.split('/')[1].split(':')[0]
         if fee_limit is not None and btime.run_mode != RunMode.PROD:
             # 非生产模式，直接使用指定手续费限制作为手续费率
-            return dict(rate=fee_limit, currency=symbol.split('/')[0].split(':')[0])
+            return dict(rate=fee_limit, currency=quote_code)
         calc_fee = self.api_async.calculate_fee(symbol, order_type, side, amount, price, taker_maker)
+        if amount and price and calc_fee['currency'] == quote_code and calc_fee['rate']:
+            # ccxt对期货手续费计算不正确：['UNFI/USDT:USDT', None, 'buy', 14.4, 6.908, 'maker']
+            # {'type': 'maker', 'currency': 'USDT', 'rate': 0.0002, 'cost': 0.00288}
+            calc_fee['cost'] = calc_fee['rate'] * (amount * price)
         if fee_limit is not None and calc_fee['rate'] > fee_limit:
             # 有手续费限制，且计算的手续费超过限制。
             raise ValueError(f'{self.name}/{symbol} fee rate exceed limit {fee_limit}')

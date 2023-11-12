@@ -320,24 +320,28 @@ class InOutOrder(BaseDbModel, InfoPart):
         if not self.status or not self.enter or not self.enter.average or not self.enter.filled:
             return 0
         if price is None:
-            price = self.exit.price if self.exit and self.exit.price else self.enter.average
+            if self.exit:
+                price = self.exit.average or self.exit.price or self.enter.average
+            else:
+                price = self.enter.average
         ent_quote_value = self.enter.average * self.enter.filled
         profit_val = self.enter.filled * price - ent_quote_value
         if self.short:
             profit_val = 0 - profit_val
         return profit_val
 
-    def update_profits(self, price: float):
-        '''
+    def update_profits(self, price: float = None):
+        """
         此方法由接口调用，策略中不应该调用此方法。
         :param price:
         :return:
-        '''
+        """
         profit_val = self.calc_profit(price)
         if not profit_val:
             return
-        fee_cost = ((self.enter.fee or 0) if self.enter else 0) + ((self.exit.fee or 0) if self.exit else 0)
-        self.profit = profit_val - fee_cost
+        enter_fee = (self.enter.fee or 0) if self.enter else 0
+        exit_fee = (self.exit.fee or 0) if self.exit else 0
+        self.profit = profit_val - enter_fee - exit_fee
         ent_price = self.enter.average or self.enter.price or self.init_price
         ent_quote_value = ent_price * self.enter.filled
         if self.leverage:
@@ -394,9 +398,8 @@ class InOutOrder(BaseDbModel, InfoPart):
     def _save_to_mem(self):
         if self.status < InOutStatus.FullExit:
             self._open_ods[self.id] = self
-        else:
-            if self.id in self._open_ods:
-                self._open_ods.pop(self.id)
+        elif self.id in self._open_ods:
+            self._open_ods.pop(self.id)
             if self.enter.filled:
                 self._his_ods.append(self)
 

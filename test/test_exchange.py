@@ -74,6 +74,15 @@ async def test_watch_mark_prices():
         logger.info(f'mark price: {len(res)}')
 
 
+async def test_calc_fee():
+    AppConfig.init_by_args()
+    exchange = get_exchange()
+    await exchange.load_markets()
+    symbol, order_type, side, amount, price, taker_maker = 'UNFI/USDT:USDT', None, 'buy', 14.4, 6.908, 'maker'
+    fee = exchange.calc_fee(symbol, order_type, side, amount, price)
+    print(fee)
+
+
 if __name__ == '__main__':
-    asyncio.run(test_watch_trades())
+    asyncio.run(test_calc_fee())
     # asyncio.run(test_watch_mark_prices())

@@ -277,8 +277,7 @@ class OrderManager(metaclass=SingletonArg):
 
     def _finish_order(self, od: InOutOrder):
         # fee_rate = (od.enter.fee or 0) + (od.exit.fee or 0)
-        if od.exit.price and od.enter.price:
-            od.update_profits(od.exit.price)
+        od.update_profits()
         if od.id in BotCache.open_ods:
             del BotCache.open_ods[od.id]
         # if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:

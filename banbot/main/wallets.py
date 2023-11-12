@@ -340,7 +340,8 @@ class WalletsLocal:
         cur_fee = sub_od.fee
         if exs.market == 'future':
             # 期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
-            self.cancel(od.key, exs.quote_code, add_amount=od.profit - cur_fee, from_pending=False)
+            # 这里profit扣除了入场和出场手续费，前面入场手续费已扣过了，所以这里需要加入场手续费
+            self.cancel(od.key, exs.quote_code, add_amount=od.profit + od.enter.fee, from_pending=False)
         elif od.short:
             # 空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
             org_amount = od.enter.filled  # 这里应该取卖单的数量，才能完全平掉
