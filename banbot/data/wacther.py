@@ -174,13 +174,13 @@ class KlineLiveConsumer(ClientIO):
         if self.realtime:
             ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
             if ohlc_arr:
-                bar_ms = int(ohlc_arr[-1, 0])
+                bar_ms = int(ohlc_arr[-1][0])
                 BotCache.set_pair_ts(pair, bar_ms, 60000)
             await self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
             return True
         ohlc_arr, fetch_tfsecs = msg_data
         if ohlc_arr:
-            bar_ms = int(ohlc_arr[-1, 0])
+            bar_ms = int(ohlc_arr[-1][0])
             BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
         job = self.jobs[pair]
         if fetch_tfsecs < job.tf_secs:
