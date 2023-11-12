@@ -88,7 +88,6 @@ class Trader:
         return stg_obj
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
-        BotGlobal.last_bar_ms = btime.time_ms()
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
             self.last_process = btime.utcstamp()
@@ -110,7 +109,6 @@ class Trader:
     async def on_pair_trades(self, pair: str, trades: List[dict]):
         if not trades:
             return
-        BotGlobal.last_bar_ms = btime.time_ms()
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             self.last_process = btime.utcstamp()
         # 更新最新价格

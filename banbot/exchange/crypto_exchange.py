@@ -667,8 +667,8 @@ class CryptoExchange:
         更新所有币种的价格。
         此方法运行一段时间后会卡住，请使用watch_mark_prices
         '''
-        from banbot.storage import BotGlobal
-        if not BotGlobal.live_mode or (btime.time_ms() - BotGlobal.last_bar_ms) > 20000:
+        from banbot.storage import BotGlobal, BotCache
+        if not BotGlobal.live_mode or (btime.time_ms() - BotCache.last_bar_ms) > 20000:
             # 只在收到一个bar的后续20s内允许更新，足够处理订单，否则太频繁容易被封ip
             return
         try:
@@ -831,12 +831,12 @@ class CryptoExchange:
     async def reconnect(self):
         try:
             await self.api_async.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f'close {self.name}.async error: {e}')
         try:
             await self.api_ws.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f'close {self.name}.ws error: {e}')
         self.api_async, self.api_ws = _init_exchange(self.config, True, self.name, self.market_type)
         await self.load_markets()
 

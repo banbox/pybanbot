@@ -141,6 +141,8 @@ class LiveTrader(Trader):
         self._run_tasks.append(asyncio.create_task(BanEvent.run_forever()))
         # 监听交易对变化
         BanEvent.on('set_pairs', self.add_del_pairs, with_db=True)
+        # 监听K线是否超时
+        self._run_tasks.append(asyncio.create_task(BotCache.run_bar_waiter()))
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([

@@ -209,7 +209,8 @@ class BaseStrategy:
         from banbot.util.trade_utils import validate_trigger_price
         if short and not self.open_short or not short and not self.open_long:
             tag = 'short' if short else 'long'
-            logger.warning(f'[{self.name}] open {tag} is disabled for {self.symbol}')
+            if BotGlobal.live_mode:
+                logger.warning(f'[{self.name}] open {tag} is disabled for {self.symbol}')
             return
         od_args = dict(tag=tag, short=short, **kwargs)
         if leverage:

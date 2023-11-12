@@ -5,7 +5,7 @@
 # Date  : 2023/4/30
 import asyncio
 
-from banbot.storage import BotGlobal
+from banbot.storage import BotGlobal, BotCache
 from banbot.util import btime
 from banbot.util.common import logger
 from banbot.util.banio import ClientIO
@@ -158,6 +158,8 @@ class KlineLiveConsumer(ClientIO):
             for p in batch_pairs:
                 if p in self.jobs:
                     del self.jobs[p]
+                    if p in BotCache.pair_copied_at:
+                        del BotCache.pair_copied_at[p]
             await self.write_msg('unsubscribe', tags)
             # 其他端可能还需要此数据，这里不能直接取消。
             # TODO: spider端应保留引用计数，没有客户端需要的才可删除
@@ -171,9 +173,15 @@ class KlineLiveConsumer(ClientIO):
             return False
         if self.realtime:
             ohlc_arr, fetch_tfsecs, update_tfsecs = msg_data
+            if ohlc_arr:
+                bar_ms = int(ohlc_arr[-1, 0])
+                BotCache.set_pair_ts(pair, bar_ms, 60000)
             await self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, update_tfsecs)
             return True
         ohlc_arr, fetch_tfsecs = msg_data
+        if ohlc_arr:
+            bar_ms = int(ohlc_arr[-1, 0])
+            BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
         job = self.jobs[pair]
         if fetch_tfsecs < job.tf_secs:
             old_ohlcvs = [job.wait_bar] if job.wait_bar else []

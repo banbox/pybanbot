@@ -506,6 +506,24 @@ class LiveSpider(ServerIO):
             await asyncio.sleep(1)
             logger.info('try restart spider...')
 
+    @classmethod
+    async def run_timer_reset(cls):
+        """每隔24H重置ccxt交易所，不然websocket订阅会有问题"""
+        from croniter import croniter
+        # 在每天的00:11重置更新
+        loop = croniter('11 0 * * *')
+        while BotGlobal.state == BotState.RUNNING:
+            wait_ts = loop.next() - btime.time()
+            await asyncio.sleep(wait_ts)
+            if not cls.obj:
+                continue
+            for key, miner in cls.obj.miners.items():
+                logger.info(f'restart exchange: {key}')
+                try:
+                    await miner.exchange.reconnect()
+                except Exception:
+                    logger.exception(f'restart {key} fail')
+
 
 async def run_spider_forever(args: dict = None):
     '''
@@ -514,8 +532,10 @@ async def run_spider_forever(args: dict = None):
     from banbot.worker.top_change import TopChange
     from banbot.worker.watch_job import run_watch_jobs
     logger.info('start top change update timer...')
+    BotGlobal.state = BotState.RUNNING
     await TopChange.start()
     asyncio.create_task(run_watch_jobs())
+    asyncio.create_task(LiveSpider.run_timer_reset())
     run_consumers(5)
     await LiveSpider.run_spider()
     # await TopChange.clear()
