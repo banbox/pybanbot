@@ -177,21 +177,23 @@ class LocalOrderManager(OrderManager):
             else:
                 # 已入场完成，尚未出现出场信号，检查是否触发止损
                 if not od.exit_tag:
-                    self._check_od_trigger(od, candle)
+                    self._check_od_trigger(od, cur_candle)
                 continue
             # 更新待执行的订单
             od_type = sub_od.order_type or self.od_type
             if od_type == OrderType.Limit.value and sub_od.price:
                 price = sub_od.price
                 if sub_od.side == 'buy':
-                    if price > cur_candle[ocol]:
-                        price = cur_candle[ocol]
-                    elif price < cur_candle[lcol]:
+                    if price < cur_candle[lcol]:
                         continue
+                    if price > cur_candle[ocol]:
+                        # 买价高于市价，以市价成交
+                        price = cur_candle[ocol]
                 elif sub_od.side == 'sell':
                     if price > cur_candle[hcol]:
                         continue
                     elif price < cur_candle[ocol]:
+                        # 卖价低于市价，以市价成交
                         price = cur_candle[ocol]
             else:
                 # 按网络延迟，模拟成交价格，和开盘价接近

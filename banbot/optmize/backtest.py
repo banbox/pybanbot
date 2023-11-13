@@ -78,8 +78,8 @@ class BackTest(Trader):
 
     def _init_data_mgr(self):
         if self.is_ws_mode():
-            from banbot.data.ws import WSProvider
-            return WSProvider(self.config, self.on_pair_trades)
+            from banbot.data.ws import LocalWSProvider
+            return LocalWSProvider(self.config, self.on_pair_trades)
         return DBDataProvider(self.config, self.on_data_feed)
 
     def is_ws_mode(self):

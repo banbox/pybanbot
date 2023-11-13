@@ -4,4 +4,4 @@
 # Author: anyongjin
 # Date  : 2023/11/4
 from banbot.data.ws.crawler import down_ws
-from banbot.data.ws.wsprovider import WSProvider
+from banbot.data.ws.wsprovider import WSProvider, LocalWSProvider, LiveWSProvider

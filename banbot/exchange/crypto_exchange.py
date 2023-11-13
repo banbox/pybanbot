@@ -114,11 +114,13 @@ def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
     return exchange, exg_args
 
 
-def _create_exchange(is_ws: bool, cfg: dict, exg_name: str, market_type: str = None):
+def create_ccxt_exchange(is_ws: bool, cfg: dict, exg_name: str = None, market_type: str = None):
     """根据交易所名称和市场初始化交易所对象"""
     run_env = cfg["env"]
     if not market_type:
         market_type = cfg['market_type']
+    if not exg_name:
+        exg_name = cfg['exchange']['name']
     cls_name = exg_name
     if market_type == 'future':
         cls_name = exg_fut_map.get(exg_name) or exg_name
@@ -141,10 +143,10 @@ def _create_exchange(is_ws: bool, cfg: dict, exg_name: str, market_type: str = N
 def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
         -> Tuple[ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
     apply_exg_proxy(exg_name, cfg)
-    exchange_async = _create_exchange(False, cfg, exg_name, market_type)
+    exchange_async = create_ccxt_exchange(False, cfg, exg_name, market_type)
     if not with_ws:
         return exchange_async, None
-    exchange_ws = _create_exchange(True, cfg, exg_name, market_type)
+    exchange_ws = create_ccxt_exchange(True, cfg, exg_name, market_type)
     return exchange_async, exchange_ws
 
 

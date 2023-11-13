@@ -294,9 +294,8 @@ class OrderManager(metaclass=SingletonArg):
             self.wallets.update_at = btime.time()
         cur_orders = [od for od in all_opens if od.symbol == pair]
         # 更新订单利润
-        close_price = float(price)
         for od in cur_orders:
-            od.update_profits(close_price)
+            od.update_profits(price)
         if all_opens and self.market_type == 'future' and not btime.prod_mode():
             # 为合约更新此定价币的所有订单保证金和钱包情况
             exs = ExSymbol.get(self.exchange.name, self.market_type, pair)
