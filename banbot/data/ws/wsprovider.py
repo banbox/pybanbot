@@ -90,6 +90,7 @@ class LocalWSProvider(WSProvider):
 
     async def loop_main(self):
         from banbot.util.misc import run_async
+        from banbot.util import btime
         await self.exg.load_markets()
         BotGlobal.state = BotState.RUNNING
         asyncio.create_task(self.exg.run_loop())
@@ -102,6 +103,7 @@ class LocalWSProvider(WSProvider):
                         self.odbooks[pair] = data
                 elif dtype == 'trade':
                     if data:
+                        btime.cur_timestamp = data[-1]['timestamp'] / 1000
                         await run_async(self._callback, pair, data)
                 else:
                     logger.error(f'not support dtype: {dtype}')

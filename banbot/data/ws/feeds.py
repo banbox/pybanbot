@@ -122,7 +122,7 @@ class my_binanceusdm(binanceusdm):
         return snapshot
 
     async def run_loop(self):
-        btime.cur_timestamp = 0
+        btime.cur_timestamp = 1
         while True:
             if not self._pairs_init:
                 await asyncio.sleep(0.05)

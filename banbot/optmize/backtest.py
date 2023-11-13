@@ -29,6 +29,8 @@ class BackTest(Trader):
         self.bar_count = 0
         self.graph_data = dict(ava=[], profit=[], real=[], withdraw=[])
         self.last_check_trades = 0
+        self.daterange_from = None
+        self.daterange_to = None
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
@@ -45,7 +47,7 @@ class BackTest(Trader):
         except AccountBomb as e:
             self._on_bomb(e, trades[-1]['timestamp'])
             return
-        if self.last_check_trades + 60000 > btime.time_ms():
+        if self.last_check_trades + 5000 > btime.time_ms():
             return
         self.last_check_trades = btime.time_ms()
         self._log_state(btime.time_ms())
@@ -61,6 +63,9 @@ class BackTest(Trader):
             logger.error(f'wallet {e.coin} BOMB at {date_str}, exit')
 
     def _log_state(self, time_ms: int):
+        if not self.daterange_from:
+            self.daterange_from = time_ms
+        self.daterange_to = time_ms
         # 更新总资产
         ava_legal = self.wallets.ava_legal()
         total_legal = self.wallets.total_legal(with_upol=True)
@@ -165,8 +170,8 @@ class BackTest(Trader):
         self.result['final_withdraw'] = self.wallets.get_withdraw_legal(self.quote_symbols)
         quote_s = 'USD'
         timerange = self.config['timerange']
-        self.result['date_from'] = btime.to_datestr(timerange.startts)
-        self.result['date_to'] = btime.to_datestr(timerange.stopts)
+        self.result['date_from'] = btime.to_datestr(self.daterange_from or timerange.startts)
+        self.result['date_to'] = btime.to_datestr(self.daterange_to or timerange.stopts)
         self.result['max_open_orders'] = self.max_open_orders
         self.result['bar_num'] = self.bar_count
         his_orders = await InOutOrder.his_orders()
