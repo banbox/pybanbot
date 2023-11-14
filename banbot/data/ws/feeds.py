@@ -3,17 +3,16 @@
 # File  : feeds.py
 # Author: anyongjin
 # Date  : 2023/11/4
-import collections
 import os
 import pickle
 import asyncio
 from typing import *
 from ccxt.pro.binanceusdm import binanceusdm
 from ccxt.async_support.base.ws.client import Client
-from asyncio import Future
 
 from banbot.config.consts import BotState
 from banbot.storage import BotGlobal
+from banbot.data.feeder import DataFeeder
 from banbot.util import btime
 from banbot.util.common import logger
 
@@ -290,3 +289,11 @@ def get_local_wsexg(config: dict):
         if market == 'future':
             return exg_name, my_binanceusdm
     raise ValueError(f'unsupport local exchange: {exg_name}.{market}')
+
+
+class LiveWSFeeder(DataFeeder):
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable):
+        super().__init__(pair, tf_warms, callback)
+
+    async def on_new_data(self, trades: List[dict]):
+        await self.callback(self.pair, trades)

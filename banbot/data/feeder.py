@@ -19,12 +19,10 @@ class DataFeeder(Watcher):
     支持预热数据。每个策略+交易对全程单独预热，不可交叉预热，避免btime被污染。
     LiveFeeder新交易对和新周期都需要预热；HistFeeder仅新周期需要预热
     '''
-    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False):
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable):
         super(DataFeeder, self).__init__(callback)
         self.pair = pair
         self.states: List[PairTFCache] = []
-        self.next_at: int = 0  # 下一次期望收到bar的毫秒时间
-        self.auto_prefire = auto_prefire
         self.sub_tflist(*tf_warms.keys())
         self.wait_bar = None  # 外部用作缓存，记录未完成的bar
 
@@ -51,6 +49,14 @@ class DataFeeder(Watcher):
         self.states.extend(new_states)
         self.states = sorted(self.states, key=lambda x: x.tf_secs)
         return timeframes
+
+
+class KLineFeeder(DataFeeder):
+
+    def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False):
+        super().__init__(pair, tf_warms, callback)
+        self.next_at: int = 0  # 下一次期望收到bar的毫秒时间
+        self.auto_prefire = auto_prefire
 
     async def warm_tfs(self, tf_datas: Dict[str, List[Tuple]]) -> Optional[int]:
         '''
@@ -122,7 +128,7 @@ class DataFeeder(Watcher):
         return bool(min_finished)
 
 
-class HistDataFeeder(DataFeeder):
+class HistKLineFeeder(KLineFeeder):
     '''
     历史数据反馈器。是文件反馈器和数据库反馈器的基类。
     可通过next_at属性获取下个bar的达到时间。按到达时间对所有Feeder排序。
@@ -130,7 +136,7 @@ class HistDataFeeder(DataFeeder):
     '''
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None):
-        super(HistDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire)
+        super(HistKLineFeeder, self).__init__(pair, tf_warms, callback, auto_prefire)
         # 回测取历史数据，如时间段未指定时，应使用真实的时间
         creal_time = btime.utctime()
         if not timerange:
@@ -165,11 +171,11 @@ class HistDataFeeder(DataFeeder):
         pass
 
 
-class FileDataFeeder(HistDataFeeder):
+class FileKLineFeeder(HistKLineFeeder):
 
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, data_dir: str,
                  auto_prefire=False, timerange: Optional[TimeRange] = None):
-        super(FileDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
+        super(FileKLineFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self.data_dir = data_dir
         self.min_tfsecs = self.states[0].tf_secs
         self.data_path, self.fetch_tfsecs = parse_data_path(self.data_dir, self.pair, self.min_tfsecs)
@@ -191,11 +197,11 @@ class FileDataFeeder(HistDataFeeder):
         self._next_arr = ret_arr
 
 
-class DBDataFeeder(HistDataFeeder):
+class DBKLineFeeder(HistKLineFeeder):
 
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None, market: str = None):
-        super(DBDataFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
+        super(DBKLineFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
         self._offset_ts = int(self.timerange.startts * 1000)
         app_config = AppConfig.get()
         exg_name = app_config['exchange']['name']
@@ -255,7 +261,7 @@ class DBDataFeeder(HistDataFeeder):
         self.row_id += 1
 
 
-class LiveDataFeader(DBDataFeeder):
+class LiveKLineFeader(DBKLineFeeder):
     '''
     每个Feeder对应一个交易对。可包含多个时间维度。
     支持动态添加时间维度。
@@ -267,7 +273,7 @@ class LiveDataFeader(DBDataFeeder):
 
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, market: str = None):
         # 实盘数据的auto_prefire在爬虫端进行。
-        super(LiveDataFeader, self).__init__(pair, tf_warms, callback, market=market)
+        super(LiveKLineFeader, self).__init__(pair, tf_warms, callback, market=market)
 
     # def _get_finish_bars(self, state: PairTFCache, details: List[Tuple], fetch_intv: int) -> Tuple[List[Tuple], bool]:
     #     if fetch_intv < state.tf_secs:

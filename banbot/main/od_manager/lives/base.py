@@ -833,6 +833,9 @@ class LiveOrderMgr(OrderManager):
 
     @loop_forever
     async def trail_open_orders_forever(self):
+        if not self.config.get('auto_edit_limit'):
+            # 未启用，退出
+            return
         timeouts = self.config.get('limit_vol_secs', 5) * 2
         if not btime.prod_mode():
             return
@@ -906,18 +909,6 @@ class LiveOrderMgr(OrderManager):
             await self.exchange.update_symbol_leverages([symbol], leverage)
         else:
             self.exchange.leverages[symbol].leverage = leverage
-
-    @loop_forever
-    async def watch_price_forever(self):
-        if self.market_type != 'future':
-            return 'exit'
-        try:
-            price_list = await self.exchange.watch_mark_prices()
-        except ccxt.NetworkError as e:
-            logger.error(f'watch_price_forever net error: {e}')
-            return
-        for item in price_list:
-            MarketPrice.set_new_price(item['symbol'], item['markPrice'])
 
     async def cleanup(self):
         if btime.run_mode not in btime.LIVE_MODES:

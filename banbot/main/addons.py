@@ -17,13 +17,9 @@ class MarketPrice:
         '''
         获取指定币种的价格
         '''
-        from banbot.storage import BotGlobal
         is_pair = len(symbol.split('/')) > 1
-        if BotGlobal.live_mode:
-            if symbol in cls.prices:
-                return cls.prices[symbol]
-            if is_pair:
-                cls.prices[symbol] = None  # 记录下，实盘时会定期更新最新价格
+        if symbol in cls.prices:
+            return cls.prices[symbol]
         if symbol in cls.bar_prices:
             return cls.bar_prices[symbol]
         elif not is_pair and symbol.find('USD') >= 0:

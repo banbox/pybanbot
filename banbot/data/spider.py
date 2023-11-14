@@ -200,6 +200,24 @@ class MinerJob(PairTFCache):
         return save_tf, check_intv
 
 
+async def run_price_watch(spider: 'LiveSpider', exchange: CryptoExchange):
+    if exchange.market_type != 'future':
+        logger.info(f'run_price_watch not support market: {exchange.market_type}, exit')
+        return
+    send_key = f'update_price_{exchange.name}.{exchange.market_type}'
+    while BotGlobal.state == BotState.RUNNING:
+        try:
+            price_list = await exchange.watch_mark_prices()
+            await spider.broadcast(send_key, price_list)
+        except ccxt.NetworkError as e:
+            logger.error(f'run_price_watch net error: {e}')
+            continue
+        except Exception:
+            logger.exception(f'run_price_watch error')
+            continue
+    logger.info('run_price_watch stopped')
+
+
 class WebsocketWatcher:
 
     def __init__(self, exg_name: str, market: str, pair: str):
@@ -336,8 +354,75 @@ class LiveMiner:
         self.socks: Dict[str, OhlcvWatcher] = dict()
         self.timeframe = timeframe
         self.tf_msecs = tf_to_secs(self.timeframe) * 1000
+        self.ws_pairs = []
+        self.ws_started = False
 
-    async def sub_pair(self, pair: str):
+    async def init(self):
+        await self.exchange.load_markets()
+
+    def start_watch_price(self):
+        if self.exchange.market_type == 'future':
+            asyncio.create_task(run_price_watch(self.spider, self.exchange))
+
+    async def sub_pairs(self, pairs: List[str], jtype: str):
+        if jtype == 'ws':
+            self.sub_ws_pairs(pairs)
+        else:
+            for pair in pairs:
+                await self.sub_kline(pair)
+
+    def sub_ws_pairs(self, pairs: List[str]):
+        cur_pairs = set(self.ws_pairs)
+        cur_pairs.update(pairs)
+        self.ws_pairs = list(cur_pairs)
+        if not self.ws_started:
+            self.run_ws_loop()
+
+    def run_ws_loop(self):
+        if not self.ws_pairs or self.ws_started:
+            return
+        self.ws_started = True
+        BotGlobal.state = BotState.RUNNING
+        logger.info(f'start watch trades and odbooks for {len(self.ws_pairs)} pairs')
+
+        # async def watch_trades():
+        #     while BotGlobal.state == BotState.RUNNING:
+        #         try:
+        #             trades = await self.exchange.watch_trades_for_symbols(self.ws_pairs)
+        #             if not trades:
+        #                 continue
+        #             pair = trades[0]['symbol']
+        #             pub_key = f'trade_{self.exchange.name}_{self.exchange.market_type}_{pair}'
+        #             await self.spider.broadcast(pub_key, trades)
+        #         except ccxt.NetworkError as e:
+        #             logger.error(f'watch_books net error: {e}')
+        #         except Exception:
+        #             logger.exception(f'watch_books error')
+        #     logger.info('watch_trades stopped.')
+        #     self.ws_started = False
+
+        async def watch_books():
+            while BotGlobal.state == BotState.RUNNING:
+                # 读取订单簿快照并保存
+                try:
+                    books = await self.exchange.watch_order_book_for_symbols(self.ws_pairs[:3])
+                    if books:
+                        pair = books['symbol']
+                        pub_key = f'book_{self.exchange.name}_{self.exchange.market_type}_{pair}'
+                        logger.info(f'{pub_key} od book')
+                        data = dict(**books)
+                        data['asks'] = list(data['asks'])
+                        data['bids'] = list(data['bids'])
+                        await self.spider.broadcast(pub_key, data)
+                except ccxt.NetworkError as e:
+                    logger.error(f'watch_books net error: {e}')
+                except Exception:
+                    logger.exception(f'watch_books error')
+            logger.info('watch_books stopped.')
+        # asyncio.create_task(watch_trades())
+        asyncio.create_task(watch_books())
+
+    async def sub_kline(self, pair: str):
         if self.tf_msecs <= 60000:
             # 1m及以下周期的ohlcv，通过websoc获取
             if pair in self.socks:
@@ -460,17 +545,21 @@ class LiveSpider(ServerIO):
         )
         return conn
 
-    async def watch_pairs(self, data):
-        exg_name, market, pairs = data
+    async def _get_miner(self, exg_name, market):
         cache_key = f'{exg_name}:{market}'
         miner = self.miners.get(cache_key)
         if not miner:
             miner = LiveMiner(self, exg_name, market)
             self.miners[cache_key] = miner
+            await miner.init()
             asyncio.create_task(miner.run())
             logger.info(f'start miner for {exg_name}.{market}')
-        for pair in pairs:
-            await miner.sub_pair(pair)
+        return miner
+
+    async def watch_pairs(self, data):
+        exg_name, market, jtype, pairs = data
+        miner = await self._get_miner(exg_name, market)
+        await miner.sub_pairs(pairs, jtype)
 
     async def unwatch_pairs(self, data):
         exg_name, market, pairs = data
@@ -482,6 +571,20 @@ class LiveSpider(ServerIO):
             if p not in miner.jobs:
                 continue
             del miner.jobs[p]
+
+    async def watch_price(self, data):
+        exg_name, market = data
+        miner = await self._get_miner(exg_name, market)
+        miner.start_watch_price()
+
+    def run_watch_jobs(self):
+        from banbot.worker.watch_job import run_watch_jobs
+        asyncio.create_task(run_watch_jobs())
+
+    async def watch_top_chg(self):
+        from banbot.worker.top_change import TopChange
+        logger.info('start top change updater...')
+        await TopChange.start()
 
     def get_cache(self, data):
         return BanCache.get(data)
@@ -529,16 +632,10 @@ async def run_spider_forever(args: dict = None):
     '''
     此函数仅用于从命令行启动
     '''
-    from banbot.worker.top_change import TopChange
-    from banbot.worker.watch_job import run_watch_jobs
-    logger.info('start top change update timer...')
     BotGlobal.state = BotState.RUNNING
-    await TopChange.start()
-    asyncio.create_task(run_watch_jobs())
     asyncio.create_task(LiveSpider.run_timer_reset())
     run_consumers(5)
     await LiveSpider.run_spider()
-    # await TopChange.clear()
 
 
 def run_spider_prc():

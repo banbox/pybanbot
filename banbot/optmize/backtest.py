@@ -87,15 +87,6 @@ class BackTest(Trader):
             return LocalWSProvider(self.config, self.on_pair_trades)
         return DBDataProvider(self.config, self.on_data_feed)
 
-    def is_ws_mode(self):
-        tfs = self.config.get('run_timeframes')
-        if tfs and 'ws' in tfs:
-            return True
-        for item in self.config.get('run_policy'):
-            if 'ws' in item['run_timeframes']:
-                return True
-        return False
-
     async def init(self):
         await AppConfig.test_db()
         from banbot.data.toolbox import sync_timeframes

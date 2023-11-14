@@ -28,7 +28,7 @@ class probinanceusdm(ccxtpro.binanceusdm):
             api_type = 'future'
         elif self.isInverse(api_type, subType):
             api_type = 'delivery'
-        messageHash = '!markPrice@arr'
+        messageHash = '!markPrice@arr@1s'
         url = self.urls['api']['ws'][api_type] + '/' + self.stream(api_type, messageHash)
         requestId = self.request_id(url)
         request = {

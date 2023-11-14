@@ -81,8 +81,13 @@ class KlineLiveConsumer(ClientIO):
         super(KlineLiveConsumer, self).__init__(self.config.get('spider_addr'))
         self.jobs: Dict[str, PairTFCache] = dict()
         self.realtime = realtime
+        exg_market = f'{BotGlobal.exg_name}.{BotGlobal.market_type}'
         self.prefix = 'uohlcv' if realtime else 'ohlcv'
-        self.listens[self.prefix] = self.on_spider_bar
+        self.listens[f'{self.prefix}_{exg_market}'] = self.on_spider_bar
+        self.listens[f'update_price_{exg_market}'] = self.update_price
+        self.listens[f'trade_{exg_market}'] = self.on_spider_trade
+        self.listens[f'book_{exg_market}'] = self.on_spider_book
+
         self._inits: List[Tuple[str, Any]] = []
 
     async def init_conn(self):
@@ -130,41 +135,67 @@ class KlineLiveConsumer(ClientIO):
 
     async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
         """从爬虫订阅K线。调用此方法前，须确保已调用ExSymbol.ensures"""
-        step_size = 20
-        for i in range(0, len(jobs), step_size):
-            batch_jobs = jobs[i: i + step_size]
-            pairs = [job.symbol for job in batch_jobs]
-            tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in pairs]
-            for job in batch_jobs:
-                if job.symbol in self.jobs:
-                    continue
-                tfsecs = tf_to_secs(job.timeframe)
-                if tfsecs < 60:
-                    raise ValueError(f'spider not support {job.timeframe} currently')
-                self.jobs[job.symbol] = PairTFCache(job.timeframe, tfsecs, job.since or 0)
-            await self.write_msg('subscribe', tags)
-            args = (exg_name, market_type, pairs)
-            await self.write_msg('watch_pairs', args)
-            self._inits.extend([
-                ('subscribe', tags),
-                ('watch_pairs', args)
-            ])
+        ws_jobs = [j for j in jobs if j.timeframe == 'ws']
+        tf_jobs = [j for j in jobs if j.timeframe != 'ws']
+        if ws_jobs:
+            await self._write_pairs(exg_name, market_type, 'ws', ws_jobs)
+        if tf_jobs:
+            await self._write_pairs(exg_name, market_type, 'bar', tf_jobs)
 
-    async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str]):
-        step_size = 20
-        for i in range(0, len(pairs), step_size):
-            batch_pairs = pairs[i:i + step_size]
-            tags = [f'{self.prefix}_{exg_name}_{market_type}_{p}' for p in batch_pairs]
-            for p in batch_pairs:
-                if p in self.jobs:
-                    del self.jobs[p]
-                    if p in BotCache.pair_copied_at:
-                        del BotCache.pair_copied_at[p]
-            await self.write_msg('unsubscribe', tags)
-            # 其他端可能还需要此数据，这里不能直接取消。
-            # TODO: spider端应保留引用计数，没有客户端需要的才可删除
-            # args = (exg_name, market_type, pairs)
-            # await self.write_msg('unwatch_pairs', args)
+    def _get_prefixs(self, exg_name: str, market_type: str, is_ws: bool):
+        exg_market = f'{exg_name}_{market_type}'
+        if is_ws:
+            prefixs = [f'trade_{exg_market}', f'book_{exg_market}']
+        else:
+            prefixs = [f'{self.prefix}_{exg_market}']
+        return prefixs
+
+    async def _write_pairs(self, exg_name: str, market_type: str, jtype: str, jobs: List[WatchParam]):
+        prefixs = self._get_prefixs(exg_name, market_type, jtype == 'ws')
+        tags, pairs = [], []
+        for job in jobs:
+            if jtype == 'ws':
+                job_key = f'{job.symbol}_ws'
+                tf_secs = 0
+            else:
+                job_key = job.symbol
+                tf_secs = tf_to_secs(job.timeframe)
+                if tf_secs < 60:
+                    raise ValueError(f'spider not support {job.timeframe} currently')
+            if job_key in self.jobs:
+                continue
+            for prefix in prefixs:
+                tags.append(f'{prefix}_{job.symbol}')
+            pairs.append(job.symbol)
+            self.jobs[job_key] = PairTFCache(job.timeframe, tf_secs, job.since or 0)
+        await self.write_msg('subscribe', tags)
+        args = (exg_name, market_type, jtype, pairs)
+        await self.write_msg('watch_pairs', args)
+        self._inits.extend([
+            ('subscribe', tags),
+            ('watch_pairs', args)
+        ])
+
+    async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str], is_ws: bool = False):
+        prefixs = self._get_prefixs(exg_name, market_type, is_ws)
+        tags = [f'{prefix}_{p}' for p in pairs for prefix in prefixs]
+        for p in pairs:
+            job_key = p if not is_ws else f'{p}_ws'
+            if job_key in self.jobs:
+                del self.jobs[job_key]
+            if p in BotCache.pair_copied_at:
+                del BotCache.pair_copied_at[p]
+        await self.write_msg('unsubscribe', tags)
+        # 其他端可能还需要此数据，这里不能直接取消。
+        # TODO: spider端应保留引用计数，没有客户端需要的才可删除
+        # args = (exg_name, market_type, pairs)
+        # await self.write_msg('unwatch_pairs', args)
+
+    async def update_price(self, price_list):
+        print(f'update_price: {price_list}')
+        from banbot.main.addons import MarketPrice
+        for item in price_list:
+            MarketPrice.set_new_price(item['symbol'], item['markPrice'])
 
     async def on_spider_bar(self, msg_key: str, msg_data):
         logger.debug('receive ohlcv: %s %s', msg_key, msg_data)
@@ -196,12 +227,38 @@ class KlineLiveConsumer(ClientIO):
             await self._on_ohlcv_msg(exg_name, market, pair, ohlcvs, job.tf_secs, job.tf_secs)
         return True
 
+    async def on_spider_trade(self, msg_key: str, msg_data):
+        logger.debug('receive trade: %s %s', msg_key, len(msg_data))
+        if not msg_data:
+            return False
+        _, exg_name, market, pair, _ = msg_key.split('_')
+        job_key = f'{pair}_ws'
+        if job_key not in self.jobs:
+            return False
+        await self._on_trades(exg_name, market, pair, msg_data)
+        return True
+
+    async def on_spider_book(self, msg_key: str, msg_data):
+        logger.debug('receive odbook: %s', msg_key)
+        if not msg_data:
+            return False
+        _, exg_name, market, pair, _ = msg_key.split('_')
+        job_key = f'{pair}_ws'
+        if job_key not in self.jobs:
+            return False
+        BotCache.odbooks[pair] = msg_data
+        return True
+
     @classmethod
     async def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: list,
-                      fetch_tfsecs: int, update_tfsecs: float):
+                            fetch_tfsecs: int, update_tfsecs: float):
         '''
         监听spider的蜡烛数据，收到时会回调此方法。
         :param fetch_tfsecs: 返回的蜡烛数据bar时间戳间隔
         :param update_tfsecs: 蜡烛数据更新间隔，可能小于fetch_tfsecs
         '''
+        raise NotImplementedError
+
+    @classmethod
+    async def _on_trades(cls, exg_name: str, market: str, pair: str, trades: List[dict]):
         raise NotImplementedError

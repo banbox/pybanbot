@@ -21,6 +21,9 @@ class BotCache:
     last_bar_ms = 0
     '上次收到bar的结束时间，13位时间戳'
 
+    odbooks: Dict[str, Dict] = dict()
+    '缓存所有从爬虫收到的订单簿'
+
     @classmethod
     def set_pair_ts(cls, pair: str, latest_ms: int, wait_ms: int):
         cls.pair_copied_at[pair] = latest_ms, wait_ms

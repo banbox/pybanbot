@@ -112,7 +112,7 @@ class Trader:
             self.last_process = btime.utcstamp()
         # 更新最新价格
         cur_price = trades[-1]['price']
-        MarketPrice.set_bar_price(pair, cur_price)
+        MarketPrice.set_new_price(pair, cur_price)
         all_open_ods = list(BotCache.open_ods.values())
         if not BotGlobal.is_warmup:
             tracer = InOutTracer(all_open_ods)
@@ -250,6 +250,15 @@ class Trader:
                 ctx_key = f'{prefix}_{od.symbol}_{od.timeframe}'
                 exit_d = dict(tag=ExitTags.data_stuck, short=od.short, order_id=od.id)
                 await self.order_mgr.process_orders(ctx_key, [], [(od.strategy, exit_d)])
+
+    def is_ws_mode(self):
+        tfs = self.config.get('run_timeframes')
+        if tfs and 'ws' in tfs:
+            return True
+        for item in self.config.get('run_policy'):
+            if 'ws' in item['run_timeframes']:
+                return True
+        return False
 
     async def run(self):
         raise NotImplementedError('`run` is not implemented')

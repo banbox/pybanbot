@@ -99,8 +99,8 @@ def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
         exg_args = dict(newUpdates=True, aiohttp_trust_env=has_proxy)
     else:
         exg_args = dict(trust_env=has_proxy)
-        if exg_cfg.get('options'):
-            exg_args['options'] = exg_cfg.get('options')
+        exg_args['options'] = exg_cfg.get('options') or dict()
+        exg_args['options']['warnOnFetchOpenOrdersWithoutSymbol'] = False
     cred_args = _get_credits(exg_cfg, run_env)
     exchange = exg_cls(dict(**exg_args, **cred_args, **kwargs))
     if run_env == 'test':
@@ -109,8 +109,6 @@ def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
     if has_proxy:
         exchange.proxies = exg_cfg['proxies']
         exchange.aiohttp_proxy = exg_cfg['proxies']['http']
-    if not is_ws:
-        exchange.options['warnOnFetchOpenOrdersWithoutSymbol'] = False
     return exchange, exg_args
 
 
@@ -664,23 +662,6 @@ class CryptoExchange:
                 f'Exchange {self.api_async.name} does not support fetching tickers in batch. '
                 f'Message: {e}') from e
 
-    async def update_prices(self):
-        '''
-        更新所有币种的价格。
-        此方法运行一段时间后会卡住，请使用watch_mark_prices
-        '''
-        from banbot.storage import BotGlobal, BotCache
-        if not BotGlobal.live_mode or (btime.time_ms() - BotCache.last_bar_ms) > 20000:
-            # 只在收到一个bar的后续20s内允许更新，足够处理订单，否则太频繁容易被封ip
-            return
-        try:
-            prices: Dict[str, Dict] = await self.api_async.fetch_last_prices()
-        except ccxt.NetworkError as e:
-            logger.error(f'watch_prices net error: {e}')
-            return
-        for key, item in prices.items():
-            MarketPrice.set_new_price(key, item['price'])
-
     async def edit_limit_order(self, id, symbol, side, amount, price=None, params={}):
         return await self.api_async.edit_limit_order(id, symbol, side, amount, price, params)
 
@@ -738,7 +719,10 @@ class CryptoExchange:
                 logger.error(f'fetch_open_orders for all fail: {e}')
         from banbot.storage import BotGlobal
         result = []
-        for symbol in BotGlobal.pairs:
+        cut_num = 30
+        if len(BotGlobal.pairs) > cut_num:
+            logger.warning(f"too many pairs, only check open orders for {cut_num} pairs.")
+        for symbol in list(BotGlobal.pairs)[:cut_num]:
             orders = await self.api_async.fetch_open_orders(symbol)
             result.extend(orders)
         return result
@@ -749,7 +733,7 @@ class CryptoExchange:
         机器人可能有些旧的止损止盈单没有及时撤销，长时间运行后导致超出最大订单限制。
         故调用此方法检查所有打开的订单，如果没有和订单关联，则取消
         '''
-        from banbot.storage import InOutOrder, dba, InOutStatus, BotGlobal
+        from banbot.storage import InOutOrder, BotGlobal
         op_ods = await InOutOrder.open_orders(pairs=list(BotGlobal.pairs))
         valid_odids = set()
         for od in op_ods:

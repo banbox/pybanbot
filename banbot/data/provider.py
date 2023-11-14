@@ -11,14 +11,14 @@ from banbot.util.misc import LazyTqdm
 
 
 class DataProvider:
-    feed_cls = DataFeeder
+    feed_cls = KLineFeeder
 
     def __init__(self, config: Config, callback: Callable):
         self.config = config
         self.exg_name = self.config['exchange']['name']
         self.market = self.config['market_type']
         self._init_args = dict()
-        self.holders: List[DataFeeder] = []
+        self.holders: List[KLineFeeder] = []
 
         async def handler(*args, **kwargs):
             try:
@@ -45,7 +45,7 @@ class DataProvider:
         old_map = {h.pair: h for h in self.holders}
         new_pairs, sub_holds, warm_jobs = [], [], []
         for pair, tf_warms in pairs.items():
-            hold: DataFeeder = old_map.get(pair)
+            hold: KLineFeeder = old_map.get(pair)
             if not hold:
                 new_pairs.append((pair, tf_warms))
                 continue
@@ -73,12 +73,12 @@ class DataProvider:
 
 
 class HistDataProvider(DataProvider):
-    feed_cls = HistDataFeeder
+    feed_cls = HistKLineFeeder
 
     def __init__(self, config: Config, callback: Callable):
         super(HistDataProvider, self).__init__(config, callback)
         self.tr: TimeRange = self.config.get('timerange')
-        self.holders: List[HistDataFeeder] = []
+        self.holders: List[HistKLineFeeder] = []
         self.pbar = None
         self.ptime = 0
         self.plast = 0
@@ -117,7 +117,7 @@ class HistDataProvider(DataProvider):
 
 
 class FileDataProvider(HistDataProvider):
-    feed_cls = FileDataFeeder
+    feed_cls = FileKLineFeeder
 
     def __init__(self, config: Config, callback: Callable):
         super(FileDataProvider, self).__init__(config, callback)
@@ -131,7 +131,7 @@ class FileDataProvider(HistDataProvider):
 
 
 class DBDataProvider(HistDataProvider):
-    feed_cls = DBDataFeeder
+    feed_cls = DBKLineFeeder
 
     def __init__(self, config: Config, callback: Callable):
         super(DBDataProvider, self).__init__(config, callback)
@@ -146,7 +146,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
     这是用于交易机器人的实时数据提供器。
     会根据需要预热一部分数据。
     '''
-    feed_cls = LiveDataFeader
+    feed_cls = LiveKLineFeader
     _obj: Optional['LiveDataProvider'] = None
 
     def __init__(self, config: Config, callback: Callable):
@@ -210,26 +210,12 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         pairs = [hold.pair for hold in removed]
         await self.unwatch_klines(self.exg_name, market, pairs)
 
-    @loop_forever
-    async def run_checks_forever(self):
-        min_tfsecs = sys.maxsize
-        cur_ms = btime.utcstamp()
-        delays = dict()
-        for feed in self.holders:
-            if not feed.next_at:
-                continue
-            delay_min = (cur_ms - feed.next_at) / 6000
-            if delay_min > 1:
-                delays[feed.pair] = round(delay_min)
-            min_tfsecs = min(min_tfsecs, feed.states[0].tf_secs)
-        if delays:
-            logger.error(f'Ohlcv Delays: (Pair: Mins) {delays}')
-        min_tfsecs = max(min_tfsecs, 300)
-        await asyncio.sleep(min_tfsecs)
+    async def loop_main(self):
+        await self.run_forever('bot')
 
     @classmethod
     async def _on_ohlcv_msg(cls, exg_name: str, market: str, pair: str, ohlc_arr: List[Tuple],
-                      fetch_tfsecs: int, update_tfsecs: float):
+                            fetch_tfsecs: int, update_tfsecs: float):
         if exg_name != cls._obj.exg_name or cls._obj.market != market:
             logger.warning(f'receive exg not match: {exg_name}, cur: {cls._obj.exg_name}')
             return
@@ -259,8 +245,3 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             return
         hold.wait_bar = last_bar
 
-    @classmethod
-    async def run(cls):
-        if not cls._obj:
-            raise RuntimeError(f'{cls.__name__} not initialized!')
-        await cls._obj.run_forever('bot')

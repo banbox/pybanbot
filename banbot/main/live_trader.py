@@ -11,7 +11,6 @@ from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
 from banbot.util.misc import *
 from banbot.exchange import get_exchange
-from banbot.data.provider import LiveDataProvider
 from banbot.config import Config
 from banbot.main.wallets import CryptoWallet
 from banbot.util.common import logger
@@ -26,7 +25,7 @@ class LiveTrader(Trader):
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
         self.exchange = get_exchange()
-        self.data_mgr = LiveDataProvider(config, self.on_data_feed)
+        self.data_mgr = self._init_data_mgr()
         self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderMgr.init(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
@@ -61,12 +60,19 @@ class LiveTrader(Trader):
             **(od.infos or dict())
         )
 
+    def _init_data_mgr(self):
+        from banbot.data.ws import LiveWSProvider
+        from banbot.data.provider import LiveDataProvider
+        if self.is_ws_mode():
+            return LiveWSProvider(self.config, self.on_pair_trades)
+        return LiveDataProvider(self.config, self.on_data_feed)
+
     async def init(self):
         BotGlobal.bot_loop = asyncio.get_running_loop()
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         # 监听实时数据推送
-        self._run_tasks.append(asyncio.create_task(LiveDataProvider.run()))
+        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main()))
         async with dba():
             await BotTask.init()
             await sync_timeframes()
@@ -146,19 +152,15 @@ class LiveTrader(Trader):
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
-                # K线延迟预警，预期时间内未收到发出错误
-                asyncio.create_task(self.data_mgr.run_checks_forever()),
                 # 监听钱包更新
                 asyncio.create_task(self.wallets.watch_balance_forever()),
                 # 跟踪监听未成交订单，及时更新价格确保成交
                 asyncio.create_task(self.order_mgr.trail_open_orders_forever()),
                 # 跟踪账户杠杆倍数和保证金配置
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
-                # 跟踪所有币的最新价格
-                asyncio.create_task(self.order_mgr.watch_price_forever()),
                 # 订单异步消费队列
                 asyncio.create_task(self.order_mgr.consume_queue()),
-                # 监听订单更新
+                # 监听交易所用户订单，更新本地订单状态
                 asyncio.create_task(self.order_mgr.listen_orders_forever()),
                 # 处理未匹配订单，跟踪用户下单
                 asyncio.create_task(self.order_mgr.trail_unmatches_forever()),
