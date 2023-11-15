@@ -56,7 +56,7 @@ async def down_pairs_by_config(config: Config):
     end_ms = round(timerange.stopts * 1000)
     cur_ms = btime.utcstamp()
     end_ms = min(cur_ms, end_ms) if end_ms else cur_ms
-    exchange = get_exchange()
+    exchange = get_exchange(with_credits=False)
     timeframes = config['timeframes']
     tr_text = btime.to_datestr(start_ms) + ' - ' + btime.to_datestr(end_ms)
     if config['medium'] == 'db':
@@ -126,7 +126,7 @@ async def _save_init(sid: int, ohlcv: List[Tuple], save_tf: str, skip_first: boo
 
     try_count = 0
     logger.info(f'start first fetch {exs.symbol} {end_ms}-{fetch_end_ms}')
-    exchange = get_exchange(exs.exchange, exs.market)
+    exchange = get_exchange(exs.exchange, exs.market, with_credits=False)
     while True:
         try_count += 1
         ins_num = await download_to_db(exchange, exs, save_tf, end_ms, fetch_end_ms)
@@ -221,7 +221,7 @@ async def run_price_watch(spider: 'LiveSpider', exchange: CryptoExchange):
 class WebsocketWatcher:
 
     def __init__(self, exg_name: str, market: str, pair: str):
-        self.exchange = get_exchange(exg_name, market)
+        self.exchange = get_exchange(exg_name, market, with_credits=False)
         self.pair = pair
         self.sid = 0
         self.running = True
@@ -348,7 +348,7 @@ class LiveMiner:
     '''
     def __init__(self, spider: 'LiveSpider', exg_name: str, market: str, timeframe: str = '1m'):
         self.spider = spider
-        self.exchange = get_exchange(exg_name, market)
+        self.exchange = get_exchange(exg_name, market, with_credits=False)
         self.auto_prefire = AppConfig.get().get('prefire')
         self.jobs: Dict[str, MinerJob] = dict()
         self.socks: Dict[str, OhlcvWatcher] = dict()

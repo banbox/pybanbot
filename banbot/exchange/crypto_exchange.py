@@ -89,7 +89,7 @@ def apply_exg_proxy(exg_name: str = None, cfg: dict = None):
     return exg_name
 
 
-def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
+def init_exchange(exg_name: str, exg_cls, cfg: dict, with_credits=True, **kwargs):
     """从交易所类实例化对象，并设置代理等"""
     run_env = cfg["env"]
     is_ws = hasattr(exg_cls, 'watch_trades')
@@ -101,7 +101,9 @@ def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
         exg_args = dict(trust_env=has_proxy)
         exg_args['options'] = exg_cfg.get('options') or dict()
         exg_args['options']['warnOnFetchOpenOrdersWithoutSymbol'] = False
-    cred_args = _get_credits(exg_cfg, run_env)
+    cred_args = dict()
+    if with_credits:
+        cred_args = _get_credits(exg_cfg, run_env)
     exchange = exg_cls(dict(**exg_args, **cred_args, **kwargs))
     if run_env == 'test':
         exchange.set_sandbox_mode(True)
@@ -112,7 +114,7 @@ def init_exchange(exg_name: str, exg_cls, cfg: dict, **kwargs):
     return exchange, exg_args
 
 
-def create_ccxt_exchange(is_ws: bool, cfg: dict, exg_name: str = None, market_type: str = None):
+def create_ccxt_exchange(is_ws: bool, cfg: dict, exg_name: str = None, market_type: str = None, with_credits=True):
     """根据交易所名称和市场初始化交易所对象"""
     run_env = cfg["env"]
     if not market_type:
@@ -132,19 +134,19 @@ def create_ccxt_exchange(is_ws: bool, cfg: dict, exg_name: str = None, market_ty
             exg_class = asy_overrides[cls_name]
         else:
             exg_class = getattr(ccxt_async, cls_name)
-    exchange, exg_args = init_exchange(exg_name, exg_class, cfg)
+    exchange, exg_args = init_exchange(exg_name, exg_class, cfg, with_credits=with_credits)
     logger.info(f'Create Exg: {ccxt_async.__name__}.{exchange.__class__.__name__} {run_env} '
                 f'proxy:{exchange.proxies}  {exg_args}')
     return exchange
 
 
-def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None)\
+def _init_exchange(cfg: dict, with_ws=False, exg_name: str = None, market_type: str = None, with_credits=True)\
         -> Tuple[ccxt_async.Exchange, Optional[ccxtpro.Exchange]]:
     apply_exg_proxy(exg_name, cfg)
-    exchange_async = create_ccxt_exchange(False, cfg, exg_name, market_type)
+    exchange_async = create_ccxt_exchange(False, cfg, exg_name, market_type, with_credits)
     if not with_ws:
         return exchange_async, None
-    exchange_ws = create_ccxt_exchange(True, cfg, exg_name, market_type)
+    exchange_ws = create_ccxt_exchange(True, cfg, exg_name, market_type, with_credits)
     return exchange_async, exchange_ws
 
 
@@ -244,9 +246,10 @@ class CryptoExchange:
     }
     _ft_has_futures: Dict = {}
 
-    def __init__(self, config: dict, exg_name: str = None, market_type: str = None):
+    def __init__(self, config: dict, exg_name: str = None, market_type: str = None, with_credits=True):
         self.config = config
-        self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type)
+        self.with_credits = with_credits
+        self.api_async, self.api_ws = _init_exchange(config, True, exg_name, market_type, with_credits)
         self.exg_config = AppConfig.get_exchange(config, exg_name)
         self.name = self.exg_config['name']
         self.bot_name = config.get('name', 'noname')
@@ -823,14 +826,15 @@ class CryptoExchange:
             await self.api_ws.close()
         except Exception as e:
             logger.warning(f'close {self.name}.ws error: {e}')
-        self.api_async, self.api_ws = _init_exchange(self.config, True, self.name, self.market_type)
+        self.api_async, self.api_ws = _init_exchange(self.config, True, self.name, self.market_type,
+                                                     self.with_credits)
         await self.load_markets()
 
     def __str__(self):
         return self.name
 
 
-def get_exchange(name: Optional[str] = None, market: str = None) -> CryptoExchange:
+def get_exchange(name: Optional[str] = None, market: str = None, with_credits=True) -> CryptoExchange:
     '''
     获取交易所实例，全局缓存
     '''
@@ -839,8 +843,9 @@ def get_exchange(name: Optional[str] = None, market: str = None) -> CryptoExchan
         name = config['exchange']['name']
     if not market:
         market = config['market_type']
-    cache_key = f'{name}.{market}'
+    crd = 'enc' if with_credits else 'pub'
+    cache_key = f'{name}.{market}.{crd}'
     if cache_key not in exg_map:
         logger.warning(f'No Cache Exchange, Create For {cache_key}')
-        exg_map[cache_key] = CryptoExchange(config, name, market)
+        exg_map[cache_key] = CryptoExchange(config, name, market, with_credits)
     return exg_map[cache_key]
