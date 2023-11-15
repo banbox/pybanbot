@@ -541,7 +541,9 @@ class LiveSpider(ServerIO):
         conn.listens.update(
             watch_pairs=self.watch_pairs,
             unwatch_pairs=self.unwatch_pairs,
-            get_cache=self.get_cache
+            get_cache=self.get_cache,
+            run_watch_jobs=self.run_watch_jobs,
+            watch_top_chg=self.watch_top_chg
         )
         return conn
 
@@ -577,13 +579,12 @@ class LiveSpider(ServerIO):
         miner = await self._get_miner(exg_name, market)
         miner.start_watch_price()
 
-    def run_watch_jobs(self):
+    def run_watch_jobs(self, data):
         from banbot.worker.watch_job import run_watch_jobs
         asyncio.create_task(run_watch_jobs())
 
-    async def watch_top_chg(self):
+    async def watch_top_chg(self, data):
         from banbot.worker.top_change import TopChange
-        logger.info('start top change updater...')
         await TopChange.start()
 
     def get_cache(self, data):

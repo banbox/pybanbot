@@ -9,6 +9,9 @@ from banbot.storage.orders import InOutOrder
 
 
 class BotCache:
+    data: Dict[str, Any] = dict()
+    '通用缓存数据'
+
     open_ods: Dict[int, InOutOrder] = dict()
     '全部打开的订单'
 

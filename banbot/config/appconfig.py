@@ -92,8 +92,7 @@ class AppConfig(metaclass=Singleton):
     @classmethod
     async def test_db(cls):
         # 测试数据库连接
-        from banbot.storage.base import init_db, dba, sa
-        init_db()
+        from banbot.storage.base import dba, sa
         async with dba():
             sess = dba.session
             db_tz = (await sess.execute(sa.text('show timezone;'))).scalar()

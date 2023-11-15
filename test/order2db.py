@@ -77,10 +77,8 @@ async def convert():
 
 
 async def test_main():
-    from banbot.storage.base import init_db
     from banbot.config import AppConfig
     AppConfig.init_by_args()
-    init_db()
     async with dba():
         await convert()
 

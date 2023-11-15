@@ -91,6 +91,8 @@ async def _consume_jobs():
     reset_ctx()
     while True:
         if not wait_jobs:
+            if BotGlobal.state != BotState.RUNNING:
+                break
             await asyncio.sleep(1)
             continue
         exg_name, market, symbol = wait_jobs.pop(0)
@@ -117,10 +119,14 @@ async def run_watch_jobs():
     运行策略信号更新任务。
     此任务应和爬虫在同一个进程。以便读取到爬虫Kline发出的异步事件。
     '''
+    if BotCache.data.get('watch_job'):
+        return
+    BotCache.data['watch_job'] = True
     global _num_tip_time
     config = AppConfig.get()
     jobs: dict = config.get('watch_jobs')
     if not jobs:
+        logger.info('no watchjobs found, skip')
         return
     # 加载任务到_tf_stgy_cls
     for tf, stf_list in jobs.items():
@@ -134,12 +140,11 @@ async def run_watch_jobs():
             continue
         _tf_stgy_cls[tf] = cur_list
     if not _tf_stgy_cls:
+        logger.info('no valid watchjobs found, skip')
         return
-    from banbot.storage.base import init_db
-    init_db()
     logger.info(f'start kline watch_jobs: {_tf_stgy_cls}')
     asyncio.create_task(_consume_jobs())
-    while True:
+    while BotGlobal.state == BotState.RUNNING:
         # 监听数据库K线写入事件，只监听1m级别
         exg_name, market, symbol, _ = await KLine.wait_bars('*', '*', '*', '1m')
         job_item = (exg_name, market, symbol)
@@ -148,4 +153,4 @@ async def run_watch_jobs():
             if len(wait_jobs) > 1000 and btime.time() - _num_tip_time > 1000:
                 logger.error(f'watch jobs queue full: {len(wait_jobs)}')
                 _num_tip_time = btime.time()
-
+    BotCache.data['watch_job'] = False

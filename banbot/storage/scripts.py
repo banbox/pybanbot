@@ -6,7 +6,7 @@
 
 from banbot.storage import *
 from banbot import storage
-from banbot.storage.base import BaseDbModel, sa, init_db, get_db_cfg
+from banbot.storage.base import BaseDbModel, sa, get_db_cfg
 from banbot.util.common import logger
 from banbot.util.misc import get_module_classes
 from sqlalchemy import create_engine, pool

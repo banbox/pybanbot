@@ -74,6 +74,8 @@ where exchange=:exchange and market=:market;'''
             next_run = (cur_time // interval + 1) * interval + delay
             wait_secs = next_run - cur_time
             if wait_secs > 0:
+                if BotGlobal.state != BotState.RUNNING:
+                    break
                 await asyncio.sleep(wait_secs)
             # 目前固定对比UTC0点
             start_ts = cur_time // secs_day * secs_day
@@ -94,12 +96,14 @@ where exchange=:exchange and market=:market;'''
                     await LiveSpider.obj.broadcast(cache_key, data)
             except Exception:
                 logger.exception(f'update {cache_key} error')
+        BotCache.data['topchg'] = False
 
     @classmethod
     async def start(cls):
+        if BotCache.data.get('topchg'):
+            return
+        BotCache.data['topchg'] = True
         logger.info('start topchg updator')
-        from banbot.storage.base import init_db
         from banbot.config import AppConfig
-        init_db()
         worker = TopChange(AppConfig.get())
         asyncio.create_task(worker.run())

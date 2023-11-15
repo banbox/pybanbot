@@ -19,9 +19,7 @@ _sched = None
 def get_sched():
     global _sched
     if not _sched:
-        from banbot.storage.base import init_db
         from banbot.util import btime
-        init_db()
         stores = dict(default=MemoryJobStore())
         sche_args = dict(jobstores=stores, timezone=btime.sys_timezone())
         _sched = BackgroundScheduler(**sche_args)
