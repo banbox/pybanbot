@@ -73,8 +73,6 @@ def _parse_tbls(args: Dict[str, Any]) -> List[BaseDbModel]:
 
 
 async def exec_dbcmd(args: Dict[str, Any]):
-    from banbot.config import AppConfig
-    AppConfig.init_by_args(args)
     action = args['action']
     async with dba():
         if action == 'rebuild':

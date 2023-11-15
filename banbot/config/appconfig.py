@@ -104,6 +104,8 @@ class AppConfig(metaclass=Singleton):
 
     @classmethod
     def init_by_args(cls, args: dict = None) -> Config:
+        if cls.obj:
+            return cls.obj.get_config()
         from banbot.util.misc import deep_merge_dicts
         if not args:
             args = dict()

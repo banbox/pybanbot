@@ -30,7 +30,7 @@ async def start_trading(args: Dict[str, Any]) -> int:
     from banbot.main.live_trader import LiveTrader
     from banbot.storage.scripts import rebuild_db
 
-    config = AppConfig.init_by_args(args)
+    config = AppConfig.get()
     # 有未初始化的表，自动执行脚本创建
     await rebuild_db(require_confirm=False)
     btime.run_mode = btime.RunMode(config.get('run_mode', 'dry_run'))
@@ -60,7 +60,7 @@ async def start_backtesting(args: Dict[str, Any]) -> None:
     # Import here to avoid loading backtesting module when it's not used
     from banbot.optmize.backtest import BackTest
 
-    config = AppConfig.init_by_args(args)
+    config = AppConfig.get()
     btime.run_mode = btime.RunMode.BACKTEST
     backtesting = BackTest(config)
     try:

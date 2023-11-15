@@ -16,6 +16,8 @@ from banbot.util.common import logger, set_log_level
 async def _run_main(run_func: Callable, nocompress: bool, args):
     from banbot.util.misc import run_async
     from banbot.storage import KLine
+    from banbot.config import AppConfig
+    AppConfig.init_by_args(args)
     if nocompress:
         async with KLine.decompress():
             await run_async(run_func, args)

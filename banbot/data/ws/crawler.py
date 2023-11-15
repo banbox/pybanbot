@@ -195,7 +195,7 @@ async def run_watch_ods(exchange: Exchange, symbols: List[str]):
 async def down_ws(args: Dict[str, Any]):
     global running
     from banbot.config import AppConfig
-    config = AppConfig.init_by_args(args)
+    config = AppConfig.get()
     data_dir = AppConfig.get_data_dir()
     exg_cfg = AppConfig.get_exchange(config)
     exg_name = exg_cfg['name']

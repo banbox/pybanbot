@@ -94,7 +94,7 @@ async def run_down_pairs(args: Dict[str, Any]):
     '''
     解析命令行参数并下载交易对数据
     '''
-    config = AppConfig.init_by_args(args)
+    config = AppConfig.get()
 
     from banbot.storage import dba
     async with dba():

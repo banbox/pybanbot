@@ -111,7 +111,6 @@ async def compare_orders(task_ids: List[int], task_hash: str):
 
 async def run_od_compare(args: Dict[str, Any]):
     from banbot.storage.base import init_db
-    AppConfig.init_by_args(args)
     init_db()
     task_hash, task_id = args.get('task_hash'), args.get('task_id')
     async with dba():
