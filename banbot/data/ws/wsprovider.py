@@ -91,9 +91,6 @@ class LiveWSProvider(DataProvider, KlineLiveConsumer):
             return
         market = self.config['market_type']
         watch_jobs = [WatchParam(hold.pair, 'ws', 0) for hold in new_holds]
-        all_pairs = {j.symbol for j in watch_jobs}
-        async with ClientIO.lock('edit_pairs'):
-            await ExSymbol.ensures(self.exg_name, market, all_pairs)
         # 发送消息给爬虫，实时抓取数据
         await self.watch_klines(self.exg_name, market, *watch_jobs)
 

@@ -71,8 +71,6 @@ class LiveTrader(Trader):
         BotGlobal.bot_loop = asyncio.get_running_loop()
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
-        # 监听实时数据推送
-        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main()))
         async with dba():
             await BotTask.init()
             await sync_timeframes()
@@ -149,6 +147,8 @@ class LiveTrader(Trader):
         BanEvent.on('set_pairs', self.add_del_pairs, with_db=True)
         # 监听K线是否超时
         self._run_tasks.append(asyncio.create_task(BotCache.run_bar_waiter()))
+        # 监听实时数据推送
+        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main()))
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([

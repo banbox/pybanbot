@@ -384,30 +384,29 @@ class LiveMiner:
         if not self.ws_pairs or self.ws_started:
             return
         self.ws_started = True
-        BotGlobal.state = BotState.RUNNING
         logger.info(f'start watch trades and odbooks for {len(self.ws_pairs)} pairs')
 
-        # async def watch_trades():
-        #     while BotGlobal.state == BotState.RUNNING:
-        #         try:
-        #             trades = await self.exchange.watch_trades_for_symbols(self.ws_pairs)
-        #             if not trades:
-        #                 continue
-        #             pair = trades[0]['symbol']
-        #             pub_key = f'trade_{self.exchange.name}_{self.exchange.market_type}_{pair}'
-        #             await self.spider.broadcast(pub_key, trades)
-        #         except ccxt.NetworkError as e:
-        #             logger.error(f'watch_books net error: {e}')
-        #         except Exception:
-        #             logger.exception(f'watch_books error')
-        #     logger.info('watch_trades stopped.')
-        #     self.ws_started = False
+        async def watch_trades():
+            while BotGlobal.state == BotState.RUNNING:
+                try:
+                    trades = await self.exchange.watch_trades_for_symbols(self.ws_pairs)
+                    if not trades:
+                        continue
+                    pair = trades[0]['symbol']
+                    pub_key = f'trade_{self.exchange.name}_{self.exchange.market_type}_{pair}'
+                    await self.spider.broadcast(pub_key, trades)
+                except ccxt.NetworkError as e:
+                    logger.error(f'watch_books net error: {e}')
+                except Exception:
+                    logger.exception(f'watch_books error')
+            logger.info('watch_trades stopped.')
+            self.ws_started = False
 
         async def watch_books():
             while BotGlobal.state == BotState.RUNNING:
                 # 读取订单簿快照并保存
                 try:
-                    books = await self.exchange.watch_order_book_for_symbols(self.ws_pairs[:3])
+                    books = await self.exchange.watch_order_book_for_symbols(self.ws_pairs)
                     if books:
                         pair = books['symbol']
                         pub_key = f'book_{self.exchange.name}_{self.exchange.market_type}_{pair}'
@@ -421,7 +420,7 @@ class LiveMiner:
                 except Exception:
                     logger.exception(f'watch_books error')
             logger.info('watch_books stopped.')
-        # asyncio.create_task(watch_trades())
+        asyncio.create_task(watch_trades())
         asyncio.create_task(watch_books())
 
     async def sub_kline(self, pair: str):

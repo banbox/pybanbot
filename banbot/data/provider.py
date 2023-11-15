@@ -193,9 +193,6 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
                 sub_tf = hold.states[0].timeframe
                 since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
                 watch_jobs.append(WatchParam(hold.pair, sub_tf, since))
-            all_pairs = {j.symbol for j in watch_jobs}
-            async with ClientIO.lock('edit_pairs'):
-                await ExSymbol.ensures(self.exg_name, market, all_pairs)
             # 发送消息给爬虫，实时抓取数据
             await self.watch_klines(self.exg_name, market, *watch_jobs)
 

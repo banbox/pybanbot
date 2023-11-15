@@ -823,7 +823,7 @@ class LiveOrderMgr(OrderManager):
         1s一次轮训处理未匹配的订单。尝试跟踪用户下单。
         '''
         if not btime.prod_mode():
-            return
+            return 'exit'
         try:
             async with dba():
                 await self._handle_unmatches()
@@ -833,12 +833,10 @@ class LiveOrderMgr(OrderManager):
 
     @loop_forever
     async def trail_open_orders_forever(self):
-        if not self.config.get('auto_edit_limit'):
+        if not self.config.get('auto_edit_limit') or not btime.prod_mode():
             # 未启用，退出
-            return
+            return 'exit'
         timeouts = self.config.get('limit_vol_secs', 5) * 2
-        if not btime.prod_mode():
-            return
         try:
             async with dba():
                 await self._trail_open_orders(timeouts)

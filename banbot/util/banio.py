@@ -3,6 +3,8 @@
 # File  : banio.py
 # Author: anyongjin
 # Date  : 2023/9/20
+import sys
+import zlib
 import asyncio
 import marshal
 import random
@@ -12,9 +14,6 @@ from banbot.util.common import logger
 from asyncio import Future
 from banbot.util import btime
 from banbot.storage import BotGlobal
-
-
-line_end = b'<\0>'
 
 
 class BanConn:
@@ -54,22 +53,25 @@ class BanConn:
 
     async def write(self, data: bytes):
         if not self.writer:
+            logger.debug('conn %s no writer, connecting...', self)
             await self.connect()
-        self.writer.write(data)
-        self.writer.write(line_end)
+        zip_data = zlib.compress(data)
+        self.writer.write(len(zip_data).to_bytes(32, sys.byteorder))
+        self.writer.write(zip_data)
+        # logger.debug('write data, len: %d %d', len(zip_data), len(data))
         await self.writer.drain()
 
     async def read(self) -> bytes:
         if not self.reader:
             await self.connect()
-        data = await self.reader.readuntil(line_end)
-        return data[:-len(line_end)]
+        len_bt = await self.reader.readexactly(32)
+        read_len = int.from_bytes(len_bt, sys.byteorder)
+        data = await self.reader.readexactly(read_len)
+        return zlib.decompress(data)
 
     async def read_msg(self) -> Tuple[str, Any]:
-        if not self.reader:
-            await self.connect()
-        data = await self.reader.readuntil(line_end)
-        msg_type, msg_data = marshal.loads(data[:-len(line_end)])
+        data = await self.read()
+        msg_type, msg_data = marshal.loads(data)
         return msg_type, msg_data
 
     def subscribe(self, data):
@@ -112,9 +114,7 @@ class BanConn:
             if not self.reader:
                 await self.connect()
             while True:
-                data = await self.reader.readuntil(line_end)
-                data = data[:-len(line_end)]
-                logger.debug('%s receive %s', name, data)
+                data = await self.read()
                 des_data = marshal.loads(data)
                 if not des_data or not hasattr(des_data, '__len__') or len(des_data) != 2:
                     logger.warning(f'{name} invalid msg: {data}')
@@ -178,9 +178,7 @@ class ServerIO:
         conn = self.get_conn(reader, writer)
         logger.info(f'receive client: {conn.remote}')
         self._wrap_handlers(conn)
-        writer.write('ready'.encode())
-        writer.write(line_end)
-        await writer.drain()
+        await conn.write('ready'.encode())
         self.conns.append(conn)
         asyncio.create_task(conn.run_forever(self.name))
 
@@ -340,7 +338,7 @@ class ClientIO(BanConn):
             await cls.set_remote(key, lock_val)
             return lock_val
         if not timeout:
-            timeout = 1200  # 最大超时时间20分钟
+            timeout = 30  # 默认超时时间30s
         while btime.time() < start + timeout:
             await asyncio.sleep(0.01)
             lock_by = await cls.get_remote(key)

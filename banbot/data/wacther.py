@@ -81,7 +81,7 @@ class KlineLiveConsumer(ClientIO):
         super(KlineLiveConsumer, self).__init__(self.config.get('spider_addr'))
         self.jobs: Dict[str, PairTFCache] = dict()
         self.realtime = realtime
-        exg_market = f'{BotGlobal.exg_name}.{BotGlobal.market_type}'
+        exg_market = f'{BotGlobal.exg_name}_{BotGlobal.market_type}'
         self.prefix = 'uohlcv' if realtime else 'ohlcv'
         self.listens[f'{self.prefix}_{exg_market}'] = self.on_spider_bar
         self.listens[f'update_price_{exg_market}'] = self.update_price
@@ -230,7 +230,7 @@ class KlineLiveConsumer(ClientIO):
         logger.debug('receive trade: %s %s', msg_key, len(msg_data))
         if not msg_data:
             return False
-        _, exg_name, market, pair, _ = msg_key.split('_')
+        _, exg_name, market, pair = msg_key.split('_')
         job_key = f'{pair}_ws'
         if job_key not in self.jobs:
             return False
@@ -241,7 +241,7 @@ class KlineLiveConsumer(ClientIO):
         logger.debug('receive odbook: %s', msg_key)
         if not msg_data:
             return False
-        _, exg_name, market, pair, _ = msg_key.split('_')
+        _, exg_name, market, pair = msg_key.split('_')
         job_key = f'{pair}_ws'
         if job_key not in self.jobs:
             return False
