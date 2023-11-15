@@ -364,8 +364,9 @@ class LiveMiner:
             asyncio.create_task(run_price_watch(self.spider, self.exchange))
 
     async def sub_pairs(self, pairs: List[str], jtype: str):
-        async with dba():
-            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, pairs)
+        async with ClientIO.lock('edit_pairs'):
+            async with dba():
+                await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, pairs)
         if jtype == 'ws':
             self.sub_ws_pairs(pairs)
         else:
