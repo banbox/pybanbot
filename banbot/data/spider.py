@@ -14,6 +14,7 @@ from banbot.storage import KLine, DisContiError
 from banbot.util.banio import ServerIO, BanConn
 from banbot.util.tf_utils import *
 from banbot.data.cache import BanCache
+from banbot.storage import dba, reset_ctx
 
 
 def get_check_interval(tf_secs: int) -> float:
@@ -96,7 +97,6 @@ async def run_down_pairs(args: Dict[str, Any]):
     '''
     config = AppConfig.get()
 
-    from banbot.storage import dba
     async with dba():
         await down_pairs_by_config(config)
 
@@ -146,7 +146,6 @@ async def _save_init(sid: int, ohlcv: List[Tuple], save_tf: str, skip_first: boo
 
 
 async def consume_db_queue():
-    from banbot.storage import dba, reset_ctx
     reset_ctx()
     while True:
         try:
@@ -365,6 +364,8 @@ class LiveMiner:
             asyncio.create_task(run_price_watch(self.spider, self.exchange))
 
     async def sub_pairs(self, pairs: List[str], jtype: str):
+        async with dba():
+            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, pairs)
         if jtype == 'ws':
             self.sub_ws_pairs(pairs)
         else:
@@ -593,7 +594,6 @@ class LiveSpider(ServerIO):
     @classmethod
     async def run_spider(cls):
         from banbot.data.toolbox import sync_timeframes, purge_kline_un
-        from banbot.storage import dba
         spider = LiveSpider()
 
         async with dba():
