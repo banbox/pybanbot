@@ -45,6 +45,8 @@ class AppConfig(metaclass=Singleton):
         if run_env != 'prod':
             logger.info(f'Running in {run_env}, Please set `ban_run_env=prod` in production running')
         path_list = [] if self.args.get('no_default') else self._get_def_config_paths()
+        if not path_list:
+            logger.info('default config is disabled')
         in_paths = self.args.get("config")
         if in_paths:
             path_list.extend(in_paths)
