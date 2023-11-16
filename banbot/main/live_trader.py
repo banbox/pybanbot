@@ -123,8 +123,8 @@ class LiveTrader(Trader):
     async def run(self):
         self.start_heartbeat_check(3)
         self.loop = asyncio.get_running_loop()
-        # 连接爬虫端
-        await self.data_mgr.connect()
+        # 监听实时数据推送，这里要先连接，因为init中需要分布式锁
+        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main()))
         # 初始化
         await self.init()
         BotGlobal.state = BotState.RUNNING
@@ -149,8 +149,6 @@ class LiveTrader(Trader):
         BanEvent.on('set_pairs', self.add_del_pairs, with_db=True)
         # 监听K线是否超时
         self._run_tasks.append(asyncio.create_task(BotCache.run_bar_waiter()))
-        # 监听实时数据推送
-        self._run_tasks.append(asyncio.create_task(self.data_mgr.loop_main()))
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([

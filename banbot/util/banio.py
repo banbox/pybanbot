@@ -32,6 +32,7 @@ class BanConn:
             self.remote = writer.get_extra_info('peername')
         self.listens: Dict[str, Callable] = dict()
         self.reconnect = reconnect
+        self.handling = False
 
     async def connect(self):
         raise NotImplementedError
@@ -115,6 +116,7 @@ class BanConn:
         try:
             if not self.reader:
                 await self.connect()
+            self.handling = True
             while True:
                 data = await self.read()
                 des_data = marshal.loads(data)
@@ -136,6 +138,7 @@ class BanConn:
                 except Exception:
                     logger.exception(f'{name} handle msg err: {self.remote}: {data}, {call_args}')
         except (asyncio.IncompleteReadError, ConnectionResetError) as e:
+            self.handling = False
             self.reader = None
             self.writer = None
             err_type = type(e).__name__
@@ -148,6 +151,7 @@ class BanConn:
             await self.run_forever(name)
         except Exception:
             logger.exception(f'{name} handle remote msg error')
+        self.handling = False
 
 
 class ServerIO:
@@ -283,6 +287,8 @@ class ClientIO(BanConn):
 
     async def get_val(self, key: str, timeout: int = None):
         """从远程端获取指定key的值。"""
+        if not self.handling:
+            raise ValueError('remote msg handling required for `get_val`')
         fut = asyncio.get_running_loop().create_future()
         wait_key = f'get_{key}'
         self._waits[wait_key] = fut
