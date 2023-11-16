@@ -123,11 +123,11 @@ class LiveTrader(Trader):
     async def run(self):
         self.start_heartbeat_check(3)
         self.loop = asyncio.get_running_loop()
+        # 连接爬虫端
+        await self.data_mgr.connect()
         # 初始化
         await self.init()
         BotGlobal.state = BotState.RUNNING
-        # 连接爬虫端
-        await self.data_mgr.connect()
         # 启动restapi
         start_api(self)
         # 启动异步任务
