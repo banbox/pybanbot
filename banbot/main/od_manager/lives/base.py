@@ -745,21 +745,6 @@ class LiveOrderMgr(OrderManager):
                         else:
                             logger.exception('consume order exception: %s', job)
                     await tracer.save()
-                    before_save = json.dumps(od.dict())
-                    before_arr = [od.exit_tag, od.exit_at, od.enter.amount, od.enter.order_id, od.enter.update_at]
-                    if od.exit:
-                        before_arr.extend([od.exit.amount, od.exit.order_id, od.exit.update_at])
-                async with dba():
-                    od = await InOutOrder.get(job.od_id)
-                    after_save = json.dumps(od.dict())
-                    after_arr = [od.exit_tag, od.exit_at, od.enter.amount, od.enter.order_id, od.enter.update_at]
-                    if od.exit:
-                        after_arr.extend([od.exit.amount, od.exit.order_id, od.exit.update_at])
-                if before_save != after_save:
-                    logger.error('exec od queue, save_order_fail: %s \n%s \n%s \n%s\n%s',
-                                 job.action, before_save, after_save, before_arr, after_arr)
-                else:
-                    logger.debug('exec od queue, %s \n%s \n%s', job.action, before_save, after_save)
         except Exception:
             logger.exception("consume order_q error")
 
