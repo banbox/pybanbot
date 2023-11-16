@@ -16,7 +16,7 @@ class BotCache:
     '全部打开的订单'
 
     updod_at = 0
-    '上次刷新open_ods的时间戳，13位'
+    '上次刷新open_ods的时间戳，10位'
 
     pair_copied_at: Dict[str, Tuple[int, int]] = dict()
     '[symbol: (int, int)]记录所有标的从爬虫获取到K线的最新时间，以及等待下一次收到的时间，用于判断是否有长期未收到的'

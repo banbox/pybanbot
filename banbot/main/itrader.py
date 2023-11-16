@@ -133,6 +133,7 @@ class Trader:
                     await self._apply_signals(pair, enter_list, exit_list, all_open_ods)
 
     async def _flush_cache_orders(self, chg_ods: List[InOutOrder]):
+        BotCache.updod_at = btime.time()
         if not BotGlobal.live_mode:
             for od in chg_ods:
                 od.save_mem()
@@ -141,7 +142,6 @@ class Trader:
             return list(BotCache.open_ods.values())
         async with dba():
             sess: SqlSession = dba.session
-            BotCache.updod_at = btime.time()
             open_ods = await InOutOrder.open_orders()
             if chg_ods:
                 for od in chg_ods:
