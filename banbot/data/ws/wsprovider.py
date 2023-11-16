@@ -113,7 +113,6 @@ class LiveWSProvider(DataProvider, KlineLiveConsumer):
         hold = next((sta for sta in cls._obj.holders if sta.pair == pair), None)
         if not hold:
             return
-        print(f'live ws provider _on_trades: {exg_name} {market} {pair}')
         hold.wait_bar = build_ws_bar(trades)
         hold.states[0].latest = hold.wait_bar
         await hold.on_new_data(trades)

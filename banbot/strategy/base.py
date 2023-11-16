@@ -354,10 +354,14 @@ class BaseStrategy:
             total_cost = 0
         return total_cost / self.get_stake_amount()
 
-    def get_orderbook(self):
-        if not BotCache.odbooks:
-            raise ValueError('odbooks not loaded!')
-        return BotCache.odbooks.get(self.symbol.symbol)
+    def get_orderbook(self, expire_ms: int = 3000):
+        book = BotCache.odbooks.get(self.symbol.symbol)
+        if book:
+            delay_ms = btime.utcstamp() - (book.get('timestamp') or 0)
+            if delay_ms > expire_ms:
+                del BotCache.odbooks[self.symbol.symbol]
+                return None
+        return book
 
     def init_third_od(self, od: InOutOrder):
         pass

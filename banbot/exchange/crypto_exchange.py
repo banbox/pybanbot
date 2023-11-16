@@ -46,12 +46,19 @@ def loop_forever(func):
         from banbot.storage import reset_ctx
         fname = func.__qualname__
         reset_ctx()
+        count, last_secs = 0, int(btime.time())
         while True:
             try:
+                count += 1
                 result = await run_async(func, *args, **kwargs)
                 if result == 'exit':
                     break
-                continue
+                cur_secs = int(btime.time())
+                if cur_secs > last_secs:
+                    if count > 1000:
+                        # 某些地方使用不当会出现死循环，这里频率过高报警
+                        logger.warning(f'run {fname} over {count} times in 1s')
+                    count, last_secs = 0, cur_secs
             except ccxt.errors.NetworkError as e:
                 if str(e) == '1006':
                     logger.warning('[%s] watch balance get 1006, retry...', fname)

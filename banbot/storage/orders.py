@@ -605,7 +605,8 @@ class InOutOrder(BaseDbModel, InfoPart):
     async def get(cls, od_id: int):
         if btime.run_mode in btime.LIVE_MODES:
             sess = dba.session
-            op_od = await sess.get(InOutOrder, od_id)
+            # 这里不使用sess.get(InOutOrder, od_id)方式，避免读取缓存
+            op_od = (await sess.execute(select(InOutOrder).where(InOutOrder.id == od_id).limit(1))).scalar()
             if not op_od:
                 return op_od
             ex_ods = list(await sess.scalars(select(Order).where(Order.inout_id == od_id)))

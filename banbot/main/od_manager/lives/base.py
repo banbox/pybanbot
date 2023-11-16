@@ -597,7 +597,8 @@ class LiveOrderMgr(OrderManager):
             for od_key, data in valid_items:
                 iod_id, sub_id = self.exg_orders[od_key]
                 async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
-                    sub_od: Order = await sess.get(Order, sub_id)
+                    # 这里不使用sess.get(Order, sub_id)方式，避免读取缓存
+                    sub_od: Order = (await sess.execute(select(Order).where(Order.id == sub_id).limit(1))).scalar()
                     await self._update_order(sub_od, data)
                     related_ods.add(sub_od)
                     logger.debug('update order by push %s %s', data, sub_od.dict())

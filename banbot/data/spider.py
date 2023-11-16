@@ -410,7 +410,6 @@ class LiveMiner:
                     if books:
                         pair = books['symbol']
                         pub_key = f'book_{self.exchange.name}_{self.exchange.market_type}_{pair}'
-                        logger.info(f'{pub_key} od book')
                         data = dict(**books)
                         data['asks'] = list(data['asks'])
                         data['bids'] = list(data['bids'])
