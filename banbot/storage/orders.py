@@ -657,13 +657,20 @@ class InOutTracer:
     """
     跟踪订单的前后状态，对比是否有新建的ORM对象需要保存到数据库的。
     """
-    def __init__(self, ods: List[InOutOrder]):
+    def __init__(self, ods: List[InOutOrder] = None):
         self.state = dict()
-        self.orders = ods
+        self.orders = ods or []
 
     def _set_state(self):
         for od in self.orders:
             self.state[id(od)] = get_od_sign(od)
+
+    def trace(self, ods: List[InOutOrder]):
+        for od in ods:
+            self.state[id(od)] = get_od_sign(od)
+        od_set = set(self.orders)
+        od_set.update(ods)
+        self.orders = list(od_set)
 
     def get_changes(self):
         result = []

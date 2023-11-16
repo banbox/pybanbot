@@ -8,19 +8,19 @@ from banbot.main.od_manager.lives.base import *
 
 class BinanceOrderMgr(LiveOrderMgr):
 
-    async def _apply_exg_order(self, od: Order, data: dict):
+    async def _apply_exg_order(self, od: InOutOrder, sub_od: Order, data: dict):
         info: dict = data['info']
         state = info['X']
         if state == 'NEW':
             return
         cur_ts = info.get('E') or info.get('T')  # 合约订单没有E
-        if cur_ts < od.update_at:
+        if cur_ts < sub_od.update_at:
             # 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
             return
-        od.update_at = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
-        od.amount = float(info['q'])
+        sub_od.update_at = cur_ts  # 记录上次更新的时间戳，避免旧数据覆盖新数据
+        sub_od.amount = float(info['q'])
         if state in {'CANCELED', 'REJECTED', 'EXPIRED', 'EXPIRED_IN_MATCH'}:
-            od.update_props(status=OrderStatus.Close)
+            sub_od.update_props(status=OrderStatus.Close)
         inout_status = None
         if state in {'FILLED', 'PARTIALLY_FILLED'}:
             od_status = OrderStatus.Close if state == 'FILLED' else OrderStatus.PartOk
@@ -35,16 +35,16 @@ class BinanceOrderMgr(LiveOrderMgr):
             if fee_val:
                 fee_name = info['N'] or ''
                 kwargs['fee_type'] = fee_name
-                if od.symbol.endswith(fee_name):
+                if sub_od.symbol.endswith(fee_name):
                     # 期货市场手续费以USD计算
                     fee_val /= average
                 kwargs['fee'] = fee_val / filled
-            od.update_props(**kwargs)
+            sub_od.update_props(**kwargs)
             mtaker = 'maker' if info['m'] else 'taker'
-            fee_key = f'{od.symbol}_{mtaker}'
-            self.exchange.pair_fees[fee_key] = od.fee_type, od.fee
+            fee_key = f'{sub_od.symbol}_{mtaker}'
+            self.exchange.pair_fees[fee_key] = sub_od.fee_type, sub_od.fee
             if od_status == OrderStatus.Close:
-                if od.enter:
+                if sub_od.enter:
                     inout_status = InOutStatus.FullEnter
                 else:
                     inout_status = InOutStatus.FullExit
@@ -52,14 +52,13 @@ class BinanceOrderMgr(LiveOrderMgr):
         else:
             logger.error('unknown bnb order status: %s, %s', state, data)
             return
-        inout_od: InOutOrder = await InOutOrder.get(od.inout_id)
         if inout_status:
-            inout_od.status = inout_status
+            od.status = inout_status
         if inout_status == InOutStatus.FullExit:
-            self._finish_order(inout_od)
-            logger.debug('fire exg od: %s', inout_od)
-            await self._cancel_trigger_ods(od)
-            self._fire(inout_od, od.enter)
+            self._finish_order(od)
+            logger.debug('fire exg od: %s', od)
+            await self._cancel_trigger_ods(sub_od)
+            self._fire(od, sub_od.enter)
 
     async def _exit_by_exg_order(self, trade: dict) -> bool:
         info: dict = trade['info']
@@ -74,6 +73,7 @@ class BinanceOrderMgr(LiveOrderMgr):
         if not open_ods:
             # 没有同方向，相反操作的订单
             return False
+        tracer = InOutTracer(open_ods)
         is_reduce_only = info.get('R', False)
         od_price, od_time = float(info['ap']), trade['timestamp']
         order_id, od_type = trade['order'], trade['type']
@@ -95,6 +95,7 @@ class BinanceOrderMgr(LiveOrderMgr):
                 self._fire(part, False)
             if filled <= min_dust:
                 break
+        await tracer.save()
         if not is_reduce_only and filled > min_dust and self.allow_take_over:
             # 有剩余数量，创建相反订单
             exs = ExSymbol.get(self.name, self.market_type, pair)

@@ -307,7 +307,7 @@ class LiveOrderMgr(OrderManager):
 
         return buy_price, sell_price
 
-    async def _consume_unmatchs(self, sub_od: Order):
+    async def _consume_unmatchs(self, od: InOutOrder, sub_od: Order):
         has_match = False
         for trade in list(self.unmatch_trades.values()):
             if trade['symbol'] != sub_od.symbol or trade['order'] != sub_od.order_id:
@@ -317,7 +317,7 @@ class LiveOrderMgr(OrderManager):
             if trade_key in self.handled_trades or sub_od.status == OrderStatus.Close:
                 continue
             logger.info('exec unmatch trade: %s', trade)
-            cur_mat = await self._update_order(sub_od, trade)
+            cur_mat = await self._update_order(od, sub_od, trade)
             has_match = has_match or cur_mat
         return has_match
 
@@ -394,7 +394,7 @@ class LiveOrderMgr(OrderManager):
             self._update_order_res(od, is_enter, order)
         else:
             logger.debug('no new trades: %s %s %s', od.symbol, sub_od.order_id, order)
-        await self._consume_unmatchs(sub_od)
+        await self._consume_unmatchs(od, sub_od)
         logger.debug('apply ccxtres to order: %s %s %s %s', od, is_enter, order, sub_od.dict())
 
     def _finish_order(self, od: InOutOrder):
@@ -554,15 +554,15 @@ class LiveOrderMgr(OrderManager):
 
         dba.add_callback(dba.session, do_put)
 
-    async def _apply_exg_order(self, od: Order, data: dict):
+    async def _apply_exg_order(self, od: InOutOrder, sub_od: Order, data: dict):
         raise ValueError(f'unsupport exchange to update order: {self.name}')
 
-    async def _update_order(self, od: Order, data: dict):
-        if od.status == OrderStatus.Close:
-            tag = 'enter' if od.enter else 'exit'
-            logger.debug('order: %s %s complete, ignore trade: %s', od, tag, data)
+    async def _update_order(self, od: InOutOrder, sub_od: Order, data: dict):
+        if sub_od.status == OrderStatus.Close:
+            tag = 'enter' if sub_od.enter else 'exit'
+            logger.debug('order: %s %s complete, ignore trade: %s', sub_od, tag, data)
             return
-        await self._apply_exg_order(od, data)
+        await self._apply_exg_order(od, sub_od, data)
         return True
 
     @loop_forever
@@ -591,25 +591,22 @@ class LiveOrderMgr(OrderManager):
             valid_items.append((od_key, data))
         if not valid_items:
             return
-        async with dba():
-            sess = dba.session
-            related_ods = set()
-            for od_key, data in valid_items:
-                iod_id, sub_id = self.exg_orders[od_key]
-                async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
-                    # 这里不使用sess.get(Order, sub_id)方式，避免读取缓存
-                    sub_od: Order = (await sess.execute(select(Order).where(Order.id == sub_id).limit(1))).scalar()
-                    await self._update_order(sub_od, data)
-                    related_ods.add(sub_od)
+        for od_key, data in valid_items:
+            iod_id, sub_id = self.exg_orders[od_key]
+            async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
+                async with dba():
+                    od = await InOutOrder.get(iod_id)
+                    tracer = InOutTracer([od])
+                    sub_od: Order = od.enter if od.enter.id == sub_id else od.exit
+                    await self._update_order(od, sub_od, data)
                     logger.debug('update order by push %s %s', data, sub_od.dict())
-            for sub_od in related_ods:
-                async with LocalLock(f'iod_{sub_od.inout_id}', 5, force_on_fail=True):
-                    has_match = await self._consume_unmatchs(sub_od)
+                    has_match = await self._consume_unmatchs(od, sub_od)
                     if has_match:
                         logger.debug('update order by unmatch %s', sub_od.dict())
-            if len(self.handled_trades) > 500:
-                cut_keys = list(self.handled_trades.keys())[-300:]
-                self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
+                    await tracer.save()
+        if len(self.handled_trades) > 500:
+            cut_keys = list(self.handled_trades.keys())[-300:]
+            self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
 
     async def _try_fill_exit(self, iod: InOutOrder, filled: float, od_price: float, od_time: int, order_id: str,
                              order_type: str, fee_name: str, fee_rate: float):
@@ -642,37 +639,6 @@ class LiveOrderMgr(OrderManager):
             # 没有id说明是分离出来的订单，需要保存
             await part.save()
         return filled, part
-
-    async def _exit_by_exg_order(self, trade: dict) -> bool:
-        """检查交易流是否是平仓操作"""
-        raise ValueError(f'unsupport exchange to _exit_by_exg_order: {self.name}')
-
-    def _get_expire_unmatches(self) -> List[Tuple[str, dict]]:
-        exp_after = btime.time_ms() - 1000  # 未匹配交易，1s过期
-        return [(trade_key, trade) for trade_key, trade in self.unmatch_trades.items()
-                if trade['timestamp'] < exp_after]
-
-    async def _handle_unmatches(self, cur_unmatchs: List[Tuple[str, dict]]):
-        '''
-        处理超时未匹配的订单，1s执行一次
-        '''
-        left_unmats = []
-        for trade_key, trade in cur_unmatchs:
-            matched = False
-            if await self._exit_by_exg_order(trade):
-                # 检测是否是平仓订单
-                matched = True
-            elif self.allow_take_over and (await self._trace_exg_order(trade)):
-                # 检测是否应该接管第三方下单
-                matched = True
-            if not matched:
-                left_unmats.append(trade)
-            del self.unmatch_trades[trade_key]
-        if left_unmats:
-            logger.warning('expired unmatch orders: %s', left_unmats)
-
-    async def _trace_exg_order(self, trade: dict):
-        raise ValueError(f'unsupport exchange to _trace_exg_order: {self.name}')
 
     async def _exec_order_enter(self, od: InOutOrder):
         if od.exit_tag:
@@ -757,8 +723,10 @@ class LiveOrderMgr(OrderManager):
         try:
             async with LocalLock(f'iod_{job.od_id}', 5, force_on_fail=True):
                 async with dba():
+                    tracer = InOutTracer()
                     try:
                         od = await InOutOrder.get(job.od_id)
+                        tracer.trace([od])
                         self._check_od_sess(od)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
@@ -773,10 +741,10 @@ class LiveOrderMgr(OrderManager):
                             err_msg = str(e)
                             # 平仓时报订单无效，说明此订单在交易所已退出-2022 ReduceOnly Order is rejected
                             od.local_exit(ExitTags.fatal_err, status_msg=err_msg)
-                            await od.save()
                             logger.exception('consume order %s: %s, force exit: %s', type(e), e, job)
                         else:
                             logger.exception('consume order exception: %s', job)
+                    await tracer.save()
                     before_save = json.dumps(od.dict())
                     before_arr = [od.exit_tag, od.exit_at, od.enter.amount, od.enter.order_id, od.enter.update_at]
                     if od.exit:
@@ -843,6 +811,37 @@ class LiveOrderMgr(OrderManager):
             logger.exception('trail_unmatches_forever error')
         await asyncio.sleep(3)
 
+    async def _exit_by_exg_order(self, trade: dict) -> bool:
+        """检查交易流是否是平仓操作"""
+        raise ValueError(f'unsupport exchange to _exit_by_exg_order: {self.name}')
+
+    def _get_expire_unmatches(self) -> List[Tuple[str, dict]]:
+        exp_after = btime.time_ms() - 1000  # 未匹配交易，1s过期
+        return [(trade_key, trade) for trade_key, trade in self.unmatch_trades.items()
+                if trade['timestamp'] < exp_after]
+
+    async def _handle_unmatches(self, cur_unmatchs: List[Tuple[str, dict]]):
+        '''
+        处理超时未匹配的订单，1s执行一次
+        '''
+        left_unmats = []
+        for trade_key, trade in cur_unmatchs:
+            matched = False
+            if await self._exit_by_exg_order(trade):
+                # 检测是否是平仓订单
+                matched = True
+            elif self.allow_take_over and (await self._trace_exg_order(trade)):
+                # 检测是否应该接管第三方下单
+                matched = True
+            if not matched:
+                left_unmats.append(trade)
+            del self.unmatch_trades[trade_key]
+        if left_unmats:
+            logger.warning('expired unmatch orders: %s', left_unmats)
+
+    async def _trace_exg_order(self, trade: dict):
+        raise ValueError(f'unsupport exchange to _trace_exg_order: {self.name}')
+
     @loop_forever
     async def trail_unfill_orders_forever(self):
         if not self.config.get('auto_edit_limit') or not btime.prod_mode():
@@ -871,7 +870,7 @@ class LiveOrderMgr(OrderManager):
         if not exp_orders:
             return
         logger.debug('pending open orders: %s', exp_orders)
-        sess = dba.session
+        tracer = InOutTracer(exp_orders)
         from itertools import groupby
         exp_orders = sorted(exp_orders, key=lambda x: x.symbol)
         unsubmits = []  # 记录长期未提交到交易所的订单
@@ -899,7 +898,7 @@ class LiveOrderMgr(OrderManager):
                 sub_od.create_at = btime.time()
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
-                await sess.flush()
+        await tracer.save()
         from banbot.rpc import Notify, NotifyType
         if unsubmits and Notify.instance:
             Notify.send(type=NotifyType.EXCEPTION, status=f'超时未提交订单：{unsubmits}')

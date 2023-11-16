@@ -295,6 +295,7 @@ class LocalLock:
     带超时的异步锁。只对同一进程的不同协程或线程有效。
     根据键维护锁对象。超时未获取锁时发出asyncio.TimeoutError异常
     慎用此锁，使用不当会导致连接被拒绝
+    当和数据库对象一起使用时，应当在锁内申请数据库连接，以确保数据库对象能被正确保存
     '''
     _locks: ClassVar[Dict[str, asyncio.Lock]] = dict()
     _holds: ClassVar[Dict[str, int]] = dict()
