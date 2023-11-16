@@ -42,7 +42,8 @@ class BanConn:
         dump_data = marshal.dumps((msg_type, data))
         while True:
             try:
-                return await self.write(dump_data)
+                await self.write(dump_data)
+                break
             except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
                 err_type = type(e).__name__
                 if not self.reconnect:
@@ -50,6 +51,7 @@ class BanConn:
                     return
                 logger.error(f'write {name} {err_type}, sleep 3s and retry...')
                 await asyncio.sleep(3)
+        logger.debug('%s write ok: %s %s', name, msg_type, data)
 
     async def write(self, data: bytes):
         if not self.writer:
