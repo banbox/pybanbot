@@ -647,13 +647,15 @@ class LiveOrderMgr(OrderManager):
         """检查交易流是否是平仓操作"""
         raise ValueError(f'unsupport exchange to _exit_by_exg_order: {self.name}')
 
-    async def _handle_unmatches(self):
+    def _get_expire_unmatches(self) -> List[Tuple[str, dict]]:
+        exp_after = btime.time_ms() - 1000  # 未匹配交易，1s过期
+        return [(trade_key, trade) for trade_key, trade in self.unmatch_trades.items()
+                if trade['timestamp'] < exp_after]
+
+    async def _handle_unmatches(self, cur_unmatchs: List[Tuple[str, dict]]):
         '''
         处理超时未匹配的订单，1s执行一次
         '''
-        exp_after = btime.time_ms() - 1000  # 未匹配交易，1s过期
-        cur_unmatchs = [(trade_key, trade) for trade_key, trade in self.unmatch_trades.items()
-                        if trade['timestamp'] < exp_after]
         left_unmats = []
         for trade_key, trade in cur_unmatchs:
             matched = False
@@ -826,28 +828,33 @@ class LiveOrderMgr(OrderManager):
         if not btime.prod_mode():
             return 'exit'
         try:
-            async with dba():
-                await self._handle_unmatches()
+            unmatches = self._get_expire_unmatches()
+            if unmatches:
+                async with dba():
+                    await self._handle_unmatches(unmatches)
         except Exception:
             logger.exception('trail_unmatches_forever error')
         await asyncio.sleep(3)
 
     @loop_forever
-    async def trail_open_orders_forever(self):
+    async def trail_unfill_orders_forever(self):
         if not self.config.get('auto_edit_limit') or not btime.prod_mode():
             # 未启用，退出
             return 'exit'
         timeouts = self.config.get('limit_vol_secs', 5) * 2
         try:
-            async with dba():
-                await self._trail_open_orders(timeouts)
+            exp_orders = [od for k, od in BotCache.open_ods if od.pending_type(timeouts)]
+            if exp_orders:
+                # 当缓存有符合条件的未成交订单时，才尝试执行，避免荣誉的数据库访问
+                async with dba():
+                    await self._trail_unfill_orders(timeouts)
         except Exception:
             logger.exception('_trail_open_orders error')
         await asyncio.sleep(timeouts)
 
-    async def _trail_open_orders(self, timeouts: int):
+    async def _trail_unfill_orders(self, timeouts: int):
         '''
-        跟踪未关闭的订单，根据市场价格及时调整，避免长时间无法成交
+        跟踪未成交的订单，根据市场价格及时调整，避免长时间无法成交
         :return:
         '''
         op_orders = await InOutOrder.open_orders()

@@ -155,7 +155,7 @@ class LiveTrader(Trader):
                 # 监听钱包更新
                 asyncio.create_task(self.wallets.watch_balance_forever()),
                 # 跟踪监听未成交订单，及时更新价格确保成交
-                asyncio.create_task(self.order_mgr.trail_open_orders_forever()),
+                asyncio.create_task(self.order_mgr.trail_unfill_orders_forever()),
                 # 跟踪账户杠杆倍数和保证金配置
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
                 # 订单异步消费队列
