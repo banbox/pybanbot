@@ -95,6 +95,12 @@ class KlineLiveConsumer(ClientIO):
             await self.write_msg(*item)
 
     async def connect(self):
+        # 使用锁防止同时连接
+        from banbot.util.misc import LocalLock
+        async with LocalLock('conn', 50):
+            await self._connect()
+
+    async def _connect(self):
         if self.writer and self.reader:
             return
         try:
@@ -106,12 +112,12 @@ class KlineLiveConsumer(ClientIO):
             if not allow_start:
                 logger.info(f'[{type(e)}] spider not running, {e}, wait 5s and retry...')
                 await asyncio.sleep(5)
-                await self.connect()
+                await self._connect()
                 return
             if self._starting_spider:
                 while self._starting_spider:
                     await asyncio.sleep(0.3)
-                await self.connect()
+                await self._connect()
                 return
             logger.info(f'[{type(e)}] spider not running, {e}, starting...')
             self._starting_spider = True
