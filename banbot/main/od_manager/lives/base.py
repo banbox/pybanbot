@@ -644,6 +644,15 @@ class LiveOrderMgr(OrderManager):
         if od.exit_tag:
             # 订单已被取消，不再提交到交易所
             return
+
+        async def force_del_od():
+            od.local_exit(ExitTags.force_exit, status_msg='del')
+            sess = dba.session
+            await sess.delete(od)
+            if od.enter:
+                await sess.delete(od.enter)
+            await sess.flush()
+
         if not od.enter.amount:
             if not od.quote_cost:
                 legal_cost = od.get_info('legal_cost')
@@ -659,15 +668,14 @@ class LiveOrderMgr(OrderManager):
                 # 这里应使用市价计算数量，因传入价格可能和市价相差很大
                 od.enter.amount = self.exchange.pres_amount(od.symbol, amount)
             except Exception as e:
-                logger.error(f'pres_amount for order fail: {e} {od.dict()}, price: {real_price}, amt: {amount}')
-
-        async def force_del_od():
-            od.local_exit(ExitTags.force_exit, status_msg='del')
-            sess = dba.session
-            await sess.delete(od)
-            if od.enter:
-                await sess.delete(od.enter)
-            await sess.flush()
+                await force_del_od()
+                if amount:
+                    # 有数量还报错的时候，是金额太小，禁止开仓
+                    self.forbid_pairs.add(od.symbol)
+                    logger.error(f'[{od.symbol}] amount invalid, forbid: {e}, price: {real_price}, amt: {amount}')
+                else:
+                    logger.error(f'pres_amount for order fail: {e} {od.dict()}, price: {real_price}, amt: {amount}')
+                return
 
         try:
             await self._create_exg_order(od, True)
