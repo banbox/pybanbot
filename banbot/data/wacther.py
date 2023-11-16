@@ -101,10 +101,10 @@ class KlineLiveConsumer(ClientIO):
             await super().connect()
             await self.init_conn()
             logger.info(f'spider connected at {self.remote}')
-        except Exception:
+        except Exception as e:
             allow_start = self.config.get('with_spider')
             if not allow_start:
-                logger.info('spider not running, wait 5s and retry...')
+                logger.info(f'[{type(e)}] spider not running, {e}, wait 5s and retry...')
                 await asyncio.sleep(5)
                 await self.connect()
                 return
@@ -113,7 +113,7 @@ class KlineLiveConsumer(ClientIO):
                     await asyncio.sleep(0.3)
                 await self.connect()
                 return
-            logger.info('spider not running, starting...')
+            logger.info(f'[{type(e)}] spider not running, {e}, starting...')
             self._starting_spider = True
             import multiprocessing
             from banbot.data.spider import run_spider_prc
