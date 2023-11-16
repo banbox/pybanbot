@@ -660,6 +660,7 @@ class InOutTracer:
     def __init__(self, ods: List[InOutOrder] = None):
         self.state = dict()
         self.orders = ods or []
+        self._set_state()
 
     def _set_state(self):
         for od in self.orders:

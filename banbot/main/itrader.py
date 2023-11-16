@@ -107,7 +107,6 @@ class Trader:
                 logger.exception('itrader run_bar SQLAlchemyError %s %s', pair, timeframe)
 
     async def on_pair_trades(self, pair: str, trades: List[dict]):
-        from banbot.data.tools import trades_to_ohlcv
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             self.last_process = btime.utcstamp()
         # 更新最新价格
@@ -116,8 +115,7 @@ class Trader:
         all_open_ods = list(BotCache.open_ods.values())
         if not BotGlobal.is_warmup:
             tracer = InOutTracer(all_open_ods)
-            details = trades_to_ohlcv(trades)
-            bar = build_ohlcvc(details, secs_year, with_count=False)[0][-1]
+            bar = self.data_mgr.get_latest_ohlcv(pair)
             self.order_mgr.update_by_bar(all_open_ods, pair, 'ws', bar)
             chg_ods = tracer.get_changes()
             if chg_ods or BotCache.updod_at + 60 < btime.time():

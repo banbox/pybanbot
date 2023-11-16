@@ -22,6 +22,13 @@ class LocalOrderManager(OrderManager):
             self.network_cost = 0.3 if timeframe == 'ws' else 3.
         super(LocalOrderManager, self).update_by_bar(all_opens, pair, timeframe, row)
         if all_opens and not btime.prod_mode():
+            if self.market_type == 'future':
+                # 为合约更新此定价币的所有订单保证金和钱包情况
+                exs = ExSymbol.get(self.exchange.name, self.market_type, pair)
+                quote_suffix = exs.quote_suffix()
+                quote_orders = [od for od in all_opens if od.symbol.endswith(quote_suffix)]
+                # 这里可能触发爆仓：AccountBomb
+                self.wallets.update_ods(quote_orders)
             cur_ods = [od for od in all_opens if od.symbol == pair]
             affect_num = self.fill_pending_orders(cur_ods, timeframe, row)
             if affect_num:
