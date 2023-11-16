@@ -304,7 +304,7 @@ class ClientIO(BanConn):
 
     def _on_get_val_res(self, data):
         """处理远程端取得数据后回调"""
-        logger.debug('_on_get_val_res %', data)
+        logger.debug('_on_get_val_res %s', data)
         key, val = data
         fut = self._waits.get(f'get_{key}')
         if not fut:
