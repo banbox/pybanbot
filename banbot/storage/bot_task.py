@@ -17,12 +17,12 @@ class BotTask(BaseDbModel, InfoPart):
     cur_id: ClassVar[int] = 0
     obj: ClassVar['BotTask'] = None
 
-    id = Column(sa.Integer, primary_key=True)
-    mode = Column(sa.String(10))  # run mode
-    stg_hash = Column(sa.String(32))
-    create_at = Column(type_=sa.TIMESTAMP(timezone=True))
-    start_at = Column(type_=sa.TIMESTAMP(timezone=True))
-    stop_at = Column(type_=sa.TIMESTAMP(timezone=True))
+    id = mapped_column(sa.Integer, primary_key=True)
+    mode = mapped_column(sa.String(10))  # run mode
+    stg_hash = mapped_column(sa.String(32))
+    create_at = mapped_column(type_=sa.TIMESTAMP(timezone=True))
+    start_at = mapped_column(type_=sa.TIMESTAMP(timezone=True))
+    stop_at = mapped_column(type_=sa.TIMESTAMP(timezone=True))
 
     @orm.reconstructor
     def __init__(self, **kwargs):
@@ -85,7 +85,7 @@ class BotTask(BaseDbModel, InfoPart):
         await sess.refresh(cls.obj)
         cls.obj.update_props(**kwargs)
 
-    def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None):
+    def dict(self, only: List[Union[str, MappedColumn[Any]]] = None, skips: List[Union[str, MappedColumn[Any]]] = None):
         data = super().dict(only, skips)
         data.update(**self.infos)
         del data['info']

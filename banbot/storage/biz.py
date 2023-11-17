@@ -4,6 +4,7 @@
 # Author: anyongjin
 # Date  : 2023/11/9
 import asyncio
+import traceback
 from typing import *
 from banbot.storage.orders import InOutOrder, InOutStatus, dba
 
@@ -59,8 +60,22 @@ class BotCache:
     @classmethod
     def save_open_ods(cls, ods: List[InOutOrder]):
         sess = dba.session
+        old_keys = cls.open_keys()
         for od in ods:
             if od.status < InOutStatus.FullExit:
                 cls.open_ods[od.id] = od.detach(sess)
             elif od.id in cls.open_ods:
                 del cls.open_ods[od.id]
+        cls.print_chgs(old_keys, traceback.format_stack()[-2])
+
+    @classmethod
+    def open_keys(cls):
+        return {od.key for _, od in BotCache.open_ods.items()}
+
+    @classmethod
+    def print_chgs(cls, old_keys: Set[str], tag: str):
+        new_keys = cls.open_keys()
+        adds = new_keys - old_keys
+        dels = old_keys - new_keys
+        if adds or dels:
+            print(f'open_ods update {tag}: {len(old_keys)} -> {len(new_keys)}, {adds} {dels}')

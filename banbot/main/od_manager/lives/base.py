@@ -594,6 +594,7 @@ class LiveOrderMgr(OrderManager):
         for od_key, data in valid_items:
             iod_id, sub_id = self.exg_orders[od_key]
             async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
+                tester = ORMTracer()
                 async with dba():
                     od = await InOutOrder.get(iod_id)
                     tracer = InOutTracer([od])
@@ -605,6 +606,9 @@ class LiveOrderMgr(OrderManager):
                         logger.debug('update order by unmatch %s', sub_od.dict())
                     await tracer.save()
                     BotCache.save_open_ods([od])
+                    tester.trace([od])
+                async with dba():
+                    await tester.test()
         if len(self.handled_trades) > 500:
             cut_keys = list(self.handled_trades.keys())[-300:]
             self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -672,7 +676,7 @@ class LiveOrderMgr(OrderManager):
                 await force_del_od()
                 if amount:
                     # 有数量还报错的时候，是金额太小，禁止开仓
-                    self.forbid_pairs.add(od.symbol)
+                    BotGlobal.forbid_pairs.add(od.symbol)
                     logger.error(f'[{od.symbol}] amount invalid, forbid: {e}, price: {real_price}, amt: {amount}')
                 else:
                     logger.error(f'pres_amount for order fail: {e} {od.dict()}, price: {real_price}, amt: {amount}')
@@ -704,7 +708,9 @@ class LiveOrderMgr(OrderManager):
                 try:
                     res = await self.exchange.cancel_order(od.enter.order_id, od.symbol)
                     await self._update_subod_by_ccxtres(od, True, res)
+                    logger.debug('cancel unfill enter: %s %s %s', od.key, od.enter.order_id, res)
                 except ccxt.OrderNotFound:
+                    logger.warning('cancel unfill enter invalid: %s %s', od.key, od.enter.order_id)
                     pass
             if not od.enter.filled:
                 od.status = InOutStatus.FullExit
@@ -731,10 +737,12 @@ class LiveOrderMgr(OrderManager):
     async def exec_od_job(self, job: OrderJob):
         try:
             async with LocalLock(f'iod_{job.od_id}', 5, force_on_fail=True):
+                tester = ORMTracer()
                 async with dba():
                     tracer = InOutTracer()
                     try:
                         od = await InOutOrder.get(job.od_id)
+                        logger.info(f'exec order: %s %s %s', job.action, job.od_id, od.key)
                         tracer.trace([od])
                         self._check_od_sess(od)
                         if job.action == OrderJob.ACT_ENTER:
@@ -755,6 +763,9 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order exception: %s', job)
                     await tracer.save()
                     BotCache.save_open_ods([od])
+                    tester.trace([od])
+                async with dba():
+                    await tester.test()
         except Exception:
             logger.exception("consume order_q error")
 
@@ -800,8 +811,14 @@ class LiveOrderMgr(OrderManager):
         try:
             unmatches = self._get_expire_unmatches()
             if unmatches:
+                tracer = ORMTracer()
                 async with dba():
+                    logger.debug(f'start _handle_unmatches: {unmatches}')
                     await self._handle_unmatches(unmatches)
+                    tracer.trace(await InOutOrder.open_orders())
+                    logger.debug(f'complete _handle_unmatches: {unmatches}')
+                async with dba():
+                    await tracer.test()
         except Exception:
             logger.exception('trail_unmatches_forever error')
         await asyncio.sleep(3)
@@ -841,6 +858,7 @@ class LiveOrderMgr(OrderManager):
     async def trail_unfill_orders_forever(self):
         if not self.config.get('auto_edit_limit') or not btime.prod_mode():
             # 未启用，退出
+            logger.info('auto_edit_limit disabled, skip')
             return 'exit'
         timeouts = self.config.get('limit_vol_secs', 5) * 2
         try:

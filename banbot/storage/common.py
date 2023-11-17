@@ -66,6 +66,9 @@ class BotGlobal(metaclass=_BotStateMeta):
     bot_loop = None
     '异步循环，用于rpc中调用exchange的方法'
 
+    forbid_pairs: Set[str] = set()
+    '禁止交易的币种'
+
     @classmethod
     def get_jobs(cls, pairs: Iterable[str]) -> List[Tuple[str, str, str]]:
         pair_set = set(pairs)

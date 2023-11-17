@@ -85,7 +85,6 @@ class LiveTrader(Trader):
             pair_tfs = self._load_strategies(cur_pairs, self.pair_mgr.pair_tfscores)
             await self._init_orders(open_ods)
             await self._init_strategies()
-            logger.info(f'warm pair_tfs: {pair_tfs}')
             await self.data_mgr.sub_warm_pairs(pair_tfs)
         Notify.startup_msg()
         Notify.send(

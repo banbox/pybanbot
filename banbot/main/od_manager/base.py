@@ -53,7 +53,6 @@ class OrderManager(metaclass=SingletonArg):
         '禁用交易，到指定时间再允许，13位毫秒时间戳'
         self.fatal_stop_hours: float = config.get('fatal_stop_hours', 8)
         '全局止损时禁止时间，默认8小时'
-        self.forbid_pairs = set()
         self.pair_fee_limits = AppConfig.obj.exchange_cfg.get('pair_fee_limits')
         if self.market_type == 'future' and OrderType(self.od_type) is OrderType.Limit:
             raise ValueError('only market order type is supported for future (as watch trades is not avaiable on bnb)')
@@ -82,7 +81,7 @@ class OrderManager(metaclass=SingletonArg):
             # 触发系统交易熔断时，禁止入场，允许出场
             logger.warning('order enter forbid, fatal stop, %s', pair)
             return False
-        return pair not in self.forbid_pairs
+        return pair not in BotGlobal.forbid_pairs
 
     async def try_dump(self):
         pass
@@ -128,8 +127,10 @@ class OrderManager(metaclass=SingletonArg):
             await sess.flush()
             enter_ods = [od.detach(sess) for od in enter_ods if od]
             exit_ods = [od.detach(sess) for od in exit_ods if od]
+        old_keys = BotCache.open_keys()
         for od in enter_ods:
             BotCache.open_ods[od.id] = od
+        BotCache.print_chgs(old_keys, 'process_orders')
         if edit_triggers:
             edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
             self.submit_triggers(edit_triggers)
@@ -251,6 +252,7 @@ class OrderManager(metaclass=SingletonArg):
 
     async def exit_order(self, od: InOutOrder, sigout: dict, price: Optional[float] = None) -> Optional[InOutOrder]:
         if od.exit_tag:
+            logger.debug('order already exit, skip: %s', od.key)
             return
         exit_amt = sigout.get('amount')
         if exit_amt:
@@ -280,6 +282,7 @@ class OrderManager(metaclass=SingletonArg):
         od.update_profits()
         if od.id in BotCache.open_ods:
             del BotCache.open_ods[od.id]
+            logger.debug(f'remove open key {od.key} _finish_order')
         # if self.pair_fee_limits and fee_rate and od.symbol not in self.forbid_pairs:
         #     limit_fee = self.pair_fee_limits.get(od.symbol)
         #     if limit_fee is not None and fee_rate > limit_fee * 2:

@@ -233,7 +233,7 @@ class KlineLiveConsumer(ClientIO):
         return True
 
     async def on_spider_trade(self, msg_key: str, msg_data):
-        logger.debug('receive trade: %s %s', msg_key, len(msg_data))
+        # logger.debug('receive trade: %s %s', msg_key, len(msg_data))
         if not msg_data:
             return False
         _, exg_name, market, pair = msg_key.split('_')
@@ -244,7 +244,7 @@ class KlineLiveConsumer(ClientIO):
         return True
 
     async def on_spider_book(self, msg_key: str, msg_data):
-        logger.debug('receive odbook: %s', msg_key)
+        # logger.debug('receive odbook: %s', msg_key)
         if not msg_data:
             return False
         _, exg_name, market, pair = msg_key.split('_')

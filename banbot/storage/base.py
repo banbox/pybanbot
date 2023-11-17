@@ -11,22 +11,21 @@ import threading
 import time
 import traceback
 from contextvars import ContextVar
-from typing import Optional, List, Union, Type, Dict, Callable
+from typing import Optional, List, Union, Type, Dict, Callable, Any
 
 import six
 import sqlalchemy as sa
-from sqlalchemy import create_engine, pool, Column, orm, select, update, delete, insert  # noqa
+from sqlalchemy import create_engine, pool, orm, select, update, delete, insert  # noqa
 from sqlalchemy import event as db_event
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm.session import make_transient, sessionmaker, Session
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, MappedColumn  # noqa
 from sqlalchemy.types import TypeDecorator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker, AsyncEngine, AsyncAttrs
 from sqlalchemy.ext.asyncio import AsyncSession as SqlSession
 
 from banbot.config import AppConfig
 from banbot.util.common import logger
 
-_BaseDbModel = declarative_base()
 _db_sess_asy: ContextVar[Optional[AsyncSession]] = ContextVar('_db_sess_asy', default=None)
 db_slow_query_timeout = 1
 
@@ -66,8 +65,8 @@ def get_db_cfg(db_url: str = None, for_async=True) -> dict:
         db_cfg['url'] = db_url
     if for_async:
         db_cfg['url'] = db_cfg['url'].replace('postgresql:', 'postgresql+asyncpg:')
-    if not db_cfg.get('pool_size'):
-        db_cfg['pool_size'] = 20
+    # if not db_cfg.get('pool_size'):
+    #     db_cfg['pool_size'] = 20
     return db_cfg
 
 
@@ -87,7 +86,7 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     db_url = db_cfgs['url']
     logger.info(f'db url:{db_url}')
     # pool_recycle 连接过期时间，根据mysql服务器端连接的存活时间wait_timeout略小些
-    create_args = dict(**db_cfgs, pool_recycle=3600, poolclass=pool.QueuePool, max_overflow=0)
+    create_args = dict(**db_cfgs, pool_recycle=3600, poolclass=pool.NullPool)  # , max_overflow=0)
     if debug is not None:
         create_args['echo'] = debug
     # 实例化异步engine
@@ -233,18 +232,9 @@ class IntEnum(TypeDecorator):
         return value
 
 
-class BaseDbModel(_BaseDbModel):
-    __abstract__ = True
+class BaseDbModel(AsyncAttrs, DeclarativeBase):
 
-    def __init__(self, *args, **kwargs):
-        all_cols = self.__table__.columns
-        allow_kwargs = {}
-        for k in kwargs:
-            if hasattr(all_cols, k):
-                allow_kwargs[k] = kwargs[k]
-        super().__init__(*args, **allow_kwargs)
-
-    def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None):
+    def dict(self, only: List[Union[str, MappedColumn[Any]]] = None, skips: List[Union[str, MappedColumn[Any]]] = None):
         all_obj_keys = set(self.__dict__.keys())
         db_keys = set(self.__table__.columns.keys())
         tmp_keys = all_obj_keys - db_keys
@@ -288,6 +278,15 @@ class BaseDbModel(_BaseDbModel):
                 setattr(self, k, v)
             except Exception:
                 continue
+
+    @classmethod
+    def fields(cls, kwargs):
+        all_cols = cls.__table__.columns
+        allow_kwargs = {}
+        for k in kwargs:
+            if hasattr(all_cols, k):
+                allow_kwargs[k] = kwargs[k]
+        return allow_kwargs
 
 
 def set_db_events(engine, Session):

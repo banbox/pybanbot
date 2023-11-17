@@ -65,13 +65,13 @@ class KLine(BaseDbModel):
     __tablename__ = 'kline_1m'
     _tname: ClassVar[str] = 'kline_1m'
 
-    sid = Column(sa.Integer, primary_key=True)
-    time = Column(type_=sa.TIMESTAMP(timezone=True), primary_key=True)
-    open = Column(sa.FLOAT)
-    high = Column(sa.FLOAT)
-    low = Column(sa.FLOAT)
-    close = Column(sa.FLOAT)
-    volume = Column(sa.FLOAT)
+    sid = mapped_column(sa.Integer, primary_key=True)
+    time = mapped_column(type_=sa.TIMESTAMP(timezone=True), primary_key=True)
+    open = mapped_column(sa.FLOAT)
+    high = mapped_column(sa.FLOAT)
+    low = mapped_column(sa.FLOAT)
+    close = mapped_column(sa.FLOAT)
+    volume = mapped_column(sa.FLOAT)
 
     agg_list = [
         # 全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差
@@ -838,11 +838,11 @@ class KHole(BaseDbModel):
         sa.UniqueConstraint('sid', 'timeframe', 'start', name='idx_khole_sid_tf_start'),
     )
 
-    id = Column(sa.Integer, primary_key=True)
-    sid = Column(sa.Integer)
-    timeframe = Column(sa.String(5))
-    start = Column(type_=sa.TIMESTAMP(timezone=True))  # 从第一个缺失的bar时间戳记录
-    stop = Column(type_=sa.TIMESTAMP(timezone=True))  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
+    id = mapped_column(sa.Integer, primary_key=True)
+    sid = mapped_column(sa.Integer)
+    timeframe = mapped_column(sa.String(5))
+    start = mapped_column(type_=sa.TIMESTAMP(timezone=True))  # 从第一个缺失的bar时间戳记录
+    stop = mapped_column(type_=sa.TIMESTAMP(timezone=True))  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
 
     @classmethod
     async def get_down_range(cls, exs: ExSymbol, timeframe: str, start_ms: int, stop_ms: int,
@@ -883,7 +883,7 @@ class KInfo(BaseDbModel):
     '''
     __tablename__ = 'kinfo'
 
-    sid = Column(sa.Integer, primary_key=True)
-    timeframe = Column(sa.String(5), primary_key=True)
-    start = Column(sa.BigInteger)  # 第一个bar的13位时间戳
-    stop = Column(sa.BigInteger)  # 最后一个bar的13位时间戳 + tf_secs * 1000
+    sid = mapped_column(sa.Integer, primary_key=True)
+    timeframe = mapped_column(sa.String(5), primary_key=True)
+    start = mapped_column(sa.BigInteger)  # 第一个bar的13位时间戳
+    stop = mapped_column(sa.BigInteger)  # 最后一个bar的13位时间戳 + tf_secs * 1000

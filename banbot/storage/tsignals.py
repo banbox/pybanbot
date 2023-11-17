@@ -21,11 +21,11 @@ class TdSignal(BaseDbModel):
         sa.Index('idx_sig_strategy', 'strategy'),
     )
 
-    id = Column(sa.Integer, primary_key=True)
-    strategy = Column(sa.String(20))
-    symbol_id = Column(sa.Integer)  # ExSymbol对应的ID
-    timeframe = Column(sa.String(5))  # 1m, 5m, 15m, ...
-    action = Column(sa.String(5))  # buy/sell
-    create_at = Column(sa.BIGINT)  # 发出信号时的时间戳，如消息中有取消息中的，否则取当前时间戳
-    bar_ms = Column(sa.BIGINT)  # 发出信号时，所属bar的时间戳，此bar应尚未完成
-    price = Column(sa.Float)
+    id = mapped_column(sa.Integer, primary_key=True)
+    strategy = mapped_column(sa.String(20))
+    symbol_id = mapped_column(sa.Integer)  # ExSymbol对应的ID
+    timeframe = mapped_column(sa.String(5))  # 1m, 5m, 15m, ...
+    action = mapped_column(sa.String(5))  # buy/sell
+    create_at = mapped_column(sa.BIGINT)  # 发出信号时的时间戳，如消息中有取消息中的，否则取当前时间戳
+    bar_ms = mapped_column(sa.BIGINT)  # 发出信号时，所属bar的时间戳，此bar应尚未完成
+    price = mapped_column(sa.Float)

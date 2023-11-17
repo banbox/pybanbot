@@ -30,21 +30,21 @@ class DbUser(BaseDbModel):
     # 插入后更新obj的default值到对应列
     __mapper_args__ = {'eager_defaults': True}
 
-    id = Column(sa.Integer, primary_key=True)
-    user_name = Column(sa.String(128))
-    avatar = Column(sa.String(256))
-    mobile = Column(sa.String(30), nullable=True)
-    mobile_verified = Column(sa.Boolean, default=False)
-    email = Column(sa.String(120), nullable=True)
-    email_verified = Column(sa.Boolean, default=False)
-    pwd_salt = Column(sa.String(128))
-    last_ip = Column(sa.String(64), nullable=True)
-    create_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
-    last_login = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
+    id = mapped_column(sa.Integer, primary_key=True)
+    user_name = mapped_column(sa.String(128))
+    avatar = mapped_column(sa.String(256))
+    mobile = mapped_column(sa.String(30), nullable=True)
+    mobile_verified = mapped_column(sa.Boolean, default=False)
+    email = mapped_column(sa.String(120), nullable=True)
+    email_verified = mapped_column(sa.Boolean, default=False)
+    pwd_salt = mapped_column(sa.String(128))
+    last_ip = mapped_column(sa.String(64), nullable=True)
+    create_at = mapped_column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
+    last_login = mapped_column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
 
-    vip_type = Column(IntEnum(VIPType), default=VIPType.normal)
-    vip_expire_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
-    inviter_id = Column(sa.Integer)
+    vip_type = mapped_column(IntEnum(VIPType), default=VIPType.normal)
+    vip_expire_at = mapped_column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
+    inviter_id = mapped_column(sa.Integer)
 
     @classmethod
     async def init_tbl(cls, sess: SqlSession):
@@ -65,9 +65,9 @@ class ExgUser(BaseDbModel):
         sa.Index('idx_exg_users_out_uid', 'out_uid'),
     )
 
-    id = Column(sa.Integer, primary_key=True)
-    uid = Column(sa.Integer, index=True)  # 关联的用户ID
-    channel = Column(sa.String(20))  # 所属渠道：binance
-    out_uid = Column(sa.String(128))  # 交易所的用户ID
-    user_name = Column(sa.String(128))  # 交易所的用户昵称
+    id = mapped_column(sa.Integer, primary_key=True)
+    uid = mapped_column(sa.Integer, index=True)  # 关联的用户ID
+    channel = mapped_column(sa.String(20))  # 所属渠道：binance
+    out_uid = mapped_column(sa.String(128))  # 交易所的用户ID
+    user_name = mapped_column(sa.String(128))  # 交易所的用户昵称
 

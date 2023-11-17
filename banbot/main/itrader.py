@@ -36,6 +36,8 @@ class Trader:
 
     def _load_strategies(self, pairlist: List[str], pair_tfscores: Dict[str, List[Tuple[str, float]]])\
             -> Dict[str, Dict[str, int]]:
+        from io import StringIO
+        from banbot.symbols.utils import group_symbols
         run_jobs = StrategyResolver.load_run_jobs(self.config, pairlist, pair_tfscores)
         if not run_jobs:
             raise ValueError(f'no run jobs found: {pairlist} {pair_tfscores}')
@@ -55,12 +57,23 @@ class Trader:
                     stg_insts.append(self._load_stg(cls, pair_tfs, pair, timeframe))
                     BotGlobal.stg_symbol_tfs.append(job)
                 BotGlobal.pairtf_stgs[pair_tf_key] = stg_insts
-        from itertools import groupby
-        stg_pairs = sorted(BotGlobal.stg_symbol_tfs, key=lambda x: x[:2])
-        sp_groups = groupby(stg_pairs, key=lambda x: x[0])
-        for key, gp in sp_groups:
-            items = ' '.join([f'{it[1]}/{it[2]}' for it in gp])
-            logger.info(f'{key}: {items}')
+        # 输出生效的任务
+        groups = dict()
+        for stg, pair, tf in BotGlobal.stg_symbol_tfs:
+            warm_num = (pair_tfs.get(pair) or dict()).get(tf) or 0
+            gp_key = f'{stg}_{tf}_{warm_num}'
+            if gp_key not in groups:
+                groups[gp_key] = []
+            groups[gp_key].append(pair)
+        out_io = StringIO()
+        out_io.write('bot runing jobs:\n')
+        for key, pairs in groups.items():
+            pairs_gp = group_symbols(pairs)
+            out_io.write(f'【{key}】\n')
+            for quote, codes in pairs_gp.items():
+                code_text = ' '.join(codes)
+                out_io.write(f'{quote}: {code_text}\n')
+        logger.info(out_io.getvalue())
         if BotGlobal.run_tf_secs and BotGlobal.run_tf_secs[0][1]:
             self.check_hang_intv = BotGlobal.run_tf_secs[0][1]
         return pair_tfs
@@ -112,6 +125,8 @@ class Trader:
         # 更新最新价格
         cur_price = trades[-1]['price']
         MarketPrice.set_new_price(pair, cur_price)
+        if pair in BotGlobal.forbid_pairs:
+            return
         all_open_ods = list(BotCache.open_ods.values())
         if not BotGlobal.is_warmup:
             tracer = InOutTracer(all_open_ods)
@@ -121,6 +136,7 @@ class Trader:
             if chg_ods or BotCache.updod_at + 60 < btime.time():
                 all_open_ods = await self._flush_cache_orders(chg_ods)
         pair_ods = [od for od in all_open_ods if od.symbol == pair]
+
         enter_list, exit_list = self._run_ws(pair_ods, pair, trades)
 
         if enter_list or exit_list:
@@ -140,6 +156,7 @@ class Trader:
             return list(BotCache.open_ods.values())
         async with dba():
             sess: SqlSession = dba.session
+            old_keys = BotCache.open_keys()
             open_ods = await InOutOrder.open_orders()
             if chg_ods:
                 for od in chg_ods:
@@ -148,6 +165,7 @@ class Trader:
                 await sess.flush()
                 open_ods = [od for od in open_ods if od.status < InOutStatus.FullExit]
             BotCache.open_ods = {od.id: od.detach(sess) for od in open_ods}
+            BotCache.print_chgs(old_keys, '_flush_cache_orders')
             return list(BotCache.open_ods.values())
 
     async def _apply_signals(self, pair: str, enter_list, exit_list, all_open_ods):

@@ -19,12 +19,12 @@ class ExSymbol(BaseDbModel):
     _object_map: ClassVar[Dict[str, 'ExSymbol']] = dict()
     _id_map: ClassVar[Dict[int, 'ExSymbol']] = dict()
 
-    id = Column(sa.Integer, primary_key=True)
-    exchange = Column(sa.String(50))
-    symbol = Column(sa.String(20))  # BTC/USDT  BTC/USDT:USDT  BTC/USDT:USDT-230630
-    market = Column(sa.String(20))
-    list_dt = Column(type_=sa.TIMESTAMP(timezone=True))
-    delist_dt = Column(type_=sa.TIMESTAMP(timezone=True))
+    id = mapped_column(sa.Integer, primary_key=True)
+    exchange = mapped_column(sa.String(50))
+    symbol = mapped_column(sa.String(20))  # BTC/USDT  BTC/USDT:USDT  BTC/USDT:USDT-230630
+    market = mapped_column(sa.String(20))
+    list_dt = mapped_column(type_=sa.TIMESTAMP(timezone=True))
+    delist_dt = mapped_column(type_=sa.TIMESTAMP(timezone=True))
 
     @orm.reconstructor
     def __init__(self, **kwargs):

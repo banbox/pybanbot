@@ -13,14 +13,14 @@ min_date_time = datetime.datetime.utcfromtimestamp(0)
 class Overlay(BaseDbModel):
     __tablename__ = 'overlay'
 
-    id = Column(sa.Integer, primary_key=True)
-    user = Column(sa.Integer, index=True)
-    sid = Column(sa.Integer, index=True)
-    start_ms = Column(sa.BIGINT, index=True)
-    stop_ms = Column(sa.BIGINT, index=True)
-    tf_msecs = Column(sa.Integer)
-    update_at = Column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
-    data = Column(sa.Text)
+    id = mapped_column(sa.Integer, primary_key=True)
+    user = mapped_column(sa.Integer, index=True)
+    sid = mapped_column(sa.Integer, index=True)
+    start_ms = mapped_column(sa.BIGINT, index=True)
+    stop_ms = mapped_column(sa.BIGINT, index=True)
+    tf_msecs = mapped_column(sa.Integer)
+    update_at = mapped_column(type_=sa.TIMESTAMP(timezone=True), default=min_date_time)
+    data = mapped_column(sa.Text)
 
     @classmethod
     async def get(cls, user_id: int, sid: int, tf_msecs: int, start_ms: int, end_ms: int,

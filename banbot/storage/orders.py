@@ -3,6 +3,7 @@
 # File  : trades.py
 # Author: anyongjin
 # Date  : 2023/3/21
+import json
 import math
 from dataclasses import dataclass
 from banbot.compute.sta_inds import *
@@ -77,28 +78,28 @@ class Order(BaseDbModel):
     # 插入后更新obj的default值到对应列
     __mapper_args__ = {'eager_defaults': True}
 
-    id = Column(sa.Integer, primary_key=True)
-    task_id = Column(sa.Integer)
-    inout_id = Column(sa.Integer)
-    symbol = Column(sa.String(50))
-    enter = Column(sa.Boolean, default=False)
-    order_type = Column(sa.String(50))
-    order_id = Column(sa.String(164))  # 交易所订单ID，如修改订单会变化，记录最新的值
-    side = Column(sa.String(10))
+    id = mapped_column(sa.Integer, primary_key=True)
+    task_id = mapped_column(sa.Integer)
+    inout_id = mapped_column(sa.Integer)
+    symbol = mapped_column(sa.String(50))
+    enter = mapped_column(sa.Boolean, default=False)
+    order_type = mapped_column(sa.String(50))
+    order_id = mapped_column(sa.String(164))  # 交易所订单ID，如修改订单会变化，记录最新的值
+    side = mapped_column(sa.String(10))
     'buy/sell'
-    create_at = Column(sa.BIGINT)  # 创建时间，13位整型时间戳
-    price = Column(sa.Float)
+    create_at = mapped_column(sa.BIGINT)  # 创建时间，13位整型时间戳
+    price = mapped_column(sa.Float)
     '入场价格，市价单此项为空'
-    average = Column(sa.Float)
+    average = mapped_column(sa.Float)
     '平均成交价格'
-    amount = Column(sa.Float)
+    amount = mapped_column(sa.Float)
     'base币的数量；这里无需扣除手续费，这里和实际钱包到账金额不同'
-    filled = Column(sa.Float)
+    filled = mapped_column(sa.Float)
     '已成交数量，这里不用扣除手续费，完全成交时和amount相等'
-    status = Column(sa.SMALLINT, default=OrderStatus.Init)
-    fee = Column(sa.Float, default=0)
-    fee_type = Column(sa.String(10))
-    update_at = Column(sa.BIGINT)
+    status = mapped_column(sa.SMALLINT, default=OrderStatus.Init)
+    fee = mapped_column(sa.Float, default=0)
+    fee_type = mapped_column(sa.String(10))
+    update_at = mapped_column(sa.BIGINT)
     '13位，上次更新的交易所时间戳，如果trade小于此值，则是旧的数据不更新'
 
     def cut_part(self, cut_rate: float, fill=True) -> 'Order':
@@ -166,31 +167,31 @@ class InOutOrder(BaseDbModel, InfoPart):
     _his_ods: ClassVar[List['InOutOrder']] = []
     _next_id: ClassVar[int] = 1
 
-    id = Column(sa.Integer, primary_key=True)
-    task_id = Column(sa.Integer)
-    symbol = Column(sa.String(50))
-    sid = Column(sa.Integer)
-    timeframe = Column(sa.String(5))
-    short = Column(sa.Boolean)
+    id = mapped_column(sa.Integer, primary_key=True)
+    task_id = mapped_column(sa.Integer)
+    symbol = mapped_column(sa.String(50))
+    sid = mapped_column(sa.Integer)
+    timeframe = mapped_column(sa.String(5))
+    short = mapped_column(sa.Boolean)
     '是否是做空单'
-    status = Column(sa.SMALLINT, default=InOutStatus.Init)
+    status = mapped_column(sa.SMALLINT, default=InOutStatus.Init)
     '交易加锁的键，阻止相同键同时下单'
-    enter_tag = Column(sa.String(30))
-    init_price = Column(sa.Float)
+    enter_tag = mapped_column(sa.String(30))
+    init_price = mapped_column(sa.Float)
     '发出信号时入场价格，仅用于策略后续计算'
-    quote_cost = Column(sa.Float)
+    quote_cost = mapped_column(sa.Float)
     '花费定价币金额，当价格不确定时，可先不设置amount，后续通过此字段计算amount'
-    exit_tag = Column(sa.String(30))
-    leverage = Column(sa.Integer, default=1)
+    exit_tag = mapped_column(sa.String(30))
+    leverage = mapped_column(sa.Integer, default=1)
     '杠杆倍数；现货杠杆和期货合约都可使用'
-    enter_at = Column(sa.BIGINT)
+    enter_at = mapped_column(sa.BIGINT)
     '13位时间戳，策略决定入场时间戳'
-    exit_at = Column(sa.BIGINT)
+    exit_at = mapped_column(sa.BIGINT)
     '13位时间戳，策略决定出场时间戳'
-    strategy = Column(sa.String(20))
-    stg_ver = Column(sa.Integer, default=0)
-    profit_rate = Column(sa.Float, default=0)
-    profit = Column(sa.Float, default=0)
+    strategy = mapped_column(sa.String(20))
+    stg_ver = mapped_column(sa.Integer, default=0)
+    profit_rate = mapped_column(sa.Float, default=0)
+    profit = mapped_column(sa.Float, default=0)
 
     @orm.reconstructor
     def __init__(self, **kwargs):
@@ -293,6 +294,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             return 'enter'
 
     def update_exit(self, **kwargs):
+        kwargs = Order.fields(kwargs)
         if not self.exit:
             kwargs.update(dict(
                 symbol=self.enter.symbol,
@@ -377,6 +379,7 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     async def _save_to_db(self):
         from banbot.storage.biz import BotCache
+        old_keys = BotCache.open_keys()
         if self.status < InOutStatus.FullExit:
             sess = dba.session
             if not self.id:
@@ -398,9 +401,11 @@ class InOutOrder(BaseDbModel, InfoPart):
             BotCache.open_ods[self.id] = self.detach(sess)
         elif self.id in BotCache.open_ods:
             del BotCache.open_ods[self.id]
+        BotCache.print_chgs(old_keys, traceback.format_stack()[-3])
 
     def _save_to_mem(self):
         from banbot.storage.biz import BotCache
+        old_keys = BotCache.open_keys()
         if self.status < InOutStatus.FullExit:
             self._open_ods[self.id] = self
             BotCache.open_ods[self.id] = self
@@ -411,6 +416,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                     self._his_ods.append(self)
             if self.id in BotCache.open_ods:
                 del BotCache.open_ods[self.id]
+        BotCache.print_chgs(old_keys, traceback.format_stack()[-3])
 
     def save_mem(self):
         if btime.run_mode not in btime.LIVE_MODES:
@@ -436,7 +442,6 @@ class InOutOrder(BaseDbModel, InfoPart):
             self.exit_at = btime.time_ms()
         self.exit_tag = tag
         self.update_exit(
-            tag=tag,
             update_at=btime.time_ms(),
             status=OrderStatus.Close,
             amount=amount,
@@ -500,7 +505,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         if other.exit:
             self.exit.update_props(**other.exit.dict())
 
-    def dict(self, only: List[Union[str, sa.Column]] = None, skips: List[Union[str, sa.Column]] = None,
+    def dict(self, only: List[Union[str, MappedColumn[Any]]] = None, skips: List[Union[str, MappedColumn[Any]]] = None,
              flat_sub: bool = False, origin: bool = False):
         from banbot.util.misc import add_dict_prefix
         result = super().dict(only, skips)
@@ -621,7 +626,7 @@ class InOutOrder(BaseDbModel, InfoPart):
             ex_ods = list(await sess.scalars(select(Order).where(Order.inout_id == od_id)))
             op_od.enter = next((o for o in ex_ods if o.enter), None)
             op_od.exit = next((o for o in ex_ods if not o.enter), None)
-            logger.debug(f'InoutOrder.get: {od_id}: {op_od}, {sess}')
+            logger.debug(f'InoutOrder.get: %s: %s, %s', od_id, op_od, sess)
             return op_od
         op_od = cls._open_ods.get(od_id)
         if op_od is not None:
@@ -698,6 +703,38 @@ class InOutTracer:
         for od in chg_ods:
             await od.save()
         self._set_state()
+
+
+class ORMTracer:
+    def __init__(self):
+        self.state = dict()
+
+    def trace(self, objs: List[BaseDbModel]):
+        for obj in objs:
+            self.state[(type(obj), obj.id)] = json.dumps(obj.dict())
+
+    async def test(self):
+        if not self.state:
+            return
+        sess: SqlSession = dba.session
+        fails = []
+        for k, data in self.state.items():
+            tbl, oid = k
+            if tbl.__name__ == 'InOutOrder':
+                new_obj = await InOutOrder.get(oid)
+            else:
+                field = getattr(tbl, 'id')
+                new_obj = (await sess.execute(select(tbl).where(field == oid).limit(1))).scalar()
+            if not new_obj:
+                new_data = '{}'
+            else:
+                new_data = json.dumps(new_obj.dict())
+            if new_data != data:
+                fails.append((tbl.__name__, oid, data, new_data))
+        if fails:
+            logger.info(f'found mismatch {len(fails)}/{len(self.state)}  {traceback.format_stack()[-2]}')
+            for f in fails:
+                print(f'{f[0]} {f[1]}\n{f[2]}\n{f[3]}')
 
 
 def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,

@@ -8,7 +8,7 @@ from banbot.storage.base import *
 
 
 class InfoPart:
-    info = Column(sa.String(4096))
+    info = mapped_column(sa.String(4096))
 
     def __init__(self):
         self.infos = dict()
