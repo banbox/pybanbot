@@ -96,6 +96,7 @@ class BinanceOrderMgr(LiveOrderMgr):
             if filled <= min_dust:
                 break
         await tracer.save()
+        BotCache.save_open_ods(open_ods)
         if not is_reduce_only and filled > min_dust and self.allow_take_over:
             # 有剩余数量，创建相反订单
             exs = ExSymbol.get(self.name, self.market_type, pair)
@@ -103,6 +104,7 @@ class BinanceOrderMgr(LiveOrderMgr):
                                         OrderStatus.Close, order_id)
             if iod:
                 await iod.save()
+                BotCache.save_open_ods([iod])
                 logger.debug('enter for left: %s', iod)
                 self._fire(iod, True)
         return True
@@ -143,6 +145,7 @@ class BinanceOrderMgr(LiveOrderMgr):
                                    btime.time_ms(), od_status, trade['id'])
         if od:
             await od.save()
+            BotCache.save_open_ods([od])
             logger.debug('enter od: %s', od)
             self._fire(od, True)
             stg_list = BotGlobal.pairtf_stgs.get(f'{exs.symbol}_{od.timeframe}')

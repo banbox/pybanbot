@@ -159,9 +159,9 @@ class LiveTrader(Trader):
                 # 跟踪账户杠杆倍数和保证金配置
                 asyncio.create_task(self.order_mgr.watch_leverage_forever()),
                 # 订单异步消费队列
-                asyncio.create_task(self.order_mgr.consume_queue()),
+                asyncio.create_task(self.order_mgr.consume_order_queue()),
                 # 监听交易所用户订单，更新本地订单状态
-                asyncio.create_task(self.order_mgr.listen_orders_forever()),
+                asyncio.create_task(self.order_mgr.watch_my_exg_trades()),
                 # 处理未匹配订单，跟踪用户下单
                 asyncio.create_task(self.order_mgr.trail_unmatches_forever()),
             ])

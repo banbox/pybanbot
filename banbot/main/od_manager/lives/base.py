@@ -522,7 +522,7 @@ class LiveOrderMgr(OrderManager):
                     od.local_exit(tag, status_msg=str(e))
             if not catched:
                 raise ValueError(f'create exg order fail: {print_args}')
-        # 创建订单返回的结果，可能早于listen_orders_forever，也可能晚于listen_orders_forever
+        # 创建订单返回的结果，可能早于watch_my_exg_trades，也可能晚于watch_my_exg_trades
         try:
             if od_res:
                 await self._update_subod_by_ccxtres(od, is_enter, od_res)
@@ -566,7 +566,7 @@ class LiveOrderMgr(OrderManager):
         return True
 
     @loop_forever
-    async def listen_orders_forever(self):
+    async def watch_my_exg_trades(self):
         try:
             trades = await self.exchange.watch_my_trades()
         except ccxt.NetworkError as e:
@@ -604,6 +604,7 @@ class LiveOrderMgr(OrderManager):
                     if has_match:
                         logger.debug('update order by unmatch %s', sub_od.dict())
                     await tracer.save()
+                    BotCache.save_open_ods([od])
         if len(self.handled_trades) > 500:
             cut_keys = list(self.handled_trades.keys())[-300:]
             self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -718,7 +719,7 @@ class LiveOrderMgr(OrderManager):
         # 检查入场订单是否已成交，如未成交则直接取消
         await self._create_exg_order(od, False)
 
-    async def consume_queue(self):
+    async def consume_order_queue(self):
         reset_ctx()
         while True:
             job: OrderJob = await self.order_q.get()
@@ -753,6 +754,7 @@ class LiveOrderMgr(OrderManager):
                         else:
                             logger.exception('consume order exception: %s', job)
                     await tracer.save()
+                    BotCache.save_open_ods([od])
         except Exception:
             logger.exception("consume order_q error")
 
@@ -844,7 +846,7 @@ class LiveOrderMgr(OrderManager):
         try:
             exp_orders = [od for k, od in BotCache.open_ods if od.pending_type(timeouts)]
             if exp_orders:
-                # 当缓存有符合条件的未成交订单时，才尝试执行，避免荣誉的数据库访问
+                # 当缓存有符合条件的未成交订单时，才尝试执行，避免冗余的数据库访问
                 async with dba():
                     await self._trail_unfill_orders(timeouts)
         except Exception:
@@ -892,6 +894,7 @@ class LiveOrderMgr(OrderManager):
                 logger.info('change %s price %s: %f -> %f', sub_od.side, od.key, sub_od.price, new_price)
                 await self.edit_pending_order(od, is_enter, new_price)
         await tracer.save()
+        BotCache.save_open_ods(exp_orders)
         from banbot.rpc import Notify, NotifyType
         if unsubmits and Notify.instance:
             Notify.send(type=NotifyType.EXCEPTION, status=f'超时未提交订单：{unsubmits}')

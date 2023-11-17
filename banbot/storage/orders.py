@@ -376,6 +376,7 @@ class InOutOrder(BaseDbModel, InfoPart):
         return part
 
     async def _save_to_db(self):
+        from banbot.storage.biz import BotCache
         if self.status < InOutStatus.FullExit:
             sess = dba.session
             if not self.id:
@@ -394,14 +395,22 @@ class InOutOrder(BaseDbModel, InfoPart):
                 need_flush = True
             if need_flush:
                 await sess.flush()
+            BotCache.open_ods[self.id] = self.detach(sess)
+        elif self.id in BotCache.open_ods:
+            del BotCache.open_ods[self.id]
 
     def _save_to_mem(self):
+        from banbot.storage.biz import BotCache
         if self.status < InOutStatus.FullExit:
             self._open_ods[self.id] = self
-        elif self.id in self._open_ods:
-            self._open_ods.pop(self.id)
-            if self.enter.filled:
-                self._his_ods.append(self)
+            BotCache.open_ods[self.id] = self
+        else:
+            if self.id in self._open_ods:
+                self._open_ods.pop(self.id)
+                if self.enter.filled:
+                    self._his_ods.append(self)
+            if self.id in BotCache.open_ods:
+                del BotCache.open_ods[self.id]
 
     def save_mem(self):
         if btime.run_mode not in btime.LIVE_MODES:

@@ -5,7 +5,7 @@
 # Date  : 2023/11/9
 import asyncio
 from typing import *
-from banbot.storage.orders import InOutOrder
+from banbot.storage.orders import InOutOrder, InOutStatus, dba
 
 
 class BotCache:
@@ -55,3 +55,12 @@ class BotCache:
                     Notify.send(type=NotifyType.EXCEPTION, status=f'监听爬虫K线超时：{fail_text}')
             except Exception:
                 logger.error('run_bar_waiter error')
+
+    @classmethod
+    def save_open_ods(cls, ods: List[InOutOrder]):
+        sess = dba.session
+        for od in ods:
+            if od.status < InOutStatus.FullExit:
+                cls.open_ods[od.id] = od.detach(sess)
+            elif od.id in cls.open_ods:
+                del cls.open_ods[od.id]
