@@ -379,7 +379,6 @@ class InOutOrder(BaseDbModel, InfoPart):
 
     async def _save_to_db(self):
         from banbot.storage.biz import BotCache
-        old_keys = BotCache.open_keys()
         if self.status < InOutStatus.FullExit:
             sess = dba.session
             if not self.id:
@@ -401,11 +400,9 @@ class InOutOrder(BaseDbModel, InfoPart):
             BotCache.open_ods[self.id] = self.clone()
         elif self.id in BotCache.open_ods:
             del BotCache.open_ods[self.id]
-        BotCache.print_chgs(old_keys, traceback.format_stack()[-3])
 
     def _save_to_mem(self):
         from banbot.storage.biz import BotCache
-        old_keys = BotCache.open_keys()
         if self.status < InOutStatus.FullExit:
             self._open_ods[self.id] = self
             BotCache.open_ods[self.id] = self
@@ -416,7 +413,6 @@ class InOutOrder(BaseDbModel, InfoPart):
                     self._his_ods.append(self)
             if self.id in BotCache.open_ods:
                 del BotCache.open_ods[self.id]
-        BotCache.print_chgs(old_keys, traceback.format_stack()[-3])
 
     def save_mem(self):
         if btime.run_mode not in btime.LIVE_MODES:

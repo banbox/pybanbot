@@ -125,10 +125,8 @@ class OrderManager(metaclass=SingletonArg):
         if btime.run_mode in btime.LIVE_MODES:
             enter_ods = [od.clone() for od in enter_ods if od]
             exit_ods = [od.clone() for od in exit_ods if od]
-        old_keys = BotCache.open_keys()
         for od in enter_ods:
             BotCache.open_ods[od.id] = od
-        BotCache.print_chgs(old_keys, 'process_orders')
         if edit_triggers:
             edit_triggers = [(od, prefix) for od, prefix in edit_triggers if od not in exit_ods]
             self.submit_triggers(edit_triggers)

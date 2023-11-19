@@ -739,7 +739,6 @@ class LiveOrderMgr(OrderManager):
                         od = await InOutOrder.get(job.od_id)
                         logger.debug('exec order: %s %s %s', job.action, job.od_id, od.key)
                         tracer.trace([od])
-                        self._check_od_sess(od)
                         if job.action == OrderJob.ACT_ENTER:
                             await self._exec_order_enter(od)
                         elif job.action == OrderJob.ACT_EXIT:
@@ -760,16 +759,6 @@ class LiveOrderMgr(OrderManager):
                     BotCache.save_open_ods([od])
         except Exception:
             logger.exception("consume order_q error")
-
-    def _check_od_sess(self, od: InOutOrder):
-        sess: SqlSession = dba.session
-        sess1 = object_session(od)
-        same1 = sess1 is sess
-        same1_1 = od in sess.identity_map.values()
-        sess2 = object_session(od.enter)
-        same2 = sess2 is sess
-        same2_1 = od.enter in sess.identity_map.values()
-        logger.info(f"check order in sess: {same1} {same1_1} {same2} {same2_1} {od} {sess} {sess1} {sess2}")
 
     async def edit_pending_order(self, od: InOutOrder, is_enter: bool, price: float):
         sub_od = od.enter if is_enter else od.exit

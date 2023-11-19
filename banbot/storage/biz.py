@@ -59,13 +59,11 @@ class BotCache:
 
     @classmethod
     def save_open_ods(cls, ods: List[InOutOrder]):
-        old_keys = cls.open_keys()
         for od in ods:
             if od.status < InOutStatus.FullExit:
                 cls.open_ods[od.id] = od.clone()
             elif od.id in cls.open_ods:
                 del cls.open_ods[od.id]
-        cls.print_chgs(old_keys, traceback.format_stack()[-2])
 
     @classmethod
     def open_keys(cls):
@@ -73,6 +71,7 @@ class BotCache:
 
     @classmethod
     def print_chgs(cls, old_keys: Set[str], tag: str):
+        """显示open_ods前后的列表变化，仅用于调试"""
         new_keys = cls.open_keys()
         adds = new_keys - old_keys
         dels = old_keys - new_keys

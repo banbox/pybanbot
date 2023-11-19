@@ -156,7 +156,6 @@ class Trader:
             return list(BotCache.open_ods.values())
         async with dba():
             sess: SqlSession = dba.session
-            old_keys = BotCache.open_keys()
             open_ods = await InOutOrder.open_orders()
             if chg_ods:
                 for od in chg_ods:
@@ -165,7 +164,6 @@ class Trader:
                 await sess.flush()
                 open_ods = [od for od in open_ods if od.status < InOutStatus.FullExit]
             BotCache.open_ods = {od.id: od.clone() for od in open_ods}
-            BotCache.print_chgs(old_keys, '_flush_cache_orders')
             return list(BotCache.open_ods.values())
 
     async def _apply_signals(self, pair: str, enter_list, exit_list, all_open_ods):
