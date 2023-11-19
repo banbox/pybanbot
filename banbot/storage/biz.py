@@ -59,11 +59,10 @@ class BotCache:
 
     @classmethod
     def save_open_ods(cls, ods: List[InOutOrder]):
-        sess = dba.session
         old_keys = cls.open_keys()
         for od in ods:
             if od.status < InOutStatus.FullExit:
-                cls.open_ods[od.id] = od.detach(sess)
+                cls.open_ods[od.id] = od.clone()
             elif od.id in cls.open_ods:
                 del cls.open_ods[od.id]
         cls.print_chgs(old_keys, traceback.format_stack()[-2])

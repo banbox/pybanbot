@@ -164,7 +164,7 @@ class Trader:
                     await db_od.save()
                 await sess.flush()
                 open_ods = [od for od in open_ods if od.status < InOutStatus.FullExit]
-            BotCache.open_ods = {od.id: od.detach(sess) for od in open_ods}
+            BotCache.open_ods = {od.id: od.clone() for od in open_ods}
             BotCache.print_chgs(old_keys, '_flush_cache_orders')
             return list(BotCache.open_ods.values())
 

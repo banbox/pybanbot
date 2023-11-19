@@ -398,7 +398,7 @@ class InOutOrder(BaseDbModel, InfoPart):
                 need_flush = True
             if need_flush:
                 await sess.flush()
-            BotCache.open_ods[self.id] = self.detach(sess)
+            BotCache.open_ods[self.id] = self.clone()
         elif self.id in BotCache.open_ods:
             del BotCache.open_ods[self.id]
         BotCache.print_chgs(old_keys, traceback.format_stack()[-3])
@@ -480,12 +480,12 @@ class InOutOrder(BaseDbModel, InfoPart):
             else:
                 await LocalOrderManager.obj.exit_order(self, exit_dic)
 
-    def detach(self, sess: SqlSession, keep_map=False):
-        result = detach_obj(sess, self, keep_map=keep_map)
+    def clone(self) -> 'InOutOrder':
+        result = super().clone()
         if self.enter:
-            result.enter = detach_obj(sess, self.enter, keep_map=keep_map)
+            result.enter: Order = self.enter.clone()
         if self.exit:
-            result.exit = detach_obj(sess, self.exit, keep_map=keep_map)
+            result.exit: Order = self.exit.clone()
         return result
 
     async def attach(self, sess: SqlSession) -> 'InOutOrder':
@@ -706,6 +706,7 @@ class InOutTracer:
 
 
 class ORMTracer:
+    """追踪ORM对象两次访问数据库的状态是否一致，用于调试。"""
     def __init__(self):
         self.state = dict()
         self.inits = dict()

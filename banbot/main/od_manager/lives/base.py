@@ -594,11 +594,9 @@ class LiveOrderMgr(OrderManager):
         for od_key, data in valid_items:
             iod_id, sub_id = self.exg_orders[od_key]
             async with LocalLock(f'iod_{iod_id}', 5, force_on_fail=True):
-                tester = ORMTracer()
                 async with dba():
                     od = await InOutOrder.get(iod_id)
                     tracer = InOutTracer([od])
-                    tester.trace([od])
                     sub_od: Order = od.enter if od.enter.id == sub_id else od.exit
                     await self._update_order(od, sub_od, data)
                     logger.debug('update order by push %s %s', data, sub_od.dict())
@@ -607,9 +605,6 @@ class LiveOrderMgr(OrderManager):
                         logger.debug('update order by unmatch %s', sub_od.dict())
                     await tracer.save()
                     BotCache.save_open_ods([od])
-                    tester.update()
-                async with dba():
-                    await tester.test()
         if len(self.handled_trades) > 500:
             cut_keys = list(self.handled_trades.keys())[-300:]
             self.handled_trades = OrderedDict.fromkeys(cut_keys, value=1)
@@ -738,13 +733,11 @@ class LiveOrderMgr(OrderManager):
     async def exec_od_job(self, job: OrderJob):
         try:
             async with LocalLock(f'iod_{job.od_id}', 5, force_on_fail=True):
-                tester = ORMTracer()
                 async with dba():
                     tracer = InOutTracer()
                     try:
                         od = await InOutOrder.get(job.od_id)
-                        tester.trace([od])
-                        logger.info(f'exec order: %s %s %s', job.action, job.od_id, od.key)
+                        logger.debug('exec order: %s %s %s', job.action, job.od_id, od.key)
                         tracer.trace([od])
                         self._check_od_sess(od)
                         if job.action == OrderJob.ACT_ENTER:
@@ -765,9 +758,6 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order exception: %s', job)
                     await tracer.save()
                     BotCache.save_open_ods([od])
-                    tester.update()
-                async with dba():
-                    await tester.test()
         except Exception:
             logger.exception("consume order_q error")
 
@@ -813,15 +803,8 @@ class LiveOrderMgr(OrderManager):
         try:
             unmatches = self._get_expire_unmatches()
             if unmatches:
-                tracer = ORMTracer()
                 async with dba():
-                    logger.debug(f'start _handle_unmatches: {unmatches}')
-                    tracer.trace(await InOutOrder.open_orders())
                     await self._handle_unmatches(unmatches)
-                    tracer.update()
-                    logger.debug(f'complete _handle_unmatches: {unmatches}')
-                async with dba():
-                    await tracer.test()
         except Exception:
             logger.exception('trail_unmatches_forever error')
         await asyncio.sleep(3)

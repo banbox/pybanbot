@@ -234,6 +234,18 @@ class IntEnum(TypeDecorator):
 
 class BaseDbModel(AsyncAttrs, DeclarativeBase):
 
+    def clone(self):
+        all_obj_keys = set(self.__dict__.keys())
+        db_keys = set(self.__table__.columns.keys())
+        save_keys = db_keys.intersection(all_obj_keys)
+        kwargs = dict()
+        for k in save_keys:
+            val = getattr(self, k)
+            if val is None:
+                continue
+            kwargs[k] = val
+        return self.__class__(**kwargs)
+
     def dict(self, only: List[Union[str, MappedColumn[Any]]] = None, skips: List[Union[str, MappedColumn[Any]]] = None):
         all_obj_keys = set(self.__dict__.keys())
         db_keys = set(self.__table__.columns.keys())
@@ -396,7 +408,7 @@ def set_db_events(engine, Session):
 
 def detach_obj(sess: SqlSession, obj: BaseDbModel, keep_map=False):
     """
-    将一个对象从DbSession中解除关联。
+    将一个对象从DbSession中解除关联。注意：对此对象的修改将会丢失！如果需要保存修改到数据库，请使用clone
     :param sess:
     :param obj: 要解除关联的对象
     :param keep_map: 默认False，为True时无法访问属性的值

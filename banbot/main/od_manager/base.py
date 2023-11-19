@@ -41,7 +41,7 @@ class OrderManager(metaclass=SingletonArg):
         self.market_type = config.get('market_type')
         self.leverage = config.get('leverage', 3)  # 杠杆倍数
         self.od_type = config.get('order_type', OrderType.Market.value)
-        self.name = data_hd.exg_name
+        self.name = exchange.name
         self.wallets = wallets
         self.data_mgr = data_hd
         self.callback = callback
@@ -123,10 +123,8 @@ class OrderManager(metaclass=SingletonArg):
         else:
             enter_ods, exit_ods = [], []
         if btime.run_mode in btime.LIVE_MODES:
-            sess = dba.session
-            await sess.flush()
-            enter_ods = [od.detach(sess) for od in enter_ods if od]
-            exit_ods = [od.detach(sess) for od in exit_ods if od]
+            enter_ods = [od.clone() for od in enter_ods if od]
+            exit_ods = [od.clone() for od in exit_ods if od]
         old_keys = BotCache.open_keys()
         for od in enter_ods:
             BotCache.open_ods[od.id] = od
