@@ -65,8 +65,8 @@ def get_db_cfg(db_url: str = None, for_async=True) -> dict:
         db_cfg['url'] = db_url
     if for_async:
         db_cfg['url'] = db_cfg['url'].replace('postgresql:', 'postgresql+asyncpg:')
-    # if not db_cfg.get('pool_size'):
-    #     db_cfg['pool_size'] = 20
+    if not db_cfg.get('pool_size'):
+        db_cfg['pool_size'] = 20
     return db_cfg
 
 
@@ -86,7 +86,7 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
     db_url = db_cfgs['url']
     logger.info(f'db url:{db_url}')
     # pool_recycle 连接过期时间，根据mysql服务器端连接的存活时间wait_timeout略小些
-    create_args = dict(**db_cfgs, pool_recycle=3600, poolclass=pool.NullPool)  # , max_overflow=0)
+    create_args = dict(**db_cfgs, pool_recycle=3600, poolclass=pool.QueuePool, max_overflow=0)
     if debug is not None:
         create_args['echo'] = debug
     # 实例化异步engine
@@ -101,7 +101,7 @@ def init_db(debug: Optional[bool] = None, db_url: str = None) -> AsyncEngine:
         # 初始化跨进程AUTOCOMMIT连接池
         create_args = dict(
             url=db_url,
-            poolclass=pool.NullPool,
+            poolclass=pool.QueuePool,
             isolation_level='AUTOCOMMIT'
         )
         _db_engine_ac = create_async_engine(**create_args)
