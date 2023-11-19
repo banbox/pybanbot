@@ -76,14 +76,13 @@ class KlineLiveConsumer(ClientIO):
     '''
     _starting_spider = False
 
-    def __init__(self, realtime=False):
+    def __init__(self):
         self.config = AppConfig.get()
         super(KlineLiveConsumer, self).__init__(self.config.get('spider_addr'))
         self.jobs: Dict[str, PairTFCache] = dict()
-        self.realtime = realtime
         exg_market = f'{BotGlobal.exg_name}_{BotGlobal.market_type}'
-        self.prefix = 'uohlcv' if realtime else 'ohlcv'
-        self.listens[f'{self.prefix}_{exg_market}'] = self.on_spider_bar
+        self.listens[f'uohlcv_{exg_market}'] = self.on_spider_bar
+        self.listens[f'ohlcv_{exg_market}'] = self.on_spider_bar
         self.listens[f'update_price_{exg_market}'] = self.update_price
         self.listens[f'trade_{exg_market}'] = self.on_spider_trade
         self.listens[f'book_{exg_market}'] = self.on_spider_book
@@ -139,32 +138,23 @@ class KlineLiveConsumer(ClientIO):
                 raise RuntimeError('wait spider timeout')
             logger.info(f'spider connected at {self.remote}')
 
-    async def watch_klines(self, exg_name: str, market_type: str, *jobs: WatchParam):
-        """从爬虫订阅K线。调用此方法前，须确保已调用ExSymbol.ensures"""
-        ws_jobs = [j for j in jobs if j.timeframe == 'ws']
-        tf_jobs = [j for j in jobs if j.timeframe != 'ws']
-        if ws_jobs:
-            await self._write_pairs(exg_name, market_type, 'ws', ws_jobs)
-        if tf_jobs:
-            await self._write_pairs(exg_name, market_type, 'bar', tf_jobs)
-
-    def _get_prefixs(self, exg_name: str, market_type: str, is_ws: bool):
+    def _get_prefixs(self, exg_name: str, market_type: str, jtype: str):
         exg_market = f'{exg_name}_{market_type}'
-        if is_ws:
+        if jtype == 'ws':
             prefixs = [f'trade_{exg_market}', f'book_{exg_market}']
         else:
-            prefixs = [f'{self.prefix}_{exg_market}']
+            prefixs = [f'{jtype}_{exg_market}']
         return prefixs
 
-    async def _write_pairs(self, exg_name: str, market_type: str, jtype: str, jobs: List[WatchParam]):
-        prefixs = self._get_prefixs(exg_name, market_type, jtype == 'ws')
+    async def watch_jobs(self, exg_name: str, market_type: str, jtype: str, jobs: List[WatchParam]):
+        """从爬虫订阅数据。ohlcv/uohlcv/ws/trade/book"""
+        prefixs = self._get_prefixs(exg_name, market_type, jtype)
         tags, pairs = [], []
         for job in jobs:
+            job_key = f'{job.symbol}_{jtype}'
             if jtype == 'ws':
-                job_key = f'{job.symbol}_ws'
                 tf_secs = 0
             else:
-                job_key = job.symbol
                 tf_secs = tf_to_secs(job.timeframe)
                 if tf_secs < 60:
                     raise ValueError(f'spider not support {job.timeframe} currently')
@@ -182,11 +172,11 @@ class KlineLiveConsumer(ClientIO):
             ('watch_pairs', args)
         ])
 
-    async def unwatch_klines(self, exg_name: str, market_type: str, pairs: List[str], is_ws: bool = False):
-        prefixs = self._get_prefixs(exg_name, market_type, is_ws)
+    async def unwatch_jobs(self, exg_name: str, market_type: str, jtype: str, pairs: List[str]):
+        prefixs = self._get_prefixs(exg_name, market_type, jtype)
         tags = [f'{prefix}_{p}' for p in pairs for prefix in prefixs]
         for p in pairs:
-            job_key = p if not is_ws else f'{p}_ws'
+            job_key = f'{p}_{jtype}'
             if job_key in self.jobs:
                 del self.jobs[job_key]
             if p in BotCache.pair_copied_at:
@@ -205,20 +195,20 @@ class KlineLiveConsumer(ClientIO):
 
     async def on_spider_bar(self, msg_key: str, msg_data):
         logger.debug('receive ohlcv: %s %s', msg_key, msg_data)
-        _, exg_name, market, pair = msg_key.split('_')
-        if pair not in self.jobs:
+        mtype, exg_name, market, pair = msg_key.split('_')
+        job = self.jobs.get(f'{pair}_{mtype}')
+        if not job:
             return False
         ohlc_arr, fetch_tfsecs = msg_data[:2]
         if ohlc_arr:
             bar_ms = int(ohlc_arr[-1][0])
             BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
-        if self.realtime:
+        if mtype == 'uohlcv':
             await self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, msg_data[2])
             return True
         if ohlc_arr:
             bar_ms = int(ohlc_arr[-1][0])
             BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
-        job = self.jobs[pair]
         if fetch_tfsecs < job.tf_secs:
             old_ohlcvs = [job.wait_bar] if job.wait_bar else []
             # 和旧的bar_row合并更新，判断是否有完成的bar
@@ -237,9 +227,6 @@ class KlineLiveConsumer(ClientIO):
         if not msg_data:
             return False
         _, exg_name, market, pair = msg_key.split('_')
-        job_key = f'{pair}_ws'
-        if job_key not in self.jobs:
-            return False
         await self._on_trades(exg_name, market, pair, msg_data)
         return True
 
@@ -248,9 +235,6 @@ class KlineLiveConsumer(ClientIO):
         if not msg_data:
             return False
         _, exg_name, market, pair = msg_key.split('_')
-        job_key = f'{pair}_ws'
-        if job_key not in self.jobs:
-            return False
         BotCache.odbooks[pair] = msg_data
         return True
 
@@ -266,4 +250,4 @@ class KlineLiveConsumer(ClientIO):
 
     @classmethod
     async def _on_trades(cls, exg_name: str, market: str, pair: str, trades: List[dict]):
-        raise NotImplementedError
+        pass

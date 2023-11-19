@@ -92,7 +92,7 @@ class LiveWSProvider(DataProvider, KlineLiveConsumer):
         market = self.config['market_type']
         watch_jobs = [WatchParam(hold.pair, 'ws', 0) for hold in new_holds]
         # 发送消息给爬虫，实时抓取数据
-        await self.watch_klines(self.exg_name, market, *watch_jobs)
+        await self.watch_jobs(self.exg_name, market, 'ws', watch_jobs)
 
     async def unsub_pairs(self, pairs: List[str]):
         removed = super(LiveWSProvider, self).unsub_pairs(pairs)
@@ -100,7 +100,7 @@ class LiveWSProvider(DataProvider, KlineLiveConsumer):
             return
         market = self.config['market_type']
         pairs = [hold.pair for hold in removed]
-        await self.unwatch_klines(self.exg_name, market, pairs, is_ws=True)
+        await self.unwatch_jobs(self.exg_name, market, 'ws', pairs)
 
     async def loop_main(self):
         await self.run_forever('bot')

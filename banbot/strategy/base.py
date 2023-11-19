@@ -57,6 +57,10 @@ class BaseStrategy:
     min_tfscore = 0.8
     nofee_tfscore = 0.6
     max_fee = 0.002
+
+    watch_book = False
+    '是否监听订单簿'
+
     stake_amount = 0
     '每笔下单金额基数'
 

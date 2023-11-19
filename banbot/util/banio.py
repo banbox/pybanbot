@@ -40,10 +40,10 @@ class BanConn:
     async def write_msg(self, msg_type: str, data: Any):
         name = self.remote
         logger.debug('%s write: %s %s', name, msg_type, data)
-        dump_data = marshal.dumps((msg_type, data))
+        dump_data = zlib.compress(marshal.dumps((msg_type, data)))
         while True:
             try:
-                await self.write(dump_data)
+                await self.write(dump_data, do_compress=False)
                 break
             except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
                 err_type = type(e).__name__
@@ -54,11 +54,14 @@ class BanConn:
                 await asyncio.sleep(3)
         logger.debug('%s write ok: %s %s', name, msg_type, data)
 
-    async def write(self, data: bytes):
+    async def write(self, data: bytes, do_compress=True):
         if not self.writer:
             logger.debug('conn %s no writer, connecting...', self)
             await self.connect()
-        zip_data = zlib.compress(data)
+        if do_compress:
+            zip_data = zlib.compress(data)
+        else:
+            zip_data = data
         self.writer.write(len(zip_data).to_bytes(32, sys.byteorder))
         self.writer.write(zip_data)
         # logger.debug('write data, len: %d %d', len(zip_data), len(data))
@@ -189,28 +192,29 @@ class ServerIO:
         asyncio.create_task(conn.run_forever(self.name))
 
     async def broadcast(self, msg_type: str, data: Any):
-        dump_data = marshal.dumps((msg_type, data))
-        fail_conns = set()
-        for conn in self.conns:
+        valid_conns = set()
+        for conn in list(self.conns):
             if not conn.writer:
                 # 连接已关闭
-                fail_conns.add(conn)
+                self.conns.remove(conn)
                 continue
             if msg_type not in conn.tags:
                 # logger.info(f'{conn.remote} skip msg: {msg_type}, {conn.tags}')
                 continue
+            valid_conns.add(conn)
+        if not valid_conns:
+            return
+        dump_data = zlib.compress(marshal.dumps((msg_type, data)))
+        for conn in valid_conns:
             try:
-                await conn.write(dump_data)
+                await conn.write(dump_data, do_compress=False)
             except (BrokenPipeError, ConnectionResetError):
                 # 连接已断开
-                fail_conns.add(conn)
+                self.conns.remove(conn)
                 logger.info(f'conn {conn.remote} disconnected')
             except Exception as e:
-                fail_conns.add(conn)
-                logger.exception(f'send msg to client fail: {msg_type} {data}: {type(e)}')
-        for conn in fail_conns:
-            if conn in self.conns:
                 self.conns.remove(conn)
+                logger.exception(f'send msg to client fail: {msg_type} {data}: {type(e)}')
 
     def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
         '''

@@ -56,6 +56,8 @@ class Trader:
                         continue
                     stg_insts.append(self._load_stg(cls, pair_tfs, pair, timeframe))
                     BotGlobal.stg_symbol_tfs.append(job)
+                    if cls.watch_book:
+                        BotGlobal.book_pairs.add(pair)
                 BotGlobal.pairtf_stgs[pair_tf_key] = stg_insts
         # 输出生效的任务
         groups = dict()

@@ -387,14 +387,37 @@ class LiveMiner:
         logger.info(f'start watch trades and odbooks for {len(self.ws_pairs)} pairs')
 
         async def watch_trades():
+            state_map = dict()
+
+            async def push_ohlcv(cpair: str, trade_list: List[dict]):
+                if cpair not in state_map:
+                    state_map[cpair] = PairTFCache('1s', 1)
+                state = state_map[cpair]
+                details = trades_to_ohlcv(trade_list)
+                ohlcvs_sml = [state.wait_bar] if state.wait_bar else []
+                tf_secs = state.tf_secs
+                ohlcvs_sml, _ = build_ohlcvc(details, tf_secs, ohlcvs=ohlcvs_sml, with_count=False)
+                if not ohlcvs_sml:
+                    return
+                state.wait_bar = ohlcvs_sml[-1]
+                ohlcvs_sml = ohlcvs_sml[:-1]  # 完成的秒级ohlcv
+                if not ohlcvs_sml:
+                    return
+                key = f'ohlcv_{self.exchange.name}_{self.exchange.market_type}_{cpair}'
+                await self.spider.broadcast(key, (ohlcvs_sml, tf_secs))
+
             while BotGlobal.state == BotState.RUNNING:
                 try:
                     trades = await self.exchange.watch_trades_for_symbols(self.ws_pairs)
                     if not trades:
                         continue
                     pair = trades[0]['symbol']
+
                     pub_key = f'trade_{self.exchange.name}_{self.exchange.market_type}_{pair}'
                     await self.spider.broadcast(pub_key, trades)
+
+                    # 从交易流构建1s级别ohlcv
+                    await push_ohlcv(pair, trades)
                 except ccxt.NetworkError as e:
                     logger.error(f'watch_books net error: {e}')
                 except Exception:

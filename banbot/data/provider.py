@@ -186,15 +186,18 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             for tf, pairs in tf_symbols.items():
                 arg_list = tf_arg_list[tf]
                 await bulk_ohlcv_do(exg, pairs, tf, arg_list, ohlcv_cb)
+        market = self.config['market_type']
         if new_holds:
-            market = self.config['market_type']
             watch_jobs = []
             for hold in new_holds:
                 sub_tf = hold.states[0].timeframe
                 since = since_map.get(f'{hold.pair}/{sub_tf}', 0)
                 watch_jobs.append(WatchParam(hold.pair, sub_tf, since))
             # 发送消息给爬虫，实时抓取数据
-            await self.watch_klines(self.exg_name, market, *watch_jobs)
+            await self.watch_jobs(self.exg_name, market, 'ohlcv', watch_jobs)
+            if BotGlobal.book_pairs:
+                jobs = [WatchParam(h.pair, h.states[0].timeframe) for h in new_holds]
+                await self.watch_jobs(self.exg_name, market, 'book', jobs)
 
     async def unsub_pairs(self, pairs: List[str]):
         '''
@@ -205,7 +208,7 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
             return
         market = self.config['market_type']
         pairs = [hold.pair for hold in removed]
-        await self.unwatch_klines(self.exg_name, market, pairs)
+        await self.unwatch_jobs(self.exg_name, market, 'ohlcv', pairs)
 
     async def loop_main(self):
         await self.run_forever('bot')
