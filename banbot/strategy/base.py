@@ -164,12 +164,21 @@ class BaseStrategy:
     def on_bar(self, arr: np.ndarray):
         '''
         计算指标。用于后续入场出场信号判断使用。
-        此方法必须被派生类重写后调用。
         此方法应尽可能减少访问数据库。很多策略同时运行此方法会导致db连接过多。
         :param arr:
         :return:
         '''
+        pass
+
+    def init_bar(self, open_ods: List[InOutOrder]):
         self.check_ms = btime.time_ms()
+        if BotGlobal.is_warmup:
+            self.orders = []
+        elif self.enter_num:
+            stg_name = self.name
+            self.orders = [od for od in open_ods if od.strategy == stg_name]
+            self.enter_tags = {od.enter_tag for od in self.orders}
+            self.enter_num = len(self.orders)
         self.entrys = []
         self.exits = []
         self.state = dict()

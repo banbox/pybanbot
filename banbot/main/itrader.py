@@ -198,12 +198,7 @@ class Trader:
                 open_ods = await InOutOrder.open_orders(pairs=pair)
             for strategy in strategy_list:
                 stg_name = strategy.name
-                if BotGlobal.is_warmup:
-                    strategy.orders = []
-                elif strategy.enter_num:
-                    strategy.orders = [od for od in open_ods if od.strategy == stg_name]
-                    strategy.enter_tags = {od.enter_tag for od in strategy.orders}
-                    strategy.enter_num = len(strategy.orders)
+                strategy.init_bar(open_ods)
                 strategy.on_bar(pair_arr)
                 # 调用策略生成入场和出场信号
                 if not bar_expired:
@@ -234,12 +229,7 @@ class Trader:
         with TempContext(f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair_tf}'):
             for strategy in strategy_list:
                 stg_name = strategy.name
-                strategy.check_ms = btime.time_ms()
-                strategy.entrys = []
-                strategy.exits = []
-                strategy.orders = [od for od in open_ods if od.strategy == stg_name]
-                strategy.enter_tags = {od.enter_tag for od in strategy.orders}
-                strategy.enter_num = len(strategy.orders)
+                strategy.init_bar(open_ods)
                 strategy.on_trades(trades)
                 # 调用策略生成入场和出场信号
                 enter_list.extend([(stg_name, d) for d in strategy.entrys])
