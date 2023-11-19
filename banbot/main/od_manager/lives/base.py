@@ -598,6 +598,7 @@ class LiveOrderMgr(OrderManager):
                 async with dba():
                     od = await InOutOrder.get(iod_id)
                     tracer = InOutTracer([od])
+                    tester.trace([od])
                     sub_od: Order = od.enter if od.enter.id == sub_id else od.exit
                     await self._update_order(od, sub_od, data)
                     logger.debug('update order by push %s %s', data, sub_od.dict())
@@ -606,7 +607,7 @@ class LiveOrderMgr(OrderManager):
                         logger.debug('update order by unmatch %s', sub_od.dict())
                     await tracer.save()
                     BotCache.save_open_ods([od])
-                    tester.trace([od])
+                    tester.update()
                 async with dba():
                     await tester.test()
         if len(self.handled_trades) > 500:
@@ -742,6 +743,7 @@ class LiveOrderMgr(OrderManager):
                     tracer = InOutTracer()
                     try:
                         od = await InOutOrder.get(job.od_id)
+                        tester.trace([od])
                         logger.info(f'exec order: %s %s %s', job.action, job.od_id, od.key)
                         tracer.trace([od])
                         self._check_od_sess(od)
@@ -763,7 +765,7 @@ class LiveOrderMgr(OrderManager):
                             logger.exception('consume order exception: %s', job)
                     await tracer.save()
                     BotCache.save_open_ods([od])
-                    tester.trace([od])
+                    tester.update()
                 async with dba():
                     await tester.test()
         except Exception:
@@ -814,8 +816,9 @@ class LiveOrderMgr(OrderManager):
                 tracer = ORMTracer()
                 async with dba():
                     logger.debug(f'start _handle_unmatches: {unmatches}')
-                    await self._handle_unmatches(unmatches)
                     tracer.trace(await InOutOrder.open_orders())
+                    await self._handle_unmatches(unmatches)
+                    tracer.update()
                     logger.debug(f'complete _handle_unmatches: {unmatches}')
                 async with dba():
                     await tracer.test()

@@ -708,9 +708,20 @@ class InOutTracer:
 class ORMTracer:
     def __init__(self):
         self.state = dict()
+        self.inits = dict()
+        self.objects = set()
 
     def trace(self, objs: List[BaseDbModel]):
         for obj in objs:
+            key = (type(obj), obj.id)
+            dump_data = json.dumps(obj.dict())
+            if key not in self.inits:
+                self.inits[key] = dump_data
+            self.state[key] = dump_data
+            self.objects.add(obj)
+
+    def update(self):
+        for obj in self.objects:
             self.state[(type(obj), obj.id)] = json.dumps(obj.dict())
 
     async def test(self):
@@ -730,11 +741,12 @@ class ORMTracer:
             else:
                 new_data = json.dumps(new_obj.dict())
             if new_data != data:
-                fails.append((tbl.__name__, oid, data, new_data))
+                init = self.inits.get(k)
+                fails.append((tbl.__name__, oid, init, data, new_data))
         if fails:
             logger.info(f'found mismatch {len(fails)}/{len(self.state)}  {traceback.format_stack()[-2]}')
             for f in fails:
-                print(f'{f[0]} {f[1]}\n{f[2]}\n{f[3]}')
+                print(f'{f[0]} {f[1]}\n{f[2]}\n{f[3]}\n{f[4]}')
 
 
 def get_order_filters(task_id: int = 0, strategy: str = None, pairs: Union[str, List[str]] = None, status: str = None,
