@@ -103,10 +103,11 @@ class Trader:
         return stg_obj
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
-        if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
-            logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
-            self.last_process = btime.utcstamp()
         tf_secs = tf_to_secs(timeframe)
+        if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
+            if tf_secs >= 60:
+                logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
+            self.last_process = btime.utcstamp()
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = delay >= max(60., tf_secs * 0.5)
@@ -182,7 +183,7 @@ class Trader:
             pair_tf = f'{pair}_{timeframe}'
             strategy_list = BotGlobal.pairtf_stgs.get(pair_tf) or []
             try:
-                pair_arr = append_new_bar(row, tf_secs)
+                pair_arr = append_new_bar(row, tf_secs, tf_secs >= 60)
             except ValueError as e:
                 logger.info(f'skip invalid bar: {e}')
                 return [], [], []

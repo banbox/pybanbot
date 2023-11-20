@@ -55,7 +55,7 @@ class Watcher:
             await self.callback(pair, timeframe, bar_row)
         if btime.run_mode in btime.LIVE_MODES and not BotGlobal.is_warmup:
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
-            if bar_delay > tf_secs:
+            if bar_delay > tf_secs >= 60:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息
                 logger.warning('{0}/{1} bar is too late, delay:{2}', pair, timeframe, bar_delay)
 
