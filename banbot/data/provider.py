@@ -184,6 +184,9 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
 
             exg = get_exchange(self.exg_name)
             for tf, pairs in tf_symbols.items():
+                if tf_to_secs(tf) < 60:
+                    # 秒级K线不存储，无法预热
+                    continue
                 arg_list = tf_arg_list[tf]
                 await bulk_ohlcv_do(exg, pairs, tf, arg_list, ohlcv_cb)
         market = self.config['market_type']

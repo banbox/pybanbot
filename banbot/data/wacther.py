@@ -150,21 +150,21 @@ class KlineLiveConsumer(ClientIO):
         """从爬虫订阅数据。ohlcv/uohlcv/ws/trade/book"""
         prefixs = self._get_prefixs(exg_name, market_type, jtype)
         tags, pairs = [], []
+        tf_sec_set = set()
         for job in jobs:
             job_key = f'{job.symbol}_{jtype}'
-            if jtype == 'ws':
-                tf_secs = 0
-            else:
-                tf_secs = tf_to_secs(job.timeframe)
-                if tf_secs < 60:
-                    raise ValueError(f'spider not support {job.timeframe} currently')
             if job_key in self.jobs:
                 continue
+            tf_secs = tf_to_secs(job.timeframe)
+            tf_sec_set.add(tf_secs)
             for prefix in prefixs:
                 tags.append(f'{prefix}_{job.symbol}')
             pairs.append(job.symbol)
             self.jobs[job_key] = PairTFCache(job.timeframe, tf_secs, job.since or 0)
         await self.write_msg('subscribe', tags)
+        if market_type == 'future' and jtype == 'ohlcv' and min(tf_sec_set) < 60:
+            # 期货市场不支持1m以下的ohlcv，使用ws监听交易归集
+            jtype = 'trade'
         args = (exg_name, market_type, jtype, pairs)
         await self.write_msg('watch_pairs', args)
         self._inits.extend([

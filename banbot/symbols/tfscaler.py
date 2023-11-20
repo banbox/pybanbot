@@ -18,7 +18,8 @@ async def calc_symboltf_scales(exg: CryptoExchange, symbols: List[str], back_num
     if not BotGlobal.run_tf_secs:
         raise ValueError('`run_timeframes` not set in `StrategyResolver.load_run_jobs`')
     if BotGlobal.ws_mode:
-        return {p: [('ws', 1.)] for p in symbols}
+        cur_tf = BotGlobal.run_tf_secs[0][0]
+        return {p: [(cur_tf, 1.)] for p in symbols}
     pip_prices = {pair: exg.price_get_one_pip(pair) for pair in symbols}
     res_list = []
 

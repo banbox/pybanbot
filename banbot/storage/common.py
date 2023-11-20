@@ -15,7 +15,7 @@ class _BotStateMeta(type):
 
     @property
     def ws_mode(cls: Type['BotGlobal']):
-        return any(p for p in cls.run_tf_secs if p[0] == 'ws')
+        return any(p for p in cls.run_tf_secs if p[1] < 60)
 
     @property
     def live_mode(cls):

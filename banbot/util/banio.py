@@ -208,13 +208,13 @@ class ServerIO:
         for conn in valid_conns:
             try:
                 await conn.write(dump_data, do_compress=False)
+                continue
             except (BrokenPipeError, ConnectionResetError):
-                # 连接已断开
-                self.conns.remove(conn)
                 logger.info(f'conn {conn.remote} disconnected')
             except Exception as e:
-                self.conns.remove(conn)
                 logger.exception(f'send msg to client fail: {msg_type} {data}: {type(e)}')
+            if conn in self.conns:
+                self.conns.remove(conn)
 
     def get_conn(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> BanConn:
         '''

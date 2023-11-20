@@ -353,8 +353,10 @@ class LiveMiner:
         self.socks: Dict[str, OhlcvWatcher] = dict()
         self.timeframe = timeframe
         self.tf_msecs = tf_to_secs(self.timeframe) * 1000
-        self.ws_pairs = []
-        self.ws_started = False
+        self.trade_pairs = []
+        self.book_pairs = []
+        self.trade_started = False
+        self.book_started = False
 
     async def init(self):
         await self.exchange.load_markets()
@@ -368,23 +370,24 @@ class LiveMiner:
             async with dba():
                 await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, pairs)
         if jtype == 'ws':
-            self.sub_ws_pairs(pairs)
+            self.start_trade_loop(pairs)
+            self.start_book_loop(pairs)
+        elif jtype == 'trade':
+            self.start_trade_loop(pairs)
+        elif jtype == 'book':
+            self.start_book_loop(pairs)
         else:
             for pair in pairs:
                 await self.sub_kline(pair)
 
-    def sub_ws_pairs(self, pairs: List[str]):
-        cur_pairs = set(self.ws_pairs)
+    def start_trade_loop(self, pairs: List[str]):
+        cur_pairs = set(self.trade_pairs)
         cur_pairs.update(pairs)
-        self.ws_pairs = list(cur_pairs)
-        if not self.ws_started:
-            self.run_ws_loop()
-
-    def run_ws_loop(self):
-        if not self.ws_pairs or self.ws_started:
+        self.trade_pairs = list(cur_pairs)
+        if not self.trade_pairs or self.trade_started:
             return
-        self.ws_started = True
-        logger.info(f'start watch trades and odbooks for {len(self.ws_pairs)} pairs')
+        self.trade_started = True
+        logger.info(f'start watch trades for {len(self.trade_pairs)} pairs')
 
         async def watch_trades():
             state_map = dict()
@@ -408,7 +411,7 @@ class LiveMiner:
 
             while BotGlobal.state == BotState.RUNNING:
                 try:
-                    trades = await self.exchange.watch_trades_for_symbols(self.ws_pairs)
+                    trades = await self.exchange.watch_trades_for_symbols(self.trade_pairs)
                     if not trades:
                         continue
                     pair = trades[0]['symbol']
@@ -423,13 +426,23 @@ class LiveMiner:
                 except Exception:
                     logger.exception(f'watch_books error')
             logger.info('watch_trades stopped.')
-            self.ws_started = False
+            self.trade_started = False
+        asyncio.create_task(watch_trades())
+
+    def start_book_loop(self, pairs: List[str]):
+        cur_pairs = set(self.book_pairs)
+        cur_pairs.update(pairs)
+        self.book_pairs = list(cur_pairs)
+        if not self.book_pairs or self.book_started:
+            return
+        self.book_started = True
+        logger.info(f'start watch odbooks for {len(self.book_pairs)} pairs')
 
         async def watch_books():
             while BotGlobal.state == BotState.RUNNING:
                 # 读取订单簿快照并保存
                 try:
-                    books = await self.exchange.watch_order_book_for_symbols(self.ws_pairs)
+                    books = await self.exchange.watch_order_book_for_symbols(self.book_pairs)
                     if books:
                         pair = books['symbol']
                         pub_key = f'book_{self.exchange.name}_{self.exchange.market_type}_{pair}'
@@ -441,8 +454,8 @@ class LiveMiner:
                     logger.error(f'watch_books net error: {e}')
                 except Exception:
                     logger.exception(f'watch_books error')
+            self.book_started = False
             logger.info('watch_books stopped.')
-        asyncio.create_task(watch_trades())
         asyncio.create_task(watch_books())
 
     async def sub_kline(self, pair: str):
