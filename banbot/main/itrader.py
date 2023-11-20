@@ -110,7 +110,7 @@ class Trader:
             self.last_process = btime.utcstamp()
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
-        bar_expired = delay >= max(60., tf_secs * 0.5)
+        bar_expired = tf_secs >= 60 and delay >= max(60., tf_secs * 0.5)
         is_live_mode = btime.run_mode == RunMode.PROD
         if bar_expired and is_live_mode and not BotGlobal.is_warmup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
