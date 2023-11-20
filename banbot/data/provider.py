@@ -225,17 +225,21 @@ class LiveDataProvider(DataProvider, KlineLiveConsumer):
         hold = next((sta for sta in cls._obj.holders if sta.pair == pair), None)
         if not hold:
             return
-        # 这里可能传入多个，但只需判断最后一个，因为hold里面会从数据库中取，不会丢失
-        last_bar = ohlc_arr[-1]
-        if not hold.wait_bar:
-            hold.wait_bar = last_bar
-        elif last_bar[0] > hold.wait_bar[0]:
-            # 新bar出现，认为wait_bar完成
-            await hold.on_new_data([last_bar], fetch_tfsecs)
-            hold.wait_bar = last_bar
+        if update_tfsecs >= fetch_tfsecs:
+            # 收到的必定已完成
+            await hold.on_new_data(ohlc_arr, fetch_tfsecs)
             return
+        # 更新频率低于bar周期，收到的可能未完成
+        done_arr = ohlc_arr[:-1]
+        if hold.wait_bar and hold.wait_bar[0] < ohlc_arr[0][0]:
+            # 新bar出现，认为wait_bar完成
+            done_arr.insert(0, hold.wait_bar)
+        if len(done_arr):
+            await hold.on_new_data(done_arr, fetch_tfsecs)
+        last_bar = ohlc_arr[-1]
         if update_tfsecs <= 5 and hold.states[0].tf_secs >= 60:
             # 更新很快，需要的周期相对较长，则要求出现下一个bar时认为完成（走上面逻辑）
+            hold.wait_bar = last_bar
             return
         # 更新频率相对不高，或占需要的周期比率较大，近似完成认为完成
         # 这里来的蜡烛和缓存的属于统一周期

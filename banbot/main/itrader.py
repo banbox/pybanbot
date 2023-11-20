@@ -108,46 +108,54 @@ class Trader:
             if tf_secs >= 60:
                 logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
             self.last_process = btime.utcstamp()
+        MarketPrice.set_bar_price(pair, float(row[ccol]))
+        if pair in BotGlobal.forbid_pairs:
+            return
         # 超过1分钟或周期的一半，认为bar延迟，不可下单
         delay = btime.time() - (row[0] // 1000 + tf_secs)
         bar_expired = tf_secs >= 60 and delay >= max(60., tf_secs * 0.5)
         is_live_mode = btime.run_mode == RunMode.PROD
         if bar_expired and is_live_mode and not BotGlobal.is_warmup:
             logger.warning(f'{pair}/{timeframe} delay {delay:.2}s, enter order is disabled')
-        # 更新最新价格
-        MarketPrice.set_bar_price(pair, float(row[ccol]))
-        async with dba():
-            try:
-                await self._run_bar(pair, timeframe, row, tf_secs, bar_expired)
-            except exc.SQLAlchemyError:
-                logger.exception('itrader run_bar SQLAlchemyError %s %s', pair, timeframe)
+
+        all_open_ods, open_ods = await self._get_pair_orders(pair, timeframe, row)
+        enter_list, exit_list, triggers = self._run_bar(open_ods, pair, timeframe, row, tf_secs, bar_expired)
+
+        if enter_list or exit_list or triggers:
+            edit_tgs = list(set(triggers))
+            if not BotGlobal.live_mode:
+                await self._apply_signals(all_open_ods, pair, timeframe, enter_list, exit_list, edit_tgs)
+            else:
+                async with dba():
+                    await self._apply_signals(all_open_ods, pair, timeframe, enter_list, exit_list, edit_tgs)
 
     async def on_pair_trades(self, pair: str, trades: List[dict]):
         if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
             self.last_process = btime.utcstamp()
-        # 更新最新价格
-        cur_price = trades[-1]['price']
-        MarketPrice.set_new_price(pair, cur_price)
+        MarketPrice.set_new_price(pair, trades[-1]['price'])
         if pair in BotGlobal.forbid_pairs:
             return
-        all_open_ods = list(BotCache.open_ods.values())
-        if not BotGlobal.is_warmup:
-            tracer = InOutTracer(all_open_ods)
-            bar = self.data_mgr.get_latest_ohlcv(pair)
-            self.order_mgr.update_by_bar(all_open_ods, pair, 'ws', bar)
-            chg_ods = tracer.get_changes()
-            if chg_ods or BotCache.updod_at + 60 < btime.time():
-                all_open_ods = await self._flush_cache_orders(chg_ods)
-        pair_ods = [od for od in all_open_ods if od.symbol == pair]
-
+        timeframe = 'ws'
+        bar = self.data_mgr.get_latest_ohlcv(pair)
+        all_open_ods, pair_ods = await self._get_pair_orders(pair, timeframe, bar)
         enter_list, exit_list = self._run_ws(pair_ods, pair, trades)
 
         if enter_list or exit_list:
             if not BotGlobal.live_mode:
-                await self._apply_signals(pair, enter_list, exit_list, all_open_ods)
+                await self._apply_signals(all_open_ods, pair, timeframe, enter_list, exit_list)
             else:
                 async with dba():
-                    await self._apply_signals(pair, enter_list, exit_list, all_open_ods)
+                    await self._apply_signals(all_open_ods, pair, timeframe, enter_list, exit_list)
+
+    async def _get_pair_orders(self, pair: str, timeframe: str, bar):
+        all_open_ods = list(BotCache.open_ods.values())
+        if not BotGlobal.is_warmup:
+            tracer = InOutTracer(all_open_ods)
+            self.order_mgr.update_by_bar(all_open_ods, pair, timeframe, bar)
+            chg_ods = tracer.get_changes()
+            if chg_ods or BotCache.updod_at + 60 < btime.time():
+                all_open_ods = await self._flush_cache_orders(chg_ods)
+        return all_open_ods, [od for od in all_open_ods if od.symbol == pair]
 
     async def _flush_cache_orders(self, chg_ods: List[InOutOrder]):
         BotCache.updod_at = btime.time()
@@ -169,13 +177,15 @@ class Trader:
             BotCache.open_ods = {od.id: od.clone() for od in open_ods}
             return list(BotCache.open_ods.values())
 
-    async def _apply_signals(self, pair: str, enter_list, exit_list, all_open_ods):
-        ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_ws'
-        await self.order_mgr.process_orders(ctx_key, enter_list, exit_list)
+    async def _apply_signals(self, all_open_ods, pair: str, timeframe: str, enter_list, exit_list, triggers=None):
+        ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
+        if not BotGlobal.is_warmup:
+            await self.order_mgr.process_orders(ctx_key, enter_list, exit_list, triggers)
         if self.last_check_hang + self.check_hang_intv < btime.time_ms():
             await self._check_pair_hang(all_open_ods)
 
-    async def _run_bar(self, pair: str, timeframe: str, row: list, tf_secs: int, bar_expired: bool):
+    def _run_bar(self, open_ods: List[InOutOrder], pair: str, timeframe: str, row: list,
+                 tf_secs: int, bar_expired: bool):
         ctx_key = f'{self.data_mgr.exg_name}_{self.data_mgr.market}_{pair}_{timeframe}'
         edit_triggers = []
         with TempContext(ctx_key):
@@ -189,14 +199,6 @@ class Trader:
                 return [], [], []
             start_time = time.monotonic()
             enter_list, exit_list = [], []
-            if not BotGlobal.is_warmup:
-                open_ods = await InOutOrder.open_orders()
-                tracer = InOutTracer(open_ods)
-                self.order_mgr.update_by_bar(open_ods, pair, timeframe, row)
-                await tracer.save()
-                open_ods = [od for od in open_ods if od.symbol == pair and od.status < InOutStatus.FullExit]
-            else:
-                open_ods = await InOutOrder.open_orders(pairs=pair)
             for strategy in strategy_list:
                 stg_name = strategy.name
                 strategy.init_bar(open_ods)
@@ -216,12 +218,7 @@ class Trader:
             if pair_tf in BotGlobal.info_pairtfs:
                 for stg in BotGlobal.info_pairtfs[pair_tf]:
                     stg.on_info_bar(pair, timeframe, pair_arr)
-        if not BotGlobal.is_warmup:
-            edit_tgs = list(set(edit_triggers))
-            await self.order_mgr.process_orders(ctx_key, enter_list, exit_list, edit_tgs)
-        if self.last_check_hang + self.check_hang_intv < btime.time_ms():
-            await self._check_pair_hang()
-        return enter_list, exit_list
+        return enter_list, exit_list, edit_triggers
 
     def _run_ws(self, open_ods: List[InOutOrder], pair: str, trades: List[dict]):
         pair_tf = f'{pair}_ws'
@@ -235,9 +232,7 @@ class Trader:
                 # 调用策略生成入场和出场信号
                 enter_list.extend([(stg_name, d) for d in strategy.entrys])
                 exit_list.extend([(stg_name, d) for d in strategy.exits])
-        if not BotGlobal.is_warmup:
-            return enter_list, exit_list
-        return [], []
+        return enter_list, exit_list
 
     async def _check_pair_hang(self, open_ods: List[InOutOrder] = None):
         """检查是否有交易对数据长期未收到卡住，如有则平掉订单"""
