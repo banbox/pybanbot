@@ -75,8 +75,8 @@ class KLine(BaseDbModel):
 
     agg_list = [
         # 全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差
-        BarAgg('1m', 'kline_1m', None, None, None, None, '2 months', '8 months'),
-        BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m', '2 months', '8 months'),
+        BarAgg('1m', 'kline_1m', None, None, None, None, '2 months', '12 months'),
+        BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m', '2 months', '12 months'),
         BarAgg('15m', 'kline_15m', '5m', '1h', '5m', '5m', '3 months', '16 months'),
         BarAgg('1h', 'kline_1h', '15m', '3h', '15m', '15m', '6 months', '3 years'),
         BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h', '3 years', '20 years'),
@@ -461,7 +461,7 @@ group by 1'''
             logger.info('pause compress ing...')
             jobs = await cls._pause_compress(sess, tbl_list)
         cost = time.monotonic() - start
-        logger.info(f'pause compress ok, cost: {cost:.3f} secs')
+        logger.info(f'pause {len(jobs)} compress jobs ok, cost: {cost:.3f} secs')
         try:
             yield
         finally:
@@ -473,21 +473,22 @@ group by 1'''
     async def _pause_compress(cls, sess: SqlSession, tbl_list: List[str] = None) -> List[int]:
         if not tbl_list:
             tbl_list = [t.tbl for t in KLine.agg_list]
+        tbl_list = set(tbl_list)
+        get_job_id = f"""
+            SELECT j.hypertable_name, j.job_id FROM timescaledb_information.jobs j
+            WHERE j.proc_name = 'policy_compression'"""
+        rows = (await sess.execute(sa.text(get_job_id))).all()
         result = []
-        for tbl in tbl_list:
-            get_job_id = f"""
-    SELECT j.job_id FROM timescaledb_information.jobs j
-    WHERE j.proc_name = 'policy_compression' AND j.hypertable_name = '{tbl}'"""
-            job_id = (await sess.execute(sa.text(get_job_id))).scalar()
-            if job_id:
-                # 暂停压缩任务
-                await sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => false);'))
-                # 解压缩涉及的块
-                decps_sql = f'''SELECT decompress_chunk(i, true) FROM show_chunks('{tbl}') i ;'''
-                await sess.execute(sa.text(decps_sql))
-                result.append(job_id)
-            else:
-                logger.warning(f"no compress job id found {tbl}")
+        for row in rows:
+            if row[0] not in tbl_list:
+                continue
+            job_id = row[1]
+            # 暂停压缩任务
+            await sess.execute(sa.text(f'SELECT alter_job({job_id}, scheduled => false);'))
+            # 解压缩涉及的块
+            decps_sql = f'''SELECT decompress_chunk(i, true) FROM show_chunks('{row[0]}') i ;'''
+            await sess.execute(sa.text(decps_sql))
+            result.append(job_id)
         await sess.flush()
         return result
 
