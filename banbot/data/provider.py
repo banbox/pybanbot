@@ -122,7 +122,11 @@ class FileDataProvider(HistDataProvider):
     def __init__(self, config: Config, callback: Callable):
         super(FileDataProvider, self).__init__(config, callback)
         exg_name = config['exchange']['name']
-        self.data_dir = os.path.join(config['data_dir'], exg_name)
+        exgs = config.get('exg_data_map') or dict()
+        sub_name = f'{exg_name}_{self.market}'
+        if sub_name in exgs:
+            sub_name = exgs[sub_name]
+        self.data_dir = os.path.join(config['data_dir'], sub_name)
         self._init_args = dict(
             auto_prefire=config.get('prefire'),
             data_dir=self.data_dir,

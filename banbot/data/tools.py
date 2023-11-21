@@ -130,26 +130,35 @@ def parse_data_path(data_dir: str, pair: str, tf_secs: int) -> Tuple[str, int]:
     '''
     base_s, quote_s = pair.split('/')
     try_list = []
-    for tf in NATIVE_TFS:
+    for tf in NATIVE_TFS[::-1]:
         cur_secs = tf_to_secs(tf)
         if cur_secs > tf_secs:
-            break
-        if tf_secs % cur_secs != 0:
             continue
         try_list.append(tf)
         data_path = os.path.join(data_dir, f'{base_s}_{quote_s}-{tf}.feather')
-        if not os.path.isfile(data_path):
-            continue
-        return data_path, cur_secs
-    raise FileNotFoundError(f'no data found, try: {try_list} in {data_dir}')
+        if os.path.isfile(data_path):
+            return data_path, cur_secs
+        data_path = os.path.join(data_dir, f'{base_s}.csv')
+        if os.path.isfile(data_path):
+            return data_path, cur_secs
+    raise FileNotFoundError(f'no data found: {pair}, try: {try_list} in {data_dir}')
 
 
 def load_file_range(data_path: str, tr: Optional[TimeRange]):
     '''
-    加载数据文件，必须是feather，按给定的范围截取并返回DataFrame
+    加载数据文件，支持feather/csv，按给定的范围截取并返回DataFrame
     '''
     import pandas as pd
-    df = pd.read_feather(data_path)
+    file_ext = os.path.splitext(data_path)[1].lower()
+    if file_ext == '.feather':
+        df = pd.read_feather(data_path)
+    elif file_ext == '.csv':
+        df = pd.read_csv(data_path, header=None)
+        df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+    else:
+        raise ValueError(f'unsupport data format: {file_ext}')
+    if df.date.dtype == 'float64':
+        df['date'] = df['date'].apply(lambda x: int(x))
     if df.date.dtype != 'int64':
         df['date'] = df['date'].apply(lambda x: int(x.timestamp() * 1000))
     start_ts, end_ts = df.iloc[0]['date'] // 1000, df.iloc[-1]['date'] // 1000

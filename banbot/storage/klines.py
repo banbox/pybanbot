@@ -75,10 +75,10 @@ class KLine(BaseDbModel):
 
     agg_list = [
         # 全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差
-        BarAgg('1m', 'kline_1m', None, None, None, None, '3 days', '2 months'),
-        BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m', '3 days', '2 months'),
-        BarAgg('15m', 'kline_15m', '5m', '1h', '5m', '5m', '6 days', '4 months'),
-        BarAgg('1h', 'kline_1h', '15m', '3h', '15m', '15m', '2 months', '2 years'),
+        BarAgg('1m', 'kline_1m', None, None, None, None, '2 months', '8 months'),
+        BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m', '2 months', '8 months'),
+        BarAgg('15m', 'kline_15m', '5m', '1h', '5m', '5m', '3 months', '16 months'),
+        BarAgg('1h', 'kline_1h', '15m', '3h', '15m', '15m', '6 months', '3 years'),
         BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h', '3 years', '20 years'),
     ]
 
@@ -408,7 +408,8 @@ group by 1'''
             if str(e).find('not supported on compressed chunks') >= 0:
                 intv_msecs = tf_to_secs(timeframe) * 1000
                 start_ms, end_ms = rows[0][0], rows[-1][0] + intv_msecs
-                logger.error(f"insert compressed, call `pause_compress` first, {ins_tbl} sid:{sid} {start_ms}-{end_ms}")
+                err_msg = f"insert compressed, add `--no-compress` and retry, {ins_tbl} sid:{sid} {start_ms}-{end_ms}"
+                raise ValueError(err_msg)
             else:
                 raise
         await sess.flush()

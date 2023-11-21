@@ -27,6 +27,7 @@ fatal_stop_hours: 8  # 全局止损的禁止时间，默认8小时
 timerange: "20230701-20230808"  # 使用的K线范围，用于回测
 ws_stamp: null  # WS回测使用的数据集时间戳，不提供时默认使用第一个
 run_timeframes: [5m]
+kline_source: db  # K线加载来源，可选：db/file
 watch_jobs:  # K线监听执行的任务，仅用于爬虫端运行
   1h: [Demo]
 run_policy:  # 运行的策略，可以多个策略同时运行
@@ -97,6 +98,8 @@ exchange:  # 交易所配置
       http: http://127.0.0.1:10808
       https: http://127.0.0.1:10808
 data_dir: E:\trade\ban_data  # 保存和读取数据的目录
+exg_data_map:  # 交易所下载k线保存的数据目录映射
+  binance_future: binance_future
 database:  # 数据库配置
   retention: all
   url: postgresql://postgres:123@[127.0.0.1]:5432/bantd

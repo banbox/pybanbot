@@ -85,6 +85,9 @@ class BackTest(Trader):
         if self.is_ws_mode():
             from banbot.data.ws import LocalWSProvider
             return LocalWSProvider(self.config, self.on_pair_trades)
+        kline_source = self.config.get('kline_source')
+        if kline_source == 'file':
+            return FileDataProvider(self.config, self.on_data_feed)
         return DBDataProvider(self.config, self.on_data_feed)
 
     async def init(self):
