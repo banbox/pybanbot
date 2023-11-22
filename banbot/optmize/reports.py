@@ -189,30 +189,34 @@ async def get_order_df() -> pd.DataFrame:
 
 async def print_backtest(result: dict):
     order_df = await get_order_df()
+    out = []
     if len(order_df):
         table = text_pair_groups(order_df)
         if isinstance(table, str) and len(table) > 0:
-            print(' Pair Profits '.center(len(table.splitlines()[0]), '='))
-            print(table)
+            out.append(' Pair Profits '.center(len(table.splitlines()[0]), '='))
+            out.append(table)
         table = text_day_profits(order_df)
         if isinstance(table, str) and len(table) > 0:
-            print(' Day Profits '.center(len(table.splitlines()[0]), '='))
-            print(table)
+            out.append(' Day Profits '.center(len(table.splitlines()[0]), '='))
+            out.append(table)
         table = text_profit_groups(order_df)
         if isinstance(table, str) and len(table) > 0:
-            print(' Profit Groups '.center(len(table.splitlines()[0]), '='))
-            print(table)
+            out.append(' Profit Groups '.center(len(table.splitlines()[0]), '='))
+            out.append(table)
         table = text_order_tags(order_df, 'enter')
         if isinstance(table, str) and len(table) > 0:
-            print(' Enter Tag '.center(len(table.splitlines()[0]), '='))
-            print(table)
+            out.append(' Enter Tag '.center(len(table.splitlines()[0]), '='))
+            out.append(table)
         table = text_order_tags(order_df, 'exit')
         if isinstance(table, str) and len(table) > 0:
-            print(' Exit Tag '.center(len(table.splitlines()[0]), '='))
-            print(table)
+            out.append(' Exit Tag '.center(len(table.splitlines()[0]), '='))
+            out.append(table)
     else:
         logger.error('NO Order Found !')
     table = text_bt_metrics(result)
     if isinstance(table, str) and len(table) > 0:
-        print(' SUMMARY METRICS '.center(len(table.splitlines()[0]), '='))
-        print(table)
+        out.append(' SUMMARY METRICS '.center(len(table.splitlines()[0]), '='))
+        out.append(table)
+    if out:
+        out_text = "\n".join(out)
+        logger.info(f'BackTest Reports:\n{out_text}')

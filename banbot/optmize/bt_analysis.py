@@ -101,21 +101,35 @@ def dump_graph(assets: Dict[str, List[Tuple[datetime.datetime, float]]], out_dir
 class BTAnalysis:
     def __init__(self, **kwargs):
         self.result = kwargs
+        self.task_dir = None
 
     async def save(self, save_dir: str):
         task_id = self.result['task_id']
-        task_dir = os.path.join(save_dir, f'task_{task_id}')
-        if not os.path.isdir(task_dir):
-            os.mkdir(task_dir)
+        self.task_dir = os.path.join(save_dir, f'task_{task_id}')
+        if not os.path.isdir(self.task_dir):
+            os.mkdir(self.task_dir)
         # 保存订单记录到CSV
-        await dump_orders(task_id, task_dir)
+        await dump_orders(task_id, self.task_dir)
         # 保存总资产曲线
-        dump_graph(self.result['graph_data'], task_dir)
+        dump_graph(self.result['graph_data'], self.task_dir)
+        # 复制用到的策略到输出目录
+        self._dump_stgs()
         # 删除graph_data
         del self.result['graph_data']
-        dump_path = os.path.join(task_dir, 'result.json')
+        dump_path = os.path.join(self.task_dir, 'result.json')
         with open(dump_path, 'wb') as fout:
             fout.write(orjson.dumps(self.result))
+
+    def _dump_stgs(self):
+        result = dict()
+        for _, stg_list in BotGlobal.pairtf_stgs.items():
+            for stg in stg_list:
+                if stg.name in result or not stg.__source__:
+                    continue
+                result[stg.name] = stg.__source__
+        for name, content in result.items():
+            with open(os.path.join(self.task_dir, f'_{name}.py'), 'w', encoding='utf-8') as fout:
+                fout.write(content)
 
     @staticmethod
     def load(save_dir: str) -> 'BTAnalysis':
