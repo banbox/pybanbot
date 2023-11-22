@@ -145,7 +145,6 @@ class my_binanceusdm(binanceusdm):
                 out_path = os.path.join(self.data_dir, fname)
                 self.file_tds[symbol] = open(out_path, 'wb')
                 self.pair_tdmsgs[symbol] = []
-                print(f'init {symbol}')
         await super().watch_trades_for_symbols(symbols, since, limit, params)
 
     def handle_trade(self, client: Client, message):

@@ -90,7 +90,7 @@ class LocalOrderManager(OrderManager):
             sub_od.price = enter_price
         ctx = self.get_context(od)
         self.wallets.confirm_od_enter(od, enter_price)
-        update_time = ctx[bar_time][0] + self.network_cost * 1000
+        update_time = ctx[bar_time][1] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullEnter
         sub_od.create_at = update_time
@@ -108,7 +108,7 @@ class LocalOrderManager(OrderManager):
             sub_od.fee = fees['cost'] or 0
             sub_od.fee_type = fees['currency']
         ctx = self.get_context(od)
-        update_time = ctx[bar_time][0] + self.network_cost * 1000
+        update_time = ctx[bar_time][1] + self.network_cost * 1000
         self.last_ts = update_time / 1000
         od.status = InOutStatus.FullExit
         sub_od.create_at = update_time
