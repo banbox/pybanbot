@@ -78,7 +78,7 @@ class KLine(BaseDbModel):
         BarAgg('1m', 'kline_1m', None, None, None, None, '2 months', '12 months'),
         BarAgg('5m', 'kline_5m', '1m', '20m', '1m', '1m', '2 months', '12 months'),
         BarAgg('15m', 'kline_15m', '5m', '1h', '5m', '5m', '3 months', '16 months'),
-        BarAgg('1h', 'kline_1h', '15m', '3h', '15m', '15m', '6 months', '3 years'),
+        BarAgg('1h', 'kline_1h', None, None, None, None, '6 months', '3 years'),
         BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h', '3 years', '20 years'),
     ]
 

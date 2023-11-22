@@ -8,6 +8,7 @@ import os.path
 from banbot.main.itrader import *
 from banbot.storage import *
 from banbot.symbols.pair_manager import PairManager
+show_num = 600
 
 
 class BackTest(Trader):
@@ -31,6 +32,7 @@ class BackTest(Trader):
         self.last_check_trades = 0
         self.daterange_from = None
         self.daterange_to = None
+        self.graph_every = 1
 
     async def on_data_feed(self, pair, timeframe, row):
         self.bar_count += 1
@@ -66,16 +68,7 @@ class BackTest(Trader):
         if not self.daterange_from:
             self.daterange_from = time_ms
         self.daterange_to = time_ms
-        # 更新总资产
-        ava_legal = self.wallets.ava_legal()
-        total_legal = self.wallets.total_legal(with_upol=True)
-        profit_legal = self.wallets.profit_legal()
-        draw_legal = self.wallets.get_withdraw_legal()
-        cur_date = btime.to_datetime(time_ms)
-        self.graph_data['real'].append((cur_date, total_legal))
-        self.graph_data['ava'].append((cur_date, ava_legal))
-        self.graph_data['profit'].append((cur_date, profit_legal))
-        self.graph_data['withdraw'].append((cur_date, draw_legal))
+        self._log_graph(time_ms)
         # 更新最大最小余额
         quote_legal = self.wallets.total_legal(self.quote_symbols)
         self.min_balance = min(self.min_balance, quote_legal)
@@ -97,7 +90,7 @@ class BackTest(Trader):
         self.min_balance = sys.maxsize
         async with dba():
             # 创建回测任务，记录相关周期
-            await BotTask.init()
+            await self._init_task()
             # 同步K线数据，防止不同周期数据有未更新
             await sync_timeframes()
             await ExSymbol.init()
@@ -151,6 +144,44 @@ class BackTest(Trader):
             quote_legal = self.wallets.ava_legal(self.quote_symbols)
             if self.draw_balance_over < quote_legal:
                 self.wallets.withdraw_legal(quote_legal - self.draw_balance_over, self.quote_symbols)
+
+    async def _init_task(self):
+        await BotTask.init()
+        if BotTask.cur_id > 0:
+            from banbot.util.common import set_log_file
+            task_dir = os.path.join(self.out_dir, f'task_{BotTask.cur_id}')
+            if not os.path.isdir(task_dir):
+                os.mkdir(task_dir)
+            log_path = os.path.join(task_dir, 'out.log')
+            self.config['logfile'] = log_path
+            set_log_file(logger, log_path)
+
+    def _log_graph(self, time_ms: int):
+        if self.bar_count % self.graph_every:
+            return
+        spl_step = 5
+        if len(self.graph_data['real']) >= show_num * spl_step:
+            # 检查数据是否太多，超过采样总数5倍时，进行重采样
+            self.graph_every *= spl_step
+            keys = ['real', 'ava', 'profit', 'withdraw']
+            data = {k: [] for k in keys}
+            for i in range(0, len(self.graph_data['real']), spl_step):
+                for k in keys:
+                    data[k].append(self.graph_data[k][i])
+            for k in keys:
+                self.graph_data[k] = data[k]
+            if self.bar_count % self.graph_every:
+                return
+
+        ava_legal = self.wallets.ava_legal()
+        total_legal = self.wallets.total_legal(with_upol=True)
+        profit_legal = self.wallets.profit_legal()
+        draw_legal = self.wallets.get_withdraw_legal()
+        cur_date = btime.to_datetime(time_ms)
+        self.graph_data['real'].append((cur_date, total_legal))
+        self.graph_data['ava'].append((cur_date, ava_legal))
+        self.graph_data['profit'].append((cur_date, profit_legal))
+        self.graph_data['withdraw'].append((cur_date, draw_legal))
 
     async def _calc_result_done(self):
         total_invest = self.result['total_invest']

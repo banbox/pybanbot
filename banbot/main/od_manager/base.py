@@ -111,7 +111,7 @@ class OrderManager(metaclass=SingletonArg):
                                 enter_ods.append(ent_od)
                             except LackOfCash as e:
                                 logger.warning(f'enter fail, lack of cash: {e} {stg_name} {sigin}')
-                                await self.on_lack_of_cash()
+                                self.on_lack_of_cash()
                             except Exception as e:
                                 logger.exception(f'enter fail: {e} {stg_name} {sigin}')
                 else:
@@ -296,7 +296,7 @@ class OrderManager(metaclass=SingletonArg):
         for od in cur_orders:
             od.update_profits(price)
 
-    async def on_lack_of_cash(self):
+    def on_lack_of_cash(self):
         pass
 
     async def check_fatal_stop(self):

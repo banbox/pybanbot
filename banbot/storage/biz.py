@@ -20,7 +20,7 @@ class BotCache:
     '上次刷新open_ods的时间戳，10位'
 
     pair_copied_at: Dict[str, Tuple[int, int]] = dict()
-    '[symbol: (int, int)]记录所有标的从爬虫获取到K线的最新时间，以及等待下一次收到的时间，用于判断是否有长期未收到的'
+    '[symbol: (int, int)]记录所有标的从爬虫获取到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的'
 
     last_bar_ms = 0
     '上次收到bar的结束时间，13位时间戳'
@@ -49,7 +49,7 @@ class BotCache:
                 for pair, wait in items:
                     if wait[0] + wait[1] * 2 >= cur_time_ms:
                         continue
-                    timeout_min = round((cur_time_ms - wait[0] - wait[1]) / minute_ms)
+                    timeout_min = round((cur_time_ms - wait[0]) / minute_ms)
                     fails.append(f'{pair}: {timeout_min}')
                 if fails:
                     fail_text = ', '.join(fails)

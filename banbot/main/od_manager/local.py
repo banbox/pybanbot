@@ -34,7 +34,7 @@ class LocalOrderManager(OrderManager):
             if affect_num:
                 logger.debug("wallets: %s", self.wallets)
 
-    async def on_lack_of_cash(self):
+    def on_lack_of_cash(self):
         lack_num = 0
         for currency in self.stake_currency:
             fiat_val = self.wallets.fiat_value(currency)
@@ -43,7 +43,8 @@ class LocalOrderManager(OrderManager):
         if lack_num < len(self.stake_currency):
             logger.debug('%s/%s sybol lack %s', lack_num, len(self.stake_currency), self.wallets.data)
             return
-        open_num = len(await InOutOrder.open_orders())
+        enterd_ods = [od for _, od in BotCache.open_ods.items() if od.status >= InOutStatus.PartEnter]
+        open_num = len(enterd_ods)
         if open_num == 0:
             # 如果余额不足，且没有打开的订单，则终止回测
             BotGlobal.state = BotState.STOPPED

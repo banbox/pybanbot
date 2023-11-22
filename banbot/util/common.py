@@ -255,6 +255,22 @@ def get_logger(level=logging.INFO):
     return log
 
 
+def set_log_file(log: logging.Logger, file_path: str):
+    formatter = None
+    for handler in log.handlers:
+        if isinstance(handler, logging.FileHandler):
+            return
+        if handler.name == 'stdout':
+            formatter = handler.formatter
+    if not formatter:
+        formatter = logging.Formatter(fmt=LOGFORMAT)
+        formatter.converter = time.gmtime
+    file_handler = logging.FileHandler(file_path)
+    file_handler.setLevel(log.level)
+    file_handler.setFormatter(formatter)
+    log.addHandler(file_handler)
+
+
 def set_log_notify(log: logging.Logger):
     notify_handler = NotifyHandler(logging.ERROR)
     notify_handler.setFormatter(logging.Formatter(fmt='%(message)s'))

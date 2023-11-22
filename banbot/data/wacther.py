@@ -202,13 +202,11 @@ class KlineLiveConsumer(ClientIO):
         ohlc_arr, fetch_tfsecs = msg_data[:2]
         if ohlc_arr:
             bar_ms = int(ohlc_arr[-1][0])
-            BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
+            fetch_ms = fetch_tfsecs * 1000
+            BotCache.set_pair_ts(pair, bar_ms + fetch_ms, fetch_ms)
         if mtype == 'uohlcv':
             await self._on_ohlcv_msg(exg_name, market, pair, ohlc_arr, fetch_tfsecs, msg_data[2])
             return True
-        if ohlc_arr:
-            bar_ms = int(ohlc_arr[-1][0])
-            BotCache.set_pair_ts(pair, bar_ms, fetch_tfsecs * 1000)
         if fetch_tfsecs < job.tf_secs:
             old_ohlcvs = [job.wait_bar] if job.wait_bar else []
             # 和旧的bar_row合并更新，判断是否有完成的bar

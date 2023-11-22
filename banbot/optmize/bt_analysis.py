@@ -107,13 +107,15 @@ class BTAnalysis:
         task_dir = os.path.join(save_dir, f'task_{task_id}')
         if not os.path.isdir(task_dir):
             os.mkdir(task_dir)
-        dump_path = os.path.join(task_dir, 'result.json')
-        with open(dump_path, 'wb') as fout:
-            fout.write(orjson.dumps(self.result))
         # 保存订单记录到CSV
         await dump_orders(task_id, task_dir)
         # 保存总资产曲线
         dump_graph(self.result['graph_data'], task_dir)
+        # 删除graph_data
+        del self.result['graph_data']
+        dump_path = os.path.join(task_dir, 'result.json')
+        with open(dump_path, 'wb') as fout:
+            fout.write(orjson.dumps(self.result))
 
     @staticmethod
     def load(save_dir: str) -> 'BTAnalysis':

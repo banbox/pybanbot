@@ -117,9 +117,11 @@ class AppConfig(metaclass=Singleton):
             config['timerange'] = TimeRange.parse_timerange(config['timerange'])
         # 检查是否启用了异常通知，如启用则设置
         from banbot.worker.exc_notify import allow_exc_notify
-        from banbot.util.common import set_log_notify
+        from banbot.util.common import set_log_notify, set_log_file
         if allow_exc_notify(config):
             set_log_notify(logger)
+        if config.get('logfile'):
+            set_log_file(logger, config['logfile'])
         # 更新BotGlobal
         from banbot.storage import BotGlobal
         from banbot.util import btime
