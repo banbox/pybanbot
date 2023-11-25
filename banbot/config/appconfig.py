@@ -81,6 +81,17 @@ class AppConfig(metaclass=Singleton):
         return cls.obj.get_config()
 
     @classmethod
+    def dict(cls) -> dict:
+        """返回一个字典副本，可用于序列化"""
+        config = copy.deepcopy(cls.get())
+        if 'timerange' in config:
+            from banbot.config.timerange import TimeRange
+            timerange = config['timerange']
+            if isinstance(timerange, TimeRange):
+                config['timerange'] = timerange.timerange_str
+        return config
+
+    @classmethod
     def get_data_dir(cls):
         import os
         data_dir = os.environ.get('ban_data_dir')
@@ -152,7 +163,7 @@ class AppConfig(metaclass=Singleton):
     @classmethod
     def get_pub(cls):
         '''返回配置的公开版本，删除敏感信息。'''
-        config = copy.deepcopy(cls.get())
+        config = cls.dict()
         exg_cfg = config.get('exchange')
         if exg_cfg:
             for key, item in exg_cfg.items():
@@ -162,11 +173,6 @@ class AppConfig(metaclass=Singleton):
                 [item.pop(k) for k in credit_keys]
         if 'database' in config:
             del config['database']
-        if 'timerange' in config:
-            from banbot.config.timerange import TimeRange
-            timerange = config['timerange']
-            if isinstance(timerange, TimeRange):
-                config['timerange'] = timerange.timerange_str
         chl_cfg = config.get('rpc_channels')
         if chl_cfg:
             keep_keys = {'enabled', 'msg_types', 'type'}
