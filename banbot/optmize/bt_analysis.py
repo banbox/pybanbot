@@ -6,6 +6,7 @@
 '''
 分析回测结果，优化策略
 '''
+import yaml
 import datetime
 import os.path
 
@@ -114,6 +115,10 @@ class BTAnalysis:
         dump_graph(self.result['graph_data'], self.task_dir)
         # 复制用到的策略到输出目录
         self._dump_stgs()
+        # 输出配置
+        content = yaml.safe_dump(AppConfig.get(), indent=2, allow_unicode=True)
+        with open(os.path.join(self.task_dir, '_config.yml'), 'w', encoding='utf-8') as fout:
+            fout.write(content)
         # 删除graph_data
         del self.result['graph_data']
         dump_path = os.path.join(self.task_dir, 'result.json')

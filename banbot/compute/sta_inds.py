@@ -319,3 +319,48 @@ def ADX(high: SeriesVar, low: SeriesVar, close: SeriesVar, period: int):
     dx.append(abs(plus - minus) / (plus + minus) * 100)
     return adx.append((SMA(dx, period)[0], plus, minus))
 
+
+def ROC(obj: SeriesVar, period: int):
+    """Rate Of Change"""
+    res_obj: SeriesVar = SeriesVar(obj.key + f'_roc{period}')
+    if res_obj.cached():
+        return res_obj
+    rate = (obj[0] - obj[period]) / obj[period]
+    return res_obj.append(rate * 100)
+
+
+def Highest(obj: SeriesVar, period: int):
+    res_obj: SeriesVar = SeriesVar(obj.key + f'_hh{period}')
+    if res_obj.cached():
+        return res_obj
+    return res_obj.append(max(obj[:period]))
+
+
+def Lowest(obj: SeriesVar, period: int):
+    res_obj: SeriesVar = SeriesVar(obj.key + f'_ll{period}')
+    if res_obj.cached():
+        return res_obj
+    return res_obj.append(min(obj[:period]))
+
+
+def HeikinAshi():
+    res: SeriesVar = SeriesVar(Bar.open.key + '_heikin')
+    if res.cached():
+        return res
+    o: SeriesVar = SeriesVar(Bar.open.key + '_hka')
+    h: SeriesVar = SeriesVar(Bar.high.key + '_hka')
+    l: SeriesVar = SeriesVar(Bar.low.key + '_hka')
+    c: SeriesVar = SeriesVar(Bar.close.key + '_hka')
+    _o, _h, _l, _c = Bar.open[0], Bar.high[0], Bar.low[0], Bar.close[0]
+    if len(o):
+        po, pc = o[1], c[1]
+        o.append((po + pc) / 2)
+        h.append(max(_h, po, pc))
+        l.append(min(_l, po, pc))
+    else:
+        o.append((_o + _c) / 2)
+        h.append(_h)
+        l.append(_l)
+    c.append((_o + _h + _l + _c) / 4)
+    return res.append((o, h, l, c))
+

@@ -43,7 +43,8 @@ class LocalOrderManager(OrderManager):
         if lack_num < len(self.stake_currency):
             logger.debug('%s/%s sybol lack %s', lack_num, len(self.stake_currency), self.wallets.data)
             return
-        enterd_ods = [od for _, od in BotCache.open_ods.items() if od.status >= InOutStatus.PartEnter]
+        enterd_ods = [od for _, od in BotCache.open_ods.items()
+                      if InOutStatus.PartEnter <= od.status < InOutStatus.FullExit]
         open_num = len(enterd_ods)
         if open_num == 0:
             # 如果余额不足，且没有打开的订单，则终止回测
@@ -65,6 +66,7 @@ class LocalOrderManager(OrderManager):
         except LackOfCash as e:
             # 余额不足
             od.local_exit(ExitTags.force_exit, status_msg=str(e))
+            self.on_lack_of_cash()
             return
         enter_price = self.exchange.pres_price(od.symbol, price)
         sub_od = od.enter

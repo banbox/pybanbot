@@ -109,9 +109,6 @@ class OrderManager(metaclass=SingletonArg):
                             try:
                                 ent_od = await self.enter_order(ctx, stg_name, sigin, do_check=False)
                                 enter_ods.append(ent_od)
-                            except LackOfCash as e:
-                                logger.warning(f'enter fail, lack of cash: {e} {stg_name} {sigin}')
-                                self.on_lack_of_cash()
                             except Exception as e:
                                 logger.exception(f'enter fail: {e} {stg_name} {sigin}')
                 else:

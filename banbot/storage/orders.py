@@ -4,7 +4,6 @@
 # Author: anyongjin
 # Date  : 2023/3/21
 import json
-import math
 from dataclasses import dataclass
 from banbot.compute.sta_inds import *
 from banbot.util.tf_utils import *
@@ -817,17 +816,18 @@ async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = Non
 
 
 async def insert_orders_to_db(orders: List[InOutOrder]):
-    sess = dba.session
-    for od in orders:
-        od.id = None
-        sess.add(od)
+    sess: SqlSession = dba.session
+    sess.add_all(orders)
     await sess.flush()
+    enters, exits = [], []
     for od in orders:
         if od.enter:
             od.enter.inout_id = od.id
-            sess.add(od.enter)
+            enters.append(od.enter)
         if od.exit:
             od.exit.inout_id = od.id
-            sess.add(od.exit)
+            exits.append(od.exit)
+    sess.add_all(enters)
+    sess.add_all(exits)
     await sess.flush()
 
