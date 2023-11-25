@@ -202,7 +202,7 @@ class DBKLineFeeder(HistKLineFeeder):
     def __init__(self, pair: str, tf_warms: Dict[str, int], callback: Callable, auto_prefire=False,
                  timerange: Optional[TimeRange] = None, market: str = None):
         super(DBKLineFeeder, self).__init__(pair, tf_warms, callback, auto_prefire, timerange)
-        self._offset_ts = int(self.timerange.startts * 1000)
+        self._offset_ts = btime.time_ms()  # 这里用最新时间，避免回测中途添加pair时间混乱
         app_config = AppConfig.get()
         exg_name = app_config['exchange']['name']
         if not market:

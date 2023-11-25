@@ -35,6 +35,8 @@ class LocalWSProvider:
         self._trade_q = asyncio.Queue(1000)
         self.exg.emit_q = self._trade_q
         self.pair_bars: Dict[str, tuple] = dict()
+        self.timers: List[Tuple[Callable, Callable]] = []
+        '回测时定时回调列表'
 
     async def loop_main(self):
         from banbot.util.misc import run_async
@@ -43,6 +45,8 @@ class LocalWSProvider:
         BotGlobal.state = BotState.RUNNING
         asyncio.create_task(self.exg.run_loop())
         self.exg.sub_pairs(self.pairs)
+        if self.timers:
+            raise ValueError('LocalWSProvider not support timers')
         while True:
             dtype, pair, data = await self._trade_q.get()
             try:

@@ -79,6 +79,8 @@ class HistDataProvider(DataProvider):
         super(HistDataProvider, self).__init__(config, callback)
         self.tr: TimeRange = self.config.get('timerange')
         self.holders: List[HistKLineFeeder] = []
+        self.timers: List[Tuple[Callable, Callable]] = []
+        '回测时定时回调列表'
         self.pbar = None
         self.ptime = 0
         self.plast = 0
@@ -100,6 +102,10 @@ class HistDataProvider(DataProvider):
 
     async def loop_main(self):
         try:
+            wait_list = sorted(self.timers, key=lambda x: x[1]())
+            next_cb, next_timer = None, None
+            if wait_list:
+                next_cb, next_timer = wait_list[0][0], wait_list[0][1]()
             while BotGlobal.state == BotState.RUNNING:
                 items = []
                 for hold in self.holders:
@@ -109,6 +115,13 @@ class HistDataProvider(DataProvider):
                     break
                 btime.cur_timestamp = bar_time / 1000
                 await feeder.invoke()
+                if next_timer and btime.time() > next_timer:
+                    try:
+                        await run_async(next_cb)
+                    except Exception:
+                        logger.exception(f'run timer error: {next_cb.__name__}')
+                    wait_list = sorted(self.timers, key=lambda x: x[1]())
+                    next_cb, next_timer = wait_list[0][0], wait_list[0][1]()
                 self._update_bar()
             if self.pbar:
                 self.pbar.close()

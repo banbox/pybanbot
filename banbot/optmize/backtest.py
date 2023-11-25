@@ -14,10 +14,8 @@ show_num = 600
 class BackTest(Trader):
     def __init__(self, config: Config):
         super(BackTest, self).__init__(config)
-        self.exchange = get_exchange()
         self.wallets = WalletsLocal(self.exchange)
         self.data_mgr = self._init_data_mgr()
-        self.pair_mgr = PairManager(config, self.exchange)
         self.order_mgr = LocalOrderManager(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.out_dir: str = os.path.join(config['data_dir'], 'backtest')
         self.result = dict()
@@ -104,6 +102,12 @@ class BackTest(Trader):
         # 初始化钱包余额
         self.reset_wallet()
         self.result['total_invest'] = self.wallets.total_legal(self.quote_symbols)
+
+        def pair_time_gen():
+            wait_secs = self.pair_mgr.get_refresh_wait()
+            return btime.time() + wait_secs
+        if not hasattr(self.data_mgr, 'pairs'):
+            self.data_mgr.timers.append((self.refresh_pairs, pair_time_gen))
 
     def reset_wallet(self, *symbols):
         wallets = self.config.get('wallet_amounts')

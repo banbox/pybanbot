@@ -7,14 +7,11 @@ from banbot.main.itrader import *
 from banbot.main.od_manager import *
 from banbot.rpc import Notify, NotifyType, start_api
 from banbot.storage import *
-from banbot.symbols.pair_manager import PairManager
 from banbot.util import btime
 from banbot.util.misc import *
-from banbot.exchange import get_exchange
 from banbot.config import Config
 from banbot.main.wallets import CryptoWallet
 from banbot.util.common import logger
-from banbot.util.support import BanEvent
 
 
 class LiveTrader(Trader):
@@ -24,9 +21,7 @@ class LiveTrader(Trader):
 
     def __init__(self, config: Config):
         super(LiveTrader, self).__init__(config)
-        self.exchange = get_exchange()
         self.data_mgr = self._init_data_mgr()
-        self.pair_mgr = PairManager(config, self.exchange)
         self.wallets = CryptoWallet(config, self.exchange)
         self.order_mgr = LiveOrderMgr.init(config, self.exchange, self.wallets, self.data_mgr, self.order_callback)
         self.loop = None
@@ -166,50 +161,6 @@ class LiveTrader(Trader):
             ])
             logger.info('listen websocket , watch wallets and order updates ...')
 
-    async def refresh_pairs(self):
-        '''
-        定期刷新交易对
-        '''
-        logger.info("start refreshing symbols")
-        old_symbols = set(self.pair_mgr.symbols)
-        await self.pair_mgr.refresh_pairlist()
-        await self.add_del_pairs(old_symbols)
-
-    async def add_del_pairs(self, old_symbols: Set[str]):
-        now_symbols = set(self.pair_mgr.symbols)
-        BotGlobal.pairs = now_symbols
-        await self.wallets.init(now_symbols)
-        del_symbols = list(old_symbols.difference(now_symbols))
-        add_symbols = list(now_symbols.difference(old_symbols))
-        # 检查删除的交易对是否有订单，有则添加回去
-        errors = dict()
-        if del_symbols:
-            open_ods = await InOutOrder.open_orders(pairs=del_symbols)
-            for od in open_ods:
-                if od.symbol in del_symbols:
-                    errors[od.symbol] = 'has open order, remove fail'
-                    del_symbols.remove(od.symbol)
-                    self.pair_mgr.symbols.append(od.symbol)
-            if del_symbols:
-                logger.info(f"remove symbols: {del_symbols}")
-                await self.data_mgr.unsub_pairs(del_symbols)
-                jobs = BotGlobal.get_jobs(del_symbols)
-                BotGlobal.remove_jobs(jobs)
-
-        # 处理新增的交易对
-        if add_symbols:
-            calc_keys = [s for s in add_symbols if s not in self.pair_mgr.pair_tfscores]
-            if calc_keys:
-                # 如果是rpc添加的，这里需要计算tfscores
-                from banbot.symbols.tfscaler import calc_symboltf_scales
-                tfscores = await calc_symboltf_scales(self.exchange, calc_keys)
-                self.pair_mgr.pair_tfscores.update(**tfscores)
-            logger.info(f"listen new symbols: {add_symbols}")
-            pair_tfs = self._load_strategies(add_symbols, self.pair_mgr.pair_tfscores)
-            await self.data_mgr.sub_warm_pairs(pair_tfs)
-        BanEvent.set('set_pairs_res', errors)
-        return errors
-
     async def loop_refresh_pairs(self):
         reset_ctx()
         while True:
@@ -217,11 +168,7 @@ class LiveTrader(Trader):
             if not wait_secs:
                 return
             await asyncio.sleep(wait_secs)
-            try:
-                async with dba():
-                    await self.refresh_pairs()
-            except Exception:
-                logger.exception('loop refresh pairs error')
+            await self.refresh_pairs()
 
     async def cleanup(self):
         await self.order_mgr.cleanup()

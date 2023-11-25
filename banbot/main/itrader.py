@@ -13,6 +13,8 @@ from banbot.data.provider import *
 from banbot.storage import *
 from banbot.main.wallets import *
 from banbot.compute.ctx import *
+from banbot.util.support import BanEvent
+from banbot.symbols.pair_manager import PairManager
 
 
 class Trader:
@@ -22,10 +24,12 @@ class Trader:
         self.name = config.get('name', 'noname')
         if btime.prod_mode():
             logger.info('started bot:   >>>  %s  <<<', self.name)
+        self.exchange = get_exchange()
         self.wallets: WalletsLocal = None
         self.order_mgr: OrderManager = None
         self.data_mgr: DataProvider = None
         self._job: Tuple[str, float, float] = None
+        self.pair_mgr = PairManager(config, self.exchange)
         self._run_tasks: List[asyncio.Task] = []
         self.last_process = 0
         '上次处理bar的毫秒时间戳，用于判断是否工作正常'
@@ -101,6 +105,60 @@ class Trader:
             else:
                 tfwarms[info.timeframe] = max(info.warmup_num, tfwarms[info.timeframe])
         return stg_obj
+
+    async def refresh_pairs(self):
+        '''
+        定期刷新交易对
+        '''
+        try:
+            async with dba():
+                logger.info("start refreshing symbols")
+                old_symbols = set(self.pair_mgr.symbols)
+                await self.pair_mgr.refresh_pairlist()
+                await self.add_del_pairs(old_symbols)
+        except Exception:
+            logger.exception('loop refresh pairs error')
+
+    async def add_del_pairs(self, old_symbols: Set[str]):
+        now_symbols = set(self.pair_mgr.symbols)
+        BotGlobal.pairs = now_symbols
+        if hasattr(self.wallets, 'init'):
+            await self.wallets.init(now_symbols)
+        del_symbols = list(old_symbols.difference(now_symbols))
+        add_symbols = list(now_symbols.difference(old_symbols))
+        # 检查删除的交易对是否有订单，有则添加回去
+        errors = dict()
+        if del_symbols:
+            open_ods = [od for _, od in BotCache.open_ods.items() if od.symbol in del_symbols]
+            for od in open_ods:
+                if od.symbol in del_symbols:
+                    errors[od.symbol] = 'has open order, remove fail'
+                    del_symbols.remove(od.symbol)
+                    self.pair_mgr.symbols.append(od.symbol)
+            if del_symbols:
+                logger.info(f"remove symbols: {del_symbols}")
+                fut = self.data_mgr.unsub_pairs(del_symbols)
+                if fut and asyncio.isfuture(fut):
+                    asyncio.ensure_future(fut)
+                jobs = BotGlobal.get_jobs(del_symbols)
+                BotGlobal.remove_jobs(jobs)
+
+        # 处理新增的交易对
+        if add_symbols:
+            calc_keys = [s for s in add_symbols if s not in self.pair_mgr.pair_tfscores]
+            if calc_keys:
+                # 如果是rpc添加的，这里需要计算tfscores
+                from banbot.symbols.tfscaler import calc_symboltf_scales
+                tfscores = await calc_symboltf_scales(self.exchange, calc_keys)
+                self.pair_mgr.pair_tfscores.update(**tfscores)
+            logger.info(f"listen new symbols: {add_symbols}")
+            pair_tfs = self._load_strategies(add_symbols, self.pair_mgr.pair_tfscores)
+            if hasattr(self.data_mgr, 'sub_warm_pairs'):
+                await self.data_mgr.sub_warm_pairs(pair_tfs)
+            else:
+                self.data_mgr.sub_pairs(pair_tfs)
+        BanEvent.set('set_pairs_res', errors)
+        return errors
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
         tf_secs = tf_to_secs(timeframe)

@@ -817,6 +817,9 @@ async def get_db_orders(strategy: str = None, pairs: Union[str, List[str]] = Non
 
 async def insert_orders_to_db(orders: List[InOutOrder]):
     sess: SqlSession = dba.session
+    if not BotGlobal.live_mode:
+        for od in orders:
+            od.id = None
     sess.add_all(orders)
     await sess.flush()
     enters, exits = [], []

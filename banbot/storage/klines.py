@@ -249,6 +249,8 @@ order by time'''
         返回的按time, sid升序。
         sid作为最后一列返回。
         '''
+        if not exs_ids:
+            return []
         tf_secs = tf_to_secs(timeframe)
 
         start_ts, end_ts = start_ms / 1000, end_ms / 1000
