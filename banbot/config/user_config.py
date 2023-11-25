@@ -22,7 +22,7 @@ class UserConfig(metaclass=Singleton):
         self.cfg_path = user_dir / 'config.yml'
         self._config: Config = dict()
         if self.cfg_path.exists():
-            self._config = load_config_file(str(self.cfg_path))
+            self._config = load_config_file(str(self.cfg_path)) or dict()
         UserConfig._obj = self
 
     @classmethod
