@@ -61,6 +61,9 @@ class BaseStrategy:
     watch_book = False
     '是否监听订单簿'
 
+    drawdown_exit = False
+    '是否启用回撤止盈，默认False，如需修改回撤参数，重写_get_drawdown_rate'
+
     stake_amount = 0
     '每笔下单金额基数'
 
@@ -98,6 +101,8 @@ class BaseStrategy:
         '当前处理的币种'
         self.timeframe: str = timeframe
         '当前处理的时间周期'
+        self.tp_maxs: Dict[int, float] = dict()
+        '订单最大盈利时价格'
         self.enter_tags: Set[str] = set()
         '已入场订单的标签'
         self.enter_num = 0
@@ -309,7 +314,19 @@ class BaseStrategy:
         self.exits.append(exit_args)
 
     def custom_exit(self, arr: np.ndarray, od: InOutOrder) -> Optional[bool]:
-        return None
+        """订单退出默认使用止盈回撤"""
+        if not self.drawdown_exit:
+            return
+        back_rate, exm_price, exm_chg = self._get_max_tp(od)
+        rate = self._get_drawdown_rate(exm_chg)
+        if rate:
+            od_dirt = -1 if od.short else 1
+            cur_price = Bar.close[0]
+            stoploss_val = exm_price * (1 + exm_chg * (1 - rate)) / (1 + exm_chg)
+            if (stoploss_val - cur_price) * od_dirt >= 0:
+                self.close_orders('take', order_id=od.id)
+                return True
+            od.set_info(stoploss_price=stoploss_val)
 
     def check_custom_exits(self, pair_arr: np.ndarray) -> List[Tuple[InOutOrder, str]]:
         # 调用策略的自定义退出判断
@@ -378,6 +395,40 @@ class BaseStrategy:
 
     def init_third_od(self, od: InOutOrder):
         pass
+
+    def _get_drawdown_rate(self, max_tp_rate: float):
+        """根据订单的最大盈利率，计算止盈时回撤百分比"""
+        if max_tp_rate > 0.1:
+            rate = 0.15
+        elif max_tp_rate > 0.04:
+            rate = 0.17
+        elif max_tp_rate > 0.025:
+            rate = 0.25
+        elif max_tp_rate > 0.015:
+            rate = 0.37
+        elif max_tp_rate > 0.007:
+            rate = 0.5
+        else:
+            rate = None
+        return rate
+
+    def _get_max_tp(self, od: InOutOrder):
+        """计算当前订单，距离最大盈利的回撤
+        返回：盈利后回撤比例，最大盈利价格，最大利润率"""
+        ent_price = od.enter.average or od.init_price
+        exm_price = self.tp_maxs.get(od.id) or od.init_price
+        if od.short:
+            price, cmp = Bar.low[0], min
+        else:
+            price, cmp = Bar.high[0], max
+        exm_price = cmp(exm_price, price)
+        self.tp_maxs[od.id] = exm_price
+        back_val = abs(exm_price - price)
+        max_tp_val = abs(exm_price - ent_price)
+        max_chg = max_tp_val / ent_price
+        if not max_tp_val:
+            return 0, exm_price, max_chg
+        return back_val / max_tp_val, exm_price, max_chg
 
     @classmethod
     def send_notify(cls, msg: str, with_pair=True):

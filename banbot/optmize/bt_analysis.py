@@ -116,7 +116,7 @@ class BTAnalysis:
         # 复制用到的策略到输出目录
         self._dump_stgs()
         # 输出配置
-        content = yaml.safe_dump(AppConfig.dict(), indent=2, allow_unicode=True)
+        content = yaml.safe_dump(AppConfig.get_pub(), indent=2, allow_unicode=True)
         with open(os.path.join(self.task_dir, '_config.yml'), 'w', encoding='utf-8') as fout:
             fout.write(content)
         # 删除graph_data

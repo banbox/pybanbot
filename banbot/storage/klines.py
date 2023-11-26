@@ -82,7 +82,7 @@ class KLine(BaseDbModel):
         BarAgg('1d', 'kline_1d', '1h', '3d', '1h', '1h', '3 years', '20 years'),
     ]
 
-    down_tfs = {'1m', '1h', '1d'}
+    down_tfs = {'1m', '15m', '1h', '1d'}
 
     agg_map: Dict[str, BarAgg] = {v.tf: v for v in agg_list}
 
@@ -388,6 +388,8 @@ group by 1'''
             if tf_secs % secs_hour > 0:
                 raise RuntimeError(f'unsupport timeframe: {tf}')
             return '1h'
+        if tf_secs >= secs_min * 15:
+            return '15m'
         if tf_secs < secs_min or tf_secs % secs_min > 0:
             raise RuntimeError(f'unsupport timeframe: {tf}')
         return '1m'
