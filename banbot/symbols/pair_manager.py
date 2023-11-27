@@ -71,6 +71,7 @@ class PairManager:
                 self.ticker_cache['tickers'] = tickers
 
             pairlist = await self.handlers[0].gen_pairlist(tickers)
+            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, pairlist)
             logger.info(f'get {len(pairlist)} symbols from {self.handlers[0].name}')
             for handler in self.handlers[1:]:
                 pairlist = await handler.filter_pairlist(pairlist, tickers)
@@ -79,6 +80,7 @@ class PairManager:
         if self.whitelist:
             add_pairs = self.whitelist if not add_pairs else set(add_pairs).union(self.whitelist)
         if add_pairs:
+            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, add_pairs)
             new_pairs = set(add_pairs).difference(pairlist)
             if new_pairs:
                 pairlist.extend(new_pairs)
