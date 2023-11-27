@@ -433,12 +433,17 @@ async def fast_bulk_ohlcv(exg: CryptoExchange, symbols: List[str], timeframe: st
     start_ms, end_ms = parse_down_args(down_tf, start_ms, end_ms, limit)
     # 筛选需要下载的币种
     down_pairs = []
+    check_ids = set()
     for sid, tf in item_ranges:
         if tf != down_tf or sid not in exs_map:
             continue
         cur_start, cur_stop = item_ranges[(sid, tf)]
         if cur_start <= start_ms <= end_ms <= cur_stop:
             continue
+        down_pairs.append(exs_map.get(sid))
+        check_ids.add(sid)
+    empty_ids = set(exs_map.keys()).difference(check_ids)
+    for sid in empty_ids:
         down_pairs.append(exs_map.get(sid))
     if down_pairs:
         # 分批次执行下载。
