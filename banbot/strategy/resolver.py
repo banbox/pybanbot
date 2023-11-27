@@ -104,6 +104,8 @@ class StrategyResolver(IResolver):
             pair_tfscores = dict()
             for pair in pairlist:
                 pair_tfscores[pair] = [('1m', 1.)]
+            if allow_filter:
+                logger.warning(f'no tfscores, set 1m for {len(pairlist)} pairs')
         run_tfs = set()
         for policy in config['run_policy']:
             strategy_cls = get_strategy(policy['name'])
