@@ -490,14 +490,6 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
     from banbot.util.misc import parallel_jobs, run_async
     from banbot.storage import dba, select
     pbar = LazyTqdm()
-    if isinstance(kwargs, dict):
-        kwargs['pbar'] = pbar
-        kwargs['new_sess'] = True
-        kwargs = [kwargs] * len(symbols)
-    else:
-        for kw in kwargs:
-            kw['pbar'] = pbar
-            kw['new_sess'] = True
     sess = dba.session
     fts = [ExSymbol.exchange == exg.name, ExSymbol.symbol.in_(set(symbols)), ExSymbol.market == exg.market_type]
     exs_list = list(await sess.scalars(select(ExSymbol).filter(*fts)))
@@ -505,6 +497,16 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
         keep_pairs = {s.symbol for s in exs_list}
         del_pairs = set(symbols).difference(keep_pairs)
         logger.warning(f'{len(del_pairs)} pairs removed in bulk_ohlcv_do, as not in exsymbol: {del_pairs}')
+    if isinstance(kwargs, dict):
+        kwargs['pbar'] = pbar
+        kwargs['new_sess'] = True
+        kwargs = [kwargs] * len(exs_list)
+    else:
+        if len(kwargs) < len(exs_list):
+            raise ValueError(f'kwargs count {len(kwargs)} < required {len(exs_list)}, in num {len(symbols)}')
+        for kw in kwargs:
+            kw['pbar'] = pbar
+            kw['new_sess'] = True
     for rid in range(0, len(exs_list), MAX_CONC_OHLCV):
         # 批量下载，提升效率
         batch = exs_list[rid: rid + MAX_CONC_OHLCV]
