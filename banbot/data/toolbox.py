@@ -55,7 +55,7 @@ async def _fill_tf_hole(timeframe: str):
         if not hole_list:
             continue
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
-        old_holes = list(await sess.scalars(select(KHole).where(*fts).order_by(KHole.start)))
+        old_holes = await get_holes(sess, fts, KHole.start)
         res_holes = []
         for h in hole_list:
             start, stop = get_unknown_range(h[0], h[1], old_holes)

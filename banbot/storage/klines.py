@@ -761,11 +761,7 @@ ORDER BY sid, 2'''
         holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
         holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
-        stmt = select(KHole).where(*fts)
-        old_holes: List[KHole] = list((await sess.scalars(stmt)).all())
-        for h in old_holes:
-            h.start = h.start.replace(tzinfo=pytz.UTC)
-            h.stop = h.stop.replace(tzinfo=pytz.UTC)
+        old_holes = await get_holes(sess, fts)
         holes.extend(old_holes)
         holes.sort(key=lambda x: x.start)
         merged: List[KHole] = []
@@ -861,8 +857,7 @@ class KHole(BaseDbModel):
         start = btime.to_datetime(start_ms)
         stop = btime.to_datetime(stop_ms)
         fts = [KHole.sid == exs.id, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]
-        stmt = select(KHole).where(*fts).order_by(KHole.start)
-        holes: List[KHole] = list((await sess.scalars(stmt)).all())
+        holes: List[KHole] = await get_holes(sess, fts, KHole.start)
         start, stop = get_unknown_range(start, stop, holes)
         if start >= stop:
             return 0, 0
@@ -884,6 +879,17 @@ def get_unknown_range(start, stop, holes: List[KHole]):
         if start >= stop:
             return start, stop
     return start, stop
+
+
+async def get_holes(sess: SqlSession, fts: List[Any], od_by=None) -> List[KHole]:
+    stmt = select(KHole).where(*fts)
+    if od_by:
+        stmt = stmt.order_by(od_by)
+    holes = list((await sess.scalars(stmt)).all())
+    for h in holes:
+        h.start = h.start.replace(tzinfo=pytz.UTC)
+        h.stop = h.stop.replace(tzinfo=pytz.UTC)
+    return holes
 
 
 class KInfo(BaseDbModel):
