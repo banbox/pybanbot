@@ -758,7 +758,6 @@ ORDER BY sid, 2'''
         if not sess:
             sess = dba.session
         sid = exs.id
-        holes = [(btime.to_datetime(h[0]), btime.to_datetime(h[1])) for h in holes]
         holes = [KHole(sid=sid, timeframe=timeframe, start=h[0], stop=h[1]) for h in holes]
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
         old_holes = await get_holes(sess, fts)
