@@ -8,7 +8,7 @@ from banbot.data.tools import *
 from banbot.util.tf_utils import *
 
 
-async def _find_sid_hole(sess: SqlSession, timeframe: str, sid: int, since: datetime, until: datetime = None):
+async def _find_sid_hole(sess: SqlSession, timeframe: str, sid: int, since: datetime, until: datetime = None) -> List[Tuple[int, int]]:
     tbl = f'kline_{timeframe}'
     batch_size, true_intv = 1000, tf_to_secs(timeframe) * 1.
     intv_delta = btime.timedelta(seconds=true_intv)
@@ -30,7 +30,9 @@ async def _find_sid_hole(sess: SqlSession, timeframe: str, sid: int, since: date
         for row in rows[off_idx:]:
             cur_intv = (row[0] - prev_date).total_seconds()
             if cur_intv > true_intv:
-                res_holes.append((prev_date + intv_delta, row[0]))
+                start = btime.to_utcstamp(prev_date + intv_delta, True, True)
+                stop = btime.to_utcstamp(row[0], True, True)
+                res_holes.append((start, stop))
             elif cur_intv < true_intv:
                 logger.warning(f'invalid kline interval: {cur_intv:.3f}, sid: {sid}')
             prev_date = row[0]
@@ -68,8 +70,7 @@ async def _fill_tf_hole(timeframe: str):
         for hole in res_holes:
             start_dt, end_dt = btime.to_datestr(hole[0]), btime.to_datestr(hole[1])
             logger.warning(f'filling hole: {stf.symbol}, {start_dt} - {end_dt}')
-            start_ms = btime.to_utcstamp(hole[0], True, True)
-            end_ms = btime.to_utcstamp(hole[1], True, True)
+            start_ms, end_ms = hole[0], hole[1]
             sub_arr = await KLine.query(stf, down_tf, start_ms, end_ms)
             true_len = (end_ms - start_ms) // down_tfsecs // 1000
             if true_len == len(sub_arr):

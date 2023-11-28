@@ -763,10 +763,10 @@ ORDER BY sid, 2'''
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
         old_holes = await get_holes(sess, fts)
         holes.extend(old_holes)
-        holes.sort(key=lambda x: x.start)
+        holes.sort(key=lambda x: x.start_ms)
         merged: List[KHole] = []
         for h in holes:
-            if not merged or merged[-1].stop < h.start:
+            if not merged or merged[-1].stop_ms < h.start_ms:
                 merged.append(h)
             else:
                 prev = merged[-1]
@@ -776,17 +776,16 @@ ORDER BY sid, 2'''
                 if hole.id:
                     await sess.delete(hole)
                     await sess.flush()
-                if hole.stop > old_h.stop:
-                    old_h.stop = hole.stop
+                if hole.stop_ms > old_h.stop_ms:
+                    old_h.set_stop(hole.stop_ms)
                 merged[-1] = old_h
         for m in merged:
-            if m.start == m.stop:
+            if m.start_ms == m.stop_ms:
                 if m.id:
                     await sess.delete(m)
                 continue
             if not m.id:
-                stop_at = m.stop.replace(tzinfo=pytz.UTC)
-                if stop_at > btime.now():
+                if m.stop_ms > btime.time_ms():
                     logger.error(f'hole.stop exceed cur time, bad: {m}, all: {merged}')
                     await sess.rollback()
                     return
@@ -849,6 +848,38 @@ class KHole(BaseDbModel):
     start = mapped_column(type_=sa.TIMESTAMP(timezone=True))  # 从第一个缺失的bar时间戳记录
     stop = mapped_column(type_=sa.TIMESTAMP(timezone=True))  # 记录到最后一个确实的bar的结束时间戳（即下一个有效bar的时间戳）
 
+    @orm.reconstructor
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.start_ms: int = 0
+        self.stop_ms: int = 0
+        if self.start:
+            self.start_ms = btime.to_utcstamp(self.start, True, True)
+        if self.stop:
+            self.stop_ms = btime.to_utcstamp(self.stop, True, True)
+
+    def _get_dt_ms(self, dt):
+        import datetime
+        if isinstance(dt, datetime.datetime):
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+            time_ms = btime.to_utcstamp(dt, True, True)
+            return dt, time_ms
+        elif isinstance(dt, (int, float)):
+            if dt < 1000000000:
+                dt *= 1000
+            time_ms = int(dt)
+            dt = btime.to_datetime(time_ms)
+            return dt, time_ms
+        raise ValueError('dt must be type datetime/time_ms')
+
+    def set_start(self, dt):
+        dt, time_ms = self._get_dt_ms(dt)
+        self.start, self.start_ms = dt, time_ms
+
+    def set_stop(self, dt):
+        dt, time_ms = self._get_dt_ms(dt)
+        self.stop, self.stop_ms = dt, time_ms
+
     @classmethod
     async def get_down_range(cls, exs: ExSymbol, timeframe: str, start_ms: int, stop_ms: int,
                              sess: SqlSession = None) -> Tuple[int, int]:
@@ -858,10 +889,10 @@ class KHole(BaseDbModel):
         stop = btime.to_datetime(stop_ms)
         fts = [KHole.sid == exs.id, KHole.timeframe == timeframe, KHole.stop > start, KHole.start < stop]
         holes: List[KHole] = await get_holes(sess, fts, KHole.start)
-        start, stop = get_unknown_range(start, stop, holes)
-        if start >= stop:
+        start_ms, stop_ms = get_unknown_range(start_ms, stop_ms, holes)
+        if start_ms >= stop_ms:
             return 0, 0
-        return btime.to_utcstamp(start, True, True), btime.to_utcstamp(stop, True, True)
+        return start_ms, stop_ms
 
     def __str__(self):
         return f'{self.sid}|{self.timeframe}|{self.start}|{self.stop}'
@@ -870,15 +901,15 @@ class KHole(BaseDbModel):
         return f'{self.sid}|{self.timeframe}|{self.start}|{self.stop}'
 
 
-def get_unknown_range(start, stop, holes: List[KHole]):
+def get_unknown_range(start_ms: int, stop_ms: int, holes: List[KHole]) -> Tuple[int, int]:
     for h in holes:
-        if h.start <= start:
-            start = max(start, h.stop)
-        elif h.stop >= stop:
-            stop = min(stop, h.start)
-        if start >= stop:
-            return start, stop
-    return start, stop
+        if h.start_ms <= start_ms:
+            start_ms = max(start_ms, h.stop_ms)
+        elif h.stop_ms >= stop_ms:
+            stop_ms = min(stop_ms, h.start_ms)
+        if start_ms >= stop_ms:
+            return start_ms, stop_ms
+    return start_ms, stop_ms
 
 
 async def get_holes(sess: SqlSession, fts: List[Any], od_by=None) -> List[KHole]:
