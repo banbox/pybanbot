@@ -764,11 +764,20 @@ ORDER BY sid, 2'''
         old_holes = await get_holes(sess, fts)
         holes.extend(old_holes)
         holes.sort(key=lambda x: x.start_ms)
+        for h in holes:
+            start_ms = btime.to_utcstamp(h.start, True, True)
+            stop_ms = btime.to_utcstamp(h.stop, True, True)
+            if start_ms != h.start_ms:
+                print(f'invalid h start_ms: {start_ms} {h.start_ms} {h}')
+            if stop_ms != h.stop_ms:
+                print(f'invalid h stop_ms: {stop_ms} {h.stop_ms} {h}')
         merged: List[KHole] = []
         for h in holes:
             if not merged or merged[-1].stop_ms < h.start_ms:
+                # 与前一个洞不连续，出现缺口
                 merged.append(h)
             else:
+                # 与前一个洞连续，需要删除一个合并成更大的洞
                 prev = merged[-1]
                 old_h, hole = prev, h
                 if h.id:
