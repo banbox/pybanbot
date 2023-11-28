@@ -503,7 +503,7 @@ async def bulk_ohlcv_do(exg: CryptoExchange, symbols: List[str], timeframe: str,
         kwargs = [kwargs] * len(exs_list)
     else:
         if len(kwargs) < len(exs_list):
-            raise ValueError(f'kwargs count {len(kwargs)} < required {len(exs_list)}, in num {len(symbols)}')
+            raise ValueError(f'kwargs count {len(kwargs)} < required {len(exs_list)}, duplicate symbols exist maybe')
         for kw in kwargs:
             kw['pbar'] = pbar
             kw['new_sess'] = True
