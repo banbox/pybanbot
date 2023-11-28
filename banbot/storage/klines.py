@@ -763,6 +763,9 @@ ORDER BY sid, 2'''
         fts = [KHole.sid == sid, KHole.timeframe == timeframe]
         stmt = select(KHole).where(*fts)
         old_holes: List[KHole] = list((await sess.scalars(stmt)).all())
+        for h in old_holes:
+            h.start = h.start.replace(tzinfo=pytz.UTC)
+            h.stop = h.stop.replace(tzinfo=pytz.UTC)
         holes.extend(old_holes)
         holes.sort(key=lambda x: x.start)
         merged: List[KHole] = []
