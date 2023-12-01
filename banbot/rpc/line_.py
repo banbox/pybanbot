@@ -5,6 +5,7 @@
 # Date  : 2023/9/12
 from banbot.rpc.webhook import *
 from banbot.util.net_utils import get_http_sess, parse_http_rsp
+from banbot.util.misc import Sleeper
 
 
 class Line(Webhook):
@@ -30,7 +31,7 @@ class Line(Webhook):
         for to_id in self.targets:
             wait_secs = next_ts - time.time()
             if wait_secs > 0:
-                await asyncio.sleep(wait_secs)
+                await Sleeper.sleep(wait_secs)
             data = dict(
                 to=to_id,
                 messages=[dict(type='text', text=merge_text)]

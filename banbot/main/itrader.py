@@ -162,9 +162,7 @@ class Trader:
 
     async def on_data_feed(self, pair: str, timeframe: str, row: list):
         tf_secs = tf_to_secs(timeframe)
-        if not BotGlobal.is_warmup and btime.run_mode in btime.LIVE_MODES:
-            if tf_secs >= 60:
-                logger.info('data_feed %s %s %s %s', pair, timeframe, btime.to_datestr(row[0]), row)
+        if not BotGlobal.is_warmup and BotGlobal.live_mode:
             self.last_process = btime.utcstamp()
         MarketPrice.set_bar_price(pair, float(row[ccol]))
         if pair in BotGlobal.forbid_pairs:

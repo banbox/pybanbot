@@ -63,7 +63,7 @@ class LiveTrader(Trader):
         return LiveDataProvider(self.config, self.on_data_feed)
 
     async def init(self):
-        BotGlobal.bot_loop = asyncio.get_running_loop()
+        BotGlobal.set_loop(asyncio.get_running_loop())
         from banbot.data.toolbox import sync_timeframes
         await self.exchange.load_markets()
         async with dba():
@@ -143,6 +143,8 @@ class LiveTrader(Trader):
         BanEvent.on('set_pairs', self.add_del_pairs, with_db=True)
         # 监听K线是否超时
         self._run_tasks.append(asyncio.create_task(BotCache.run_bar_waiter()))
+        # 定期输出收到K线概况
+        self._run_tasks.append(asyncio.create_task(BotCache.run_bar_summary()))
         if btime.prod_mode():
             # 仅实盘交易模式，监听钱包和订单状态更新
             self._run_tasks.extend([
@@ -167,10 +169,13 @@ class LiveTrader(Trader):
             wait_secs = self.pair_mgr.get_refresh_wait()
             if not wait_secs:
                 return
-            await asyncio.sleep(wait_secs)
+            await Sleeper.sleep(wait_secs)
+            if BotGlobal.state != BotState.RUNNING:
+                break
             await self.refresh_pairs()
 
     async def cleanup(self):
+        await Sleeper.cancel_all()
         await self.order_mgr.cleanup()
         Notify.send(type=NotifyType.STATUS, status='Bot stopped')
         await Notify.cleanup()

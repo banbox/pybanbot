@@ -89,3 +89,7 @@ class BotGlobal(metaclass=_BotStateMeta):
                 stgs = cls.pairtf_stgs[pairtf]
                 cls.pairtf_stgs[pairtf] = [stg for stg in stgs if stg.name != j[0]]
         cls.pairs = {j[1] for j in cls.stg_symbol_tfs}
+
+    @classmethod
+    def set_loop(cls, loop):
+        cls.bot_loop = loop

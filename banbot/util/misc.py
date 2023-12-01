@@ -5,7 +5,7 @@
 # Date  : 2023/3/22
 import asyncio
 import sys
-from typing import List, Optional, Callable, Dict, Any, ClassVar
+from typing import List, Optional, Callable, Dict, Any, ClassVar, Set
 _run_env = None
 
 
@@ -355,3 +355,31 @@ class LocalLock:
                     del self._locks[self.key]
                     if self.key in self._holds:
                         del self._holds[self.key]
+
+
+class Sleeper:
+    "Group sleep calls allowing instant cancellation of all"
+    tasks: ClassVar[Set[asyncio.Task]] = set()
+
+    @classmethod
+    async def sleep(cls, delay, result=None):
+        coro = asyncio.sleep(delay, result=result)
+        task = asyncio.ensure_future(coro)
+        cls.tasks.add(task)
+        try:
+            return await task
+        except asyncio.CancelledError:
+            return result
+        finally:
+            cls.tasks.remove(task)
+
+    @classmethod
+    async def cancel_all(cls):
+        "Coroutine cancelling tasks"
+        cancelled = set()
+        for task in cls.tasks:
+            if task.cancel():
+                cancelled.add(task)
+        await asyncio.wait(cls.tasks)
+        cls.tasks -= cancelled
+        return len(cancelled)

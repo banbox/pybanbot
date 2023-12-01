@@ -13,6 +13,7 @@ from banbot.exchange.crypto_exchange import get_exchange
 from banbot.storage import KLine, DisContiError
 from banbot.util.banio import ServerIO, BanConn
 from banbot.util.tf_utils import *
+from banbot.util.misc import Sleeper
 from banbot.data.cache import BanCache
 from banbot.storage import dba, reset_ctx
 
@@ -653,7 +654,7 @@ class LiveSpider(ServerIO):
         loop = croniter('11 0 * * *')
         while BotGlobal.state == BotState.RUNNING:
             wait_ts = loop.next() - btime.time()
-            await asyncio.sleep(wait_ts)
+            await Sleeper.sleep(wait_ts)
             if not cls.obj:
                 continue
             for key, miner in cls.obj.miners.items():

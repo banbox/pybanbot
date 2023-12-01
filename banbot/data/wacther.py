@@ -49,11 +49,18 @@ class Watcher:
         return finish_bars
 
     async def _fire_callback(self, bar_arr, pair: str, timeframe: str, tf_secs: int):
+        is_live = BotGlobal.live_mode
         for bar_row in bar_arr:
-            if btime.run_mode not in btime.LIVE_MODES:
+            if not is_live:
                 btime.cur_timestamp = bar_row[0] / 1000 + tf_secs
             await self.callback(pair, timeframe, bar_row)
-        if btime.run_mode in btime.LIVE_MODES and not BotGlobal.is_warmup:
+        if is_live and not BotGlobal.is_warmup:
+            # 记录收到的bar数量
+            if timeframe not in BotCache.tf_pair_hits:
+                BotCache.tf_pair_hits[timeframe] = dict()
+            pair_hits = BotCache.tf_pair_hits[timeframe]
+            pair_hits[pair] = (pair_hits.get(pair) or 0) + len(bar_arr)
+            # 检查是否延迟
             bar_delay = btime.time() - bar_arr[-1][0] // 1000 - tf_secs
             if bar_delay > tf_secs >= 60:
                 # 当蜡烛的触发时间过于滞后时，输出错误信息

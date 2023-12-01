@@ -3,10 +3,8 @@
 # File  : bix.py
 # Author: anyongjin
 # Date  : 2023/11/9
-import asyncio
-import traceback
 from typing import *
-from banbot.storage.orders import InOutOrder, InOutStatus, dba
+from banbot.storage.orders import InOutOrder, InOutStatus
 
 
 class BotCache:
@@ -21,6 +19,9 @@ class BotCache:
 
     pair_copied_at: Dict[str, Tuple[int, int]] = dict()
     '[symbol: (int, int)]记录所有标的从爬虫获取到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的'
+
+    tf_pair_hits: Dict[str, Dict[str, int]] = dict()
+    '一段时间内各周期各币种的bar数量，用于定时输出'
 
     last_bar_ms = 0
     '上次收到bar的结束时间，13位时间戳'
@@ -39,9 +40,10 @@ class BotCache:
         from banbot.util import btime
         from banbot.rpc import Notify, NotifyType
         from banbot.util.common import logger
+        from banbot.util.misc import Sleeper
         minute_ms = 60000
         while BotGlobal.state == BotState.RUNNING:
-            await asyncio.sleep(60)
+            await Sleeper.sleep(60)
             cur_time_ms = btime.time_ms()
             try:
                 items = list(cls.pair_copied_at.items())
@@ -56,6 +58,32 @@ class BotCache:
                     Notify.send(type=NotifyType.EXCEPTION, status=f'监听爬虫K线超时：{fail_text}')
             except Exception:
                 logger.error('run_bar_waiter error')
+
+    @classmethod
+    async def run_bar_summary(cls):
+        from banbot.storage.common import BotGlobal, BotState
+        from banbot.util import btime
+        from croniter import croniter
+        from itertools import groupby
+        from banbot.util.common import logger
+        from banbot.util.misc import Sleeper
+        # 在每5分钟偏移1，然后加30s时执行，即01:30 06:30 11:30 16:30...
+        loop = croniter('1-59/5 * * * * 30')
+        while BotGlobal.state == BotState.RUNNING:
+            wait_ts = loop.next() - btime.time()
+            await Sleeper.sleep(wait_ts)
+            shot = dict()
+            for k in set(cls.tf_pair_hits.keys()):
+                data = cls.tf_pair_hits[k]
+                cls.tf_pair_hits[k] = dict()
+                items = sorted(list(data.items()), key=lambda x: x[1])
+                groups = groupby(items, key=lambda x: x[1])
+                for cnt, gp in groups:
+                    shot[f'{k}_{cnt}'] = ', '.join([it[0] for it in gp])
+            if shot:
+                content = '\n'.join(f'[{k}] {v}' for k, v in shot.items())
+                logger.info(f'receive bars in 5 mins:\n{content}')
+        logger.info('run_bar_summary done')
 
     @classmethod
     def save_open_ods(cls, ods: List[InOutOrder]):

@@ -844,7 +844,9 @@ class LiveOrderMgr(OrderManager):
                     await self._trail_unfill_orders(timeouts)
         except Exception:
             logger.exception('_trail_open_orders error')
-        await asyncio.sleep(timeouts)
+        await Sleeper.sleep(timeouts)
+        if BotGlobal.state != BotState.RUNNING:
+            return 'exit'
 
     async def _trail_unfill_orders(self, timeouts: int):
         '''
