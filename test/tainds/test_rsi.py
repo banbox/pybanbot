@@ -3,6 +3,8 @@
 # File  : test_rsi.py
 # Author: anyongjin
 # Date  : 2023/4/12
+import numpy as np
+import pandas as pd
 import talib as ta
 import pandas_ta as pta
 from test.common import *
@@ -207,3 +209,10 @@ def test_adx():
     ta_res = ta.ADX(high_arr, low_arr, close_arr, timeperiod=period)
     sta_res = calc_state_func(lambda: sta.ADX(Bar.high, Bar.close, Bar.close, period))[0]
     print_tares(None, sta_res, ta_res)
+
+
+def test_any():
+    res = calc_state_func(lambda: sta.HeikinAshi())
+    print(res)
+    # res = Std(ohlcv_arr, 9, 3, 3)[0]
+    # print(res)

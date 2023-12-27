@@ -5,8 +5,9 @@
 # Date  : 2023/4/12
 import pandas as pd
 
-from banbot.compute.sta_inds import *
+from banbot.compute.sta_inds import ocol, hcol, ccol, lcol, np, Callable, TempContext
 candles = [
+    # 数据来自币安合约BTC/USDT.P 2023/07/01 - 2023/08/27
     [1688169600000, 30460.2, 30668.2, 30311.3, 30573.6, 135520.246],
     [1688256000000, 30573.6, 30800, 30149.9, 30612.7, 231866.18800000002],
     [1688342400000, 30612.7, 31395.2, 30559.4, 31149, 370293.2360000001],
@@ -67,8 +68,8 @@ candles = [
     [1693094400000, 26004.3, 26173.6, 25955.6, 26087.7, 86505.398],
 ]
 ohlcv_arr = np.array(candles)
-high_arr, low_arr, close_arr = ohlcv_arr[:, hcol], ohlcv_arr[:, lcol], ohlcv_arr[:, ccol]
-high_col, low_col, close_col = pd.Series(high_arr), pd.Series(low_arr), pd.Series(close_arr)
+open_arr, high_arr, low_arr, close_arr = ohlcv_arr[:, ocol], ohlcv_arr[:, hcol], ohlcv_arr[:, lcol], ohlcv_arr[:, ccol]
+open_col, high_col, low_col, close_col = pd.Series(open_arr), pd.Series(high_arr), pd.Series(low_arr), pd.Series(close_arr)
 
 
 def print_tares(vec_res, sta_res, ta_cres=None, ta_mres=None, mytt_res=None, pta_res=None):
@@ -92,13 +93,14 @@ def print_tares(vec_res, sta_res, ta_cres=None, ta_mres=None, mytt_res=None, pta
         print(pta_res)
 
 
-def calc_state_func(func: Callable):
+def calc_state_func(func: Callable, bar_arr=None, tf_secs=86400):
     from banbot.compute import append_new_bar
     pair_tf = 'binance_spot_BTC/USDT_1d'
-    tf_secs = 86400
+    if bar_arr is None:
+        bar_arr = ohlcv_arr
     with TempContext(pair_tf):
-        for i in range(len(ohlcv_arr)):
-            row = ohlcv_arr[i]
+        for i in range(len(bar_arr)):
+            row = bar_arr[i]
             append_new_bar(row, tf_secs)
             ret_val = func()
     if ret_val.cols:

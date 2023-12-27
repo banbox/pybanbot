@@ -91,6 +91,8 @@ class BackTest(Trader):
             await self._init_task()
             # 同步K线数据，防止不同周期数据有未更新
             await sync_timeframes()
+            all_symbols = list(self.exchange.markets.keys())
+            await ExSymbol.ensures(self.exchange.name, self.exchange.market_type, all_symbols)
             await ExSymbol.init()
             await self.pair_mgr.refresh_pairlist()
             if not self.pair_mgr.symbols:

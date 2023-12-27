@@ -317,12 +317,12 @@ class BaseStrategy:
         """订单退出默认使用止盈回撤"""
         if not self.drawdown_exit:
             return
-        back_rate, exm_price, exm_chg = self._get_max_tp(od)
+        back_rate, ent_price, exm_chg = self._get_max_tp(od)
         rate = self._get_drawdown_rate(exm_chg)
         if rate:
             od_dirt = -1 if od.short else 1
             cur_price = Bar.close[0]
-            stoploss_val = exm_price * (1 + exm_chg * (1 - rate)) / (1 + exm_chg)
+            stoploss_val = ent_price * (1 + exm_chg * (1 - rate) * od_dirt)
             if (stoploss_val - cur_price) * od_dirt >= 0:
                 self.close_orders('take', order_id=od.id)
                 return True
@@ -414,7 +414,7 @@ class BaseStrategy:
 
     def _get_max_tp(self, od: InOutOrder):
         """计算当前订单，距离最大盈利的回撤
-        返回：盈利后回撤比例，最大盈利价格，最大利润率"""
+        返回：盈利后回撤比例，入场价格，最大利润率"""
         ent_price = od.enter.average or od.init_price
         exm_price = self.tp_maxs.get(od.id) or od.init_price
         if od.short:
@@ -423,12 +423,12 @@ class BaseStrategy:
             price, cmp = Bar.high[0], max
         exm_price = cmp(exm_price, price)
         self.tp_maxs[od.id] = exm_price
-        back_val = abs(exm_price - price)
+        back_val = abs(exm_price - Bar.close[0])
         max_tp_val = abs(exm_price - ent_price)
         max_chg = max_tp_val / ent_price
         if not max_tp_val:
-            return 0, exm_price, max_chg
-        return back_val / max_tp_val, exm_price, max_chg
+            return 0, ent_price, max_chg
+        return back_val / max_tp_val, ent_price, max_chg
 
     @classmethod
     def send_notify(cls, msg: str, with_pair=True):

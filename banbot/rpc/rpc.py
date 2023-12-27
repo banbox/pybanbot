@@ -346,7 +346,7 @@ class RPC:
             if od.exit_tag and od.exit and od.exit.price:
                 cur_price = od.exit.price
             else:
-                cur_price = MarketPrice.get(od.symbol)
+                cur_price = MarketPrice.get(od.symbol, False)
                 od.update_profits(cur_price)
             od_dict = od.dict(flat_sub=True)
             od_dict.update(dict(

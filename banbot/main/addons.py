@@ -13,7 +13,7 @@ class MarketPrice:
     prices = dict()  # 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
 
     @classmethod
-    def get(cls, symbol: str) -> float:
+    def get(cls, symbol: str, raiseErr: bool = True) -> float:
         '''
         获取指定币种的价格
         '''
@@ -24,7 +24,8 @@ class MarketPrice:
             return cls.bar_prices[symbol]
         elif not is_pair and symbol.find('USD') >= 0:
             return 1
-        raise ValueError(f'unsupport quote symbol: {symbol}')
+        if raiseErr:
+            raise ValueError(f'unsupport quote symbol: {symbol}')
 
     @classmethod
     def pairs(cls):

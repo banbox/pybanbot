@@ -8,6 +8,7 @@
 函数式调用，传入序列变量，自动追踪历史结果。
 按序号取值，res[0]表示当前值，res[1]表示前一个。。。
 '''
+import numpy as np
 
 from banbot.compute.ctx import *
 from banbot.util.num_utils import *
@@ -135,7 +136,7 @@ def MACD(obj: SeriesVar, fast_period: int = 12, slow_period: int = 26,
     '''
     计算MACD指标。国外主流使用init_type=0，MyTT和国内主要使用init_type=1
     '''
-    res_obj = SeriesVar(obj.key + '_macd')
+    res_obj = SeriesVar(obj.key + f'_macd_{fast_period}_{slow_period}_{smooth_period}_{init_type}')
     if res_obj.cached():
         return res_obj
     short = EMA(obj, fast_period, init_type=init_type)
@@ -352,15 +353,14 @@ def HeikinAshi():
     l: SeriesVar = SeriesVar(Bar.low.key + '_hka')
     c: SeriesVar = SeriesVar(Bar.close.key + '_hka')
     _o, _h, _l, _c = Bar.open[0], Bar.high[0], Bar.low[0], Bar.close[0]
-    if len(o):
-        po, pc = o[1], c[1]
-        o.append((po + pc) / 2)
-        h.append(max(_h, po, pc))
-        l.append(min(_l, po, pc))
+    if np.isfinite(o[0]):
+        o.append((o[0] + c[0]) / 2)
     else:
         o.append((_o + _c) / 2)
-        h.append(_h)
-        l.append(_l)
-    c.append((_o + _h + _l + _c) / 4)
+    curC = (_o + _h + _l + _c) / 4
+    c.append(curC)
+    curO = o[0]
+    h.append(max(_h, curO, curC))
+    l.append(min(_l, curO, curC))
     return res.append((o, h, l, c))
 
