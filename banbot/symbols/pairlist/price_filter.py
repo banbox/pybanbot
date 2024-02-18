@@ -42,12 +42,18 @@ class PriceFilter(PairList):
                 if self._validate_price(p, tk.get('last')):
                     res_pairs.append(p)
         else:
+            has = dict()
+
             def kline_cb(candles, exs: ExSymbol, timeframe, **kwargs):
                 if not candles:
                     return
                 if self._validate_price(exs.symbol, candles[-1][ccol]):
-                    res_pairs.append(exs.symbol)
+                    has[exs.symbol] = True
             await fast_bulk_ohlcv(self.exchange, pairlist, '1h', limit=1, callback=kline_cb)
+            for pair in pairlist:
+                if not (pair in has):
+                    continue
+                res_pairs.append(pair)
         return res_pairs
 
     def _validate_price(self, pair: str, price: float) -> bool:
