@@ -5,7 +5,7 @@
 # Date  : 2023/4/12
 import pandas as pd
 
-from banbot.compute.sta_inds import ocol, hcol, ccol, lcol, np, Callable, TempContext
+from banbot.compute.sta_inds import ocol, hcol, ccol, lcol, vcol, np, Callable, TempContext
 candles = [
     # 数据来自币安合约BTC/USDT.P 2023/07/01 - 2023/08/27
     [1688169600000, 30460.2, 30668.2, 30311.3, 30573.6, 135520.246],
@@ -68,8 +68,9 @@ candles = [
     [1693094400000, 26004.3, 26173.6, 25955.6, 26087.7, 86505.398],
 ]
 ohlcv_arr = np.array(candles)
-open_arr, high_arr, low_arr, close_arr = ohlcv_arr[:, ocol], ohlcv_arr[:, hcol], ohlcv_arr[:, lcol], ohlcv_arr[:, ccol]
-open_col, high_col, low_col, close_col = pd.Series(open_arr), pd.Series(high_arr), pd.Series(low_arr), pd.Series(close_arr)
+open_arr, high_arr, low_arr, close_arr, vol_arr = ohlcv_arr[:, ocol], ohlcv_arr[:, hcol], ohlcv_arr[:, lcol], ohlcv_arr[:, ccol], ohlcv_arr[:, vcol]
+bar_idx = list(range(len(ohlcv_arr)))
+open_col, high_col, low_col, close_col, vol_col = pd.Series(open_arr, index=bar_idx), pd.Series(high_arr, index=bar_idx), pd.Series(low_arr, index=bar_idx), pd.Series(close_arr, index=bar_idx), pd.Series(vol_arr, index=bar_idx)
 
 
 def print_tares(vec_res, sta_res, ta_cres=None, ta_mres=None, mytt_res=None, pta_res=None):

@@ -3,6 +3,8 @@
 采用逐bar计算，回测和实盘复用一套策略，回测时一秒执行约5K个bar  
 目前单个机器人只支持监听一个交易所的一个市场。如币安现货市场。
 
+此项目已归档，不再更新，请考虑使用[golang版本](https://github.com/banbox/banbot)，回测性能提升百倍，带有UI界面。
+
 # 运行交易机器人
 本项目依赖timescaledb，故使用`docker compose`一键启动。  
 [详细文档](doc/deploy_docker.md)

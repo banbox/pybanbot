@@ -270,9 +270,9 @@ class SeriesVar(metaclass=MetaStateVar):
         self.key = key
         self.time = 0
 
-    def append(self, row, check_len=True):
+    def append(self, row, check_len=True, check_time=True):
         in_time = bar_time.get()[1]
-        if in_time <= self.time:
+        if check_time and in_time <= self.time:
             raise ValueError(f'repeat update on {self.key}')
         self.time = in_time
         if hasattr(row, '__len__'):
